@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from time import perf_counter
 from typing import Any
@@ -13,6 +14,7 @@ from app.providers.registry import get_provider
 from app.services.api_config_service import ApiConfigNotFoundError, get_api_config_storage
 from app.services.preset_service import PresetNotFoundError, get_preset_storage
 from app.services.prompt_assembler import PromptAssembler
+from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import (
     SessionNotFoundError,
     get_session_dir,
@@ -143,6 +145,8 @@ def _build_log_request(
 
 async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
     session = get_session_storage(session_name)
+    if session.is_closed:
+        raise ChatConfigError("Session is closed")
     preset = get_preset_storage(session.preset_id)
     api_config = get_api_config_storage(session.main_api_config_id)
 
@@ -193,6 +197,14 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
     request_time = datetime.utcnow().isoformat()
     provider_name = api_config.provider.value
     started_at = perf_counter()
+    rst_runtime_service.update_session_state(
+        session_name,
+        mode=session.mode,
+        status="running",
+        last_request_at=request_time,
+        last_user_input_length=len(user_input),
+        last_prompt_size=len(prompt_messages),
+    )
 
     try:
         provider_result = await provider.chat(
@@ -242,6 +254,17 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
                 raw_response=raw_response,
             )
         )
+        rst_runtime_service.update_session_state(
+            session_name,
+            status="error",
+            last_response_at=response_time,
+        )
+        raise
+    except asyncio.CancelledError:
+        rst_runtime_service.update_session_state(
+            session_name,
+            status="cancelled",
+        )
         raise
 
     assistant_text = provider_result.text
@@ -288,6 +311,12 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
             raw_request=raw_request,
             raw_response=raw_response,
         )
+    )
+    rst_runtime_service.update_session_state(
+        session_name,
+        status="idle",
+        last_response_at=response_time,
+        last_response_length=len(assistant_text),
     )
 
     return ChatResponse(user_message=user_message, assistant_message=assistant_message)

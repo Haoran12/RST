@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import pytest
 
 from app.providers.base import BaseProvider, ProviderChatResult
@@ -50,6 +51,38 @@ class _StubProvider(BaseProvider):
             text=text,
             request=request_payload,
             response=response_payload,
+        )
+
+
+class _SlowProvider(BaseProvider):
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.cancelled = asyncio.Event()
+
+    async def list_models(self, base_url: str, api_key: str) -> list[str]:
+        return []
+
+    async def chat(
+        self,
+        base_url: str,
+        api_key: str,
+        *,
+        messages: list[dict],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        stream: bool = False,
+    ) -> ProviderChatResult:
+        self.started.set()
+        try:
+            await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+        return ProviderChatResult(
+            text="slow-answer",
+            request={"messages": messages, "model": model},
+            response={"choices": [{"finish_reason": "stop"}]},
         )
 
 
@@ -168,3 +201,50 @@ async def test_logs_include_usage_and_stop_reason(async_client, sample_api_confi
     assert latest["total_tokens"] == 15
     assert latest["stop_reason"] == "stop"
     assert "provider_request" in latest["raw_request"]
+
+
+@pytest.mark.asyncio
+async def test_closed_session_rejects_chat(async_client, sample_api_config) -> None:
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    await _create_session(async_client, "ClosedChat", config_id, preset_id)
+
+    close_response = await async_client.put("/sessions/ClosedChat", json={"is_closed": True})
+    assert close_response.status_code == 200
+    assert close_response.json()["is_closed"] is True
+
+    chat = await async_client.post("/sessions/ClosedChat/chat", json={"content": "hello"})
+    assert chat.status_code == 400
+    assert "Session is closed" in chat.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_closing_session_cancels_runtime_and_clears_memory(
+    async_client, sample_api_config, monkeypatch
+) -> None:
+    from app.services.rst_runtime_service import rst_runtime_service
+
+    provider = _SlowProvider()
+    monkeypatch.setattr("app.services.chat_service.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    await _create_session(async_client, "RuntimeClose", config_id, preset_id)
+
+    chat_task = asyncio.create_task(
+        async_client.post("/sessions/RuntimeClose/chat", json={"content": "hello"})
+    )
+    await asyncio.wait_for(provider.started.wait(), timeout=1.5)
+
+    runtime_state = rst_runtime_service.get_session_state("RuntimeClose")
+    assert runtime_state.get("status") == "running"
+
+    close_response = await async_client.put("/sessions/RuntimeClose", json={"is_closed": True})
+    assert close_response.status_code == 200
+    assert close_response.json()["is_closed"] is True
+
+    await asyncio.wait_for(provider.cancelled.wait(), timeout=1.5)
+    chat_response = await chat_task
+    assert chat_response.status_code == 499
+    assert rst_runtime_service.get_session_state("RuntimeClose") == {}
+    assert rst_runtime_service.has_running_tasks("RuntimeClose") is False

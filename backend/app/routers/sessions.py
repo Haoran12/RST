@@ -19,6 +19,7 @@ from app.services.session_service import (
     rename_session,
     update_session,
 )
+from app.services.rst_runtime_service import rst_runtime_service
 
 router = APIRouter()
 
@@ -45,16 +46,20 @@ def get_session_route(name: str):
 
 
 @router.put("/{name}", response_model=SessionResponse)
-def update_session_route(name: str, payload: SessionUpdate):
+async def update_session_route(name: str, payload: SessionUpdate):
     try:
-        return update_session(name, payload)
+        updated = update_session(name, payload)
+        if updated.is_closed:
+            await rst_runtime_service.shutdown_session(name)
+        return updated
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_session_route(name: str):
+async def delete_session_route(name: str):
     try:
+        await rst_runtime_service.shutdown_session(name)
         delete_session(name)
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

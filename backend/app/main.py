@@ -12,6 +12,7 @@ from app.routers.logs import router as logs_router
 from app.routers.presets import router as presets_router
 from app.routers.sessions import router as sessions_router
 from app.services.preset_service import ensure_default_preset
+from app.services.rst_runtime_service import rst_runtime_service
 from app.storage.encryption import get_or_create_key
 from app.storage.init_dirs import ensure_data_dirs
 
@@ -23,6 +24,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     get_or_create_key()
     ensure_default_preset(data_dir)
     yield
+    await rst_runtime_service.shutdown_all()
 
 
 def create_app() -> FastAPI:

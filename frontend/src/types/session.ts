@@ -1,12 +1,14 @@
-﻿export interface SessionSummary {
+export interface SessionSummary {
   name: string;
   mode: "ST" | "RST";
+  is_closed: boolean;
   updated_at: string;
 }
 
 export interface SessionDetail {
   name: string;
   mode: "ST" | "RST";
+  is_closed: boolean;
   user_description: string;
   scan_depth: number;
   mem_length: number;
@@ -21,6 +23,7 @@ export interface SessionDetail {
 export interface SessionCreate {
   name: string;
   mode?: "ST" | "RST";
+  is_closed?: boolean;
   main_api_config_id: string;
   scheduler_api_config_id?: string;
   preset_id: string;
@@ -31,6 +34,7 @@ export interface SessionCreate {
 
 export interface SessionUpdate {
   mode?: "ST" | "RST";
+  is_closed?: boolean;
   main_api_config_id?: string;
   scheduler_api_config_id?: string | null;
   preset_id?: string;
@@ -42,4 +46,3 @@ export interface SessionUpdate {
 export interface SessionRename {
   new_name: string;
 }
-

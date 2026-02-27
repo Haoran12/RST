@@ -12,6 +12,7 @@ NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\- \u4e00-\u9fff]{1,64}$")
 class SessionMeta(BaseModel):
     name: str
     mode: Literal["ST", "RST"] = "RST"
+    is_closed: bool = False
     user_description: str = ""
     scan_depth: int = Field(default=4, ge=-1, le=50)
     mem_length: int = Field(default=40, ge=-1, le=500)
@@ -33,6 +34,7 @@ class SessionMeta(BaseModel):
 class SessionCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     mode: Literal["ST", "RST"] = "RST"
+    is_closed: bool = False
     main_api_config_id: str
     scheduler_api_config_id: str | None = None
     preset_id: str
@@ -52,6 +54,7 @@ class SessionUpdate(BaseModel):
     """All fields are optional; only provided fields will be updated."""
 
     mode: Literal["ST", "RST"] | None = None
+    is_closed: bool | None = None
     main_api_config_id: str | None = None
     scheduler_api_config_id: str | None = None
     preset_id: str | None = None
@@ -74,12 +77,14 @@ class SessionRename(BaseModel):
 class SessionSummary(BaseModel):
     name: str
     mode: Literal["ST", "RST"]
+    is_closed: bool
     updated_at: datetime
 
 
 class SessionResponse(BaseModel):
     name: str
     mode: Literal["ST", "RST"]
+    is_closed: bool
     user_description: str
     scan_depth: int
     mem_length: int

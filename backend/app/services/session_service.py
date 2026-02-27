@@ -64,6 +64,7 @@ def _to_response(meta: SessionMeta) -> SessionResponse:
     return SessionResponse(
         name=meta.name,
         mode=meta.mode,
+        is_closed=meta.is_closed,
         user_description=meta.user_description,
         scan_depth=meta.scan_depth,
         mem_length=meta.mem_length,
@@ -83,6 +84,7 @@ def create_session(payload: SessionCreate) -> SessionResponse:
     meta = SessionMeta(
         name=payload.name,
         mode=payload.mode,
+        is_closed=payload.is_closed,
         user_description=payload.user_description,
         scan_depth=payload.scan_depth,
         mem_length=payload.mem_length,
@@ -119,7 +121,12 @@ def list_sessions() -> list[SessionSummary]:
         except Exception:
             continue
         summaries.append(
-            SessionSummary(name=meta.name, mode=meta.mode, updated_at=meta.updated_at)
+            SessionSummary(
+                name=meta.name,
+                mode=meta.mode,
+                is_closed=meta.is_closed,
+                updated_at=meta.updated_at,
+            )
         )
     return sorted(
         summaries, key=lambda item: (item.updated_at, item.name.lower()), reverse=True
@@ -141,6 +148,8 @@ def get_session_dir(name: str) -> Path:
 def update_session(name: str, payload: SessionUpdate) -> SessionResponse:
     meta = _load_session(name)
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("is_closed") is None:
+        updates.pop("is_closed", None)
     if updates.get("scan_depth") is None:
         updates.pop("scan_depth", None)
     if updates.get("mem_length") is None:

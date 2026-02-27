@@ -12,6 +12,13 @@
             placeholder="Select session"
             @update:value="handleSessionSelect"
           />
+          <span
+            v-if="currentSession"
+            class="session-state-pill"
+            :class="{ 'is-closed': currentSession.is_closed }"
+          >
+            {{ currentSession.is_closed ? "Closed" : "Open" }}
+          </span>
         </div>
         <div class="quick-select">
           <span class="quick-label">Appearance</span>
@@ -62,7 +69,8 @@
                 ref="inputRef"
                 v-model="inputText"
                 class="chat-input"
-                placeholder="Type your message... (Ctrl+Enter to send)"
+                :placeholder="inputPlaceholder"
+                :disabled="!currentSession || currentSessionClosed"
                 @keydown="handleKeyDown"
               ></textarea>
               <button
@@ -96,6 +104,7 @@ import { useAppearanceStore } from "@/stores/appearance";
 import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
 import { message } from "@/utils/message";
+import { confirmLeaveSessionWhileBusy } from "@/utils/session-leave-guard";
 
 type HealthState = "checking" | "ok" | "error";
 
@@ -113,6 +122,7 @@ const sessionOptions = computed(() =>
 );
 const selectedSession = computed(() => currentSession.value?.name ?? null);
 const themeOptions = appearanceStore.themeOptions;
+const currentSessionClosed = computed(() => Boolean(currentSession.value?.is_closed));
 const currentModelDisplay = computed(() => {
   const configId = currentSession.value?.main_api_config_id;
   if (!configId) {
@@ -136,8 +146,20 @@ let healthProbeTimer: number | null = null;
 const HEALTH_PROBE_INTERVAL_MS = 15000;
 
 const statusText = computed(() => status.value);
+const inputPlaceholder = computed(() => {
+  if (!currentSession.value) {
+    return "Select a session before sending.";
+  }
+  if (currentSession.value.is_closed) {
+    return "Current session is closed. Re-open it in Session panel.";
+  }
+  return "Type your message... (Ctrl+Enter to send)";
+});
 const canSend = computed(() => {
   if (!currentSession.value) {
+    return false;
+  }
+  if (currentSession.value.is_closed) {
     return false;
   }
   return true;
@@ -163,9 +185,18 @@ onUnmounted(() => {
 });
 
 watch(
-  () => currentSession.value?.name ?? null,
-  (name) => {
-    chatStore.setActiveSession(name);
+  () => ({
+    name: currentSession.value?.name ?? null,
+    isClosed: Boolean(currentSession.value?.is_closed),
+  }),
+  ({ name, isClosed }) => {
+    if (isClosed && name) {
+      chatStore.cancelInFlightOperations();
+      chatStore.clearSessionRuntime(name);
+      chatStore.setActiveSession(null);
+    } else {
+      chatStore.setActiveSession(name);
+    }
     inputText.value = "";
     chatStore.clearPendingAttachments();
     nextTick(adjustTextareaHeight);
@@ -177,8 +208,26 @@ watch(inputText, () => {
   adjustTextareaHeight();
 });
 
-function handleSessionSelect(value: string) {
+async function handleSessionSelect(value: string) {
+  if (value === selectedSession.value) {
+    return;
+  }
+  if (!(await confirmLeaveIfBusy())) {
+    return;
+  }
   sessionStore.loadSession(value);
+}
+
+async function confirmLeaveIfBusy(): Promise<boolean> {
+  if (!chatStore.hasRunningWork) {
+    return true;
+  }
+  const confirmed = await confirmLeaveSessionWhileBusy();
+  if (!confirmed) {
+    return false;
+  }
+  chatStore.cancelInFlightOperations();
+  return true;
 }
 
 async function probeHealth() {
@@ -215,6 +264,10 @@ function handleSend() {
   }
   if (!currentSession.value) {
     message.error("Select a session before sending.");
+    return;
+  }
+  if (currentSession.value.is_closed) {
+    message.error("Current session is closed.");
     return;
   }
   const content = inputText.value.trim();
@@ -276,6 +329,23 @@ function formatSize(bytes: number) {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.session-state-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--rst-border-color);
+  color: var(--rst-success);
+  font-size: 11px;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.session-state-pill.is-closed {
+  color: var(--rst-danger);
 }
 
 .quick-label {

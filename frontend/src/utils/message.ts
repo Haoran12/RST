@@ -13,7 +13,7 @@ const configProviderProps = computed(() => ({
   theme: messageTheme.value,
 }));
 
-const { message } = createDiscreteApi(["message"], {
+const { message, dialog } = createDiscreteApi(["message", "dialog"], {
   configProviderProps,
 });
 
@@ -21,4 +21,4 @@ function setMessageTheme(theme: ThemeMode): void {
   messageTheme.value = theme === "dark" ? darkTheme : null;
 }
 
-export { message, setMessageTheme };
+export { message, dialog, setMessageTheme };

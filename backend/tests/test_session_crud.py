@@ -92,6 +92,7 @@ async def test_get_session_detail(async_client, sample_api_config) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["name"] == "DetailSession"
+    assert payload["is_closed"] is False
     assert payload["main_api_config_id"] == config_id
     assert payload["preset_id"] == preset_id
 
@@ -108,8 +109,24 @@ async def test_update_session_partial(async_client, sample_api_config) -> None:
     assert updated.status_code == 200
     payload = updated.json()
     assert payload["mode"] == "ST"
+    assert payload["is_closed"] is False
     assert payload["main_api_config_id"] == original["main_api_config_id"]
     assert payload["preset_id"] == original["preset_id"]
+
+
+@pytest.mark.asyncio
+async def test_update_session_can_toggle_closed(async_client, sample_api_config) -> None:
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    await _create_session(async_client, "ClosableSession", config_id, preset_id)
+
+    closed = await async_client.put("/sessions/ClosableSession", json={"is_closed": True})
+    assert closed.status_code == 200
+    assert closed.json()["is_closed"] is True
+
+    reopened = await async_client.put("/sessions/ClosableSession", json={"is_closed": False})
+    assert reopened.status_code == 200
+    assert reopened.json()["is_closed"] is False
 
 
 @pytest.mark.asyncio

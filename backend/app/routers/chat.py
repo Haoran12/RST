@@ -9,6 +9,7 @@ from app.models.chat import ChatRequest, ChatResponse, MessageListResponse, Mess
 from app.models.session import Message
 from app.providers.base import ProviderError
 from app.services.chat_service import ChatConfigError, run_chat
+from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import SessionNotFoundError, get_session_dir, get_session_storage, touch_session
 from app.storage.message_store import MessageStore
 from app.storage.encryption import EncryptionError
@@ -76,8 +77,11 @@ def delete_message(name: str, message_id: str):
 @router.post("/sessions/{name}/chat", response_model=ChatResponse)
 async def chat(name: str, payload: ChatRequest, request: Request) -> ChatResponse:
     task = asyncio.create_task(run_chat(name, payload))
+    rst_runtime_service.register_task(name, task)
     try:
         return await _await_with_disconnect(task, request)
+    except asyncio.CancelledError:
+        raise HTTPException(status_code=499, detail="Request cancelled")
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PresetNotFoundError as exc:
@@ -90,3 +94,5 @@ async def chat(name: str, payload: ChatRequest, request: Request) -> ChatRespons
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        rst_runtime_service.unregister_task(name, task)

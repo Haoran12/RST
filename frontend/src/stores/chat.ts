@@ -29,6 +29,7 @@ export const useChatStore = defineStore("chat", () => {
   const batchAction = ref<BatchAction>(null);
   const selectedIds = ref<string[]>([]);
   const isSending = ref(false);
+  const isRstDataUpdating = ref(false);
   const requestController = ref<AbortController | null>(null);
 
   const currentMessages = computed<ChatMessage[]>(() => {
@@ -41,6 +42,9 @@ export const useChatStore = defineStore("chat", () => {
   const hasActiveSession = computed(() => Boolean(activeSession.value));
   const hasMessages = computed(() => currentMessages.value.length > 0);
   const isBatchMode = computed(() => batchAction.value !== null);
+  const hasRunningWork = computed(
+    () => isSending.value || isRstDataUpdating.value,
+  );
 
   function setMessages(name: string, messages: ChatMessage[]): void {
     messagesBySession.value = { ...messagesBySession.value, [name]: messages };
@@ -66,9 +70,28 @@ export const useChatStore = defineStore("chat", () => {
     requestController.value.abort();
   }
 
+  function cancelInFlightOperations(): void {
+    cancelSending();
+    isRstDataUpdating.value = false;
+  }
+
+  function clearSessionRuntime(name: string): void {
+    if (!name) {
+      return;
+    }
+    const next = { ...messagesBySession.value };
+    delete next[name];
+    messagesBySession.value = next;
+    if (activeSession.value === name) {
+      selectedIds.value = [];
+      batchAction.value = null;
+      pendingAttachments.value = [];
+    }
+  }
+
   function setActiveSession(name: string | null): void {
-    if (name !== activeSession.value && isSending.value) {
-      cancelSending();
+    if (name !== activeSession.value && hasRunningWork.value) {
+      cancelInFlightOperations();
     }
     activeSession.value = name;
     selectedIds.value = [];
@@ -132,6 +155,7 @@ export const useChatStore = defineStore("chat", () => {
     const controller = new AbortController();
     requestController.value = controller;
     isSending.value = true;
+    isRstDataUpdating.value = true;
 
     try {
       const response = await sendChatMessage(
@@ -160,6 +184,7 @@ export const useChatStore = defineStore("chat", () => {
         requestController.value = null;
       }
       isSending.value = false;
+      isRstDataUpdating.value = false;
     }
   }
 
@@ -312,10 +337,14 @@ export const useChatStore = defineStore("chat", () => {
     hasMessages,
     isBatchMode,
     isSending,
+    isRstDataUpdating,
+    hasRunningWork,
     setActiveSession,
     addMessage,
     sendMessage,
     cancelSending,
+    cancelInFlightOperations,
+    clearSessionRuntime,
     updateMessage,
     toggleMessageVisibility,
     deleteMessage,

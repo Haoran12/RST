@@ -3,8 +3,28 @@ import { createPinia, setActivePinia } from "pinia";
 
 import { useApiConfigStore } from "@/stores/api-config";
 
+const { mockMessageApi, mockDialogApi } = vi.hoisted(() => ({
+  mockMessageApi: {
+    error: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+  },
+  mockDialogApi: {
+    warning: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    success: vi.fn(),
+  },
+}));
+
 vi.mock("naive-ui", () => ({
-  useMessage: () => ({ error: vi.fn() }),
+  useMessage: () => mockMessageApi,
+  createDiscreteApi: () => ({
+    message: mockMessageApi,
+    dialog: mockDialogApi,
+  }),
+  darkTheme: {},
 }));
 
 const fetchApiConfigs = vi.fn();
@@ -51,7 +71,7 @@ describe("api-config store", () => {
       stream: true,
     });
     const store = useApiConfigStore();
-    const result = await store.saveConfig({
+    const result = await store.createConfig({
       name: "A",
       provider: "openai",
       api_key: "sk-test-1234",

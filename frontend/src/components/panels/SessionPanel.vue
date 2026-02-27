@@ -50,6 +50,18 @@
 
       <div v-else-if="store.currentSession" class="form">
         <n-form size="small" label-placement="top">
+          <n-form-item label="Session">
+            <div class="session-toggle-row">
+              <n-switch
+                :value="!formState.is_closed"
+                :loading="store.loading"
+                @update:value="handleSessionOpenToggle"
+              />
+              <span class="session-toggle-label">
+                {{ formState.is_closed ? "Closed" : "Open" }}
+              </span>
+            </div>
+          </n-form-item>
           <n-form-item label="Mode">
             <n-select
               v-model:value="formState.mode"
@@ -151,13 +163,16 @@ import {
   NInputNumber,
   NSelect,
   NSlider,
+  NSwitch,
   useMessage,
 } from "naive-ui";
 
 import { useApiConfigStore } from "@/stores/api-config";
 import { usePresetStore } from "@/stores/preset";
 import { useSessionStore } from "@/stores/session";
+import { useChatStore } from "@/stores/chat";
 import { useAutoSave } from "@/composables/useAutoSave";
+import { confirmLeaveSessionWhileBusy } from "@/utils/session-leave-guard";
 
 import ConfigSelector from "@/components/panels/ConfigSelector.vue";
 import SaveIndicator from "@/components/panels/SaveIndicator.vue";
@@ -165,6 +180,7 @@ import SaveIndicator from "@/components/panels/SaveIndicator.vue";
 const store = useSessionStore();
 const apiStore = useApiConfigStore();
 const presetStore = usePresetStore();
+const chatStore = useChatStore();
 const message = useMessage();
 
 const selectedName = ref<string | null>(null);
@@ -179,6 +195,7 @@ const modeOptions = [
 
 const formState = reactive({
   mode: "RST" as "ST" | "RST",
+  is_closed: false,
   main_api_config_id: "",
   scheduler_api_config_id: null as string | null,
   preset_id: "",
@@ -224,6 +241,7 @@ const { saveStatus, markDirty, flush, cancel } = useAutoSave({
     formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
     await store.saveSession(selectedName.value, {
       mode: formState.mode,
+      is_closed: formState.is_closed,
       main_api_config_id: formState.main_api_config_id,
       scheduler_api_config_id: formState.scheduler_api_config_id ?? null,
       preset_id: formState.preset_id,
@@ -250,6 +268,7 @@ watch(
         selectedName.value = session.name;
       }
       formState.mode = session.mode;
+      formState.is_closed = session.is_closed;
       formState.main_api_config_id = session.main_api_config_id;
       formState.scheduler_api_config_id = session.scheduler_api_config_id;
       formState.preset_id = session.preset_id;
@@ -282,7 +301,13 @@ watch(selectedName, () => {
   cancel();
 });
 
-function handleSelect(value: string) {
+async function handleSelect(value: string) {
+  if (value === selectedName.value) {
+    return;
+  }
+  if (!(await confirmLeaveIfBusy())) {
+    return;
+  }
   createMode.value = false;
   selectedName.value = value;
   store.loadSession(value);
@@ -353,6 +378,34 @@ function handleImmediateSave() {
   formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
   markDirty();
   void flush();
+}
+
+async function handleSessionOpenToggle(nextOpen: boolean) {
+  const nextClosed = !nextOpen;
+  if (nextClosed === formState.is_closed) {
+    return;
+  }
+  if (nextClosed && !(await confirmLeaveIfBusy())) {
+    return;
+  }
+  formState.is_closed = nextClosed;
+  handleImmediateSave();
+}
+
+async function confirmLeaveIfBusy(): Promise<boolean> {
+  const currentName = store.currentSession?.name ?? selectedName.value;
+  if (!currentName) {
+    return true;
+  }
+  if (chatStore.activeSession !== currentName || !chatStore.hasRunningWork) {
+    return true;
+  }
+  const confirmed = await confirmLeaveSessionWhileBusy();
+  if (!confirmed) {
+    return false;
+  }
+  chatStore.cancelInFlightOperations();
+  return true;
 }
 
 function handleSliderUpdate(field: "scan_depth" | "mem_length") {
@@ -509,5 +562,18 @@ function formatMemTooltip(value: number) {
   margin-top: 6px;
   font-size: 11px;
   color: var(--rst-text-secondary);
+}
+
+.session-toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-toggle-label {
+  min-width: 48px;
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+  text-transform: uppercase;
 }
 </style>
