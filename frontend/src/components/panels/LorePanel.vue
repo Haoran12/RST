@@ -13,6 +13,7 @@
       @rename-confirm="handleRename"
       @delete="handleDelete"
     />
+    <div class="selector-divider" aria-hidden="true"></div>
 
     <div class="panel-body">
       <div v-if="createMode" class="card">
@@ -198,6 +199,11 @@ function isNameTaken(name: string, ignoreId?: string): boolean {
   margin-top: 12px;
   flex: 1;
   overflow-y: auto;
+}
+
+.selector-divider {
+  margin-top: 12px;
+  border-top: 1px solid var(--rst-border-color);
 }
 
 .card {

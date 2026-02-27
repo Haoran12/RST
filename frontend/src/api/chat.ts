@@ -13,7 +13,7 @@ export interface ChatRequest {
 }
 
 export interface ChatResponse {
-  user_message: ChatMessage;
+  user_message?: ChatMessage | null;
   assistant_message: ChatMessage;
 }
 
@@ -27,12 +27,16 @@ export async function fetchMessages(sessionName: string): Promise<MessageListRes
 export async function sendChatMessage(
   sessionName: string,
   payload: ChatRequest,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<ChatResponse> {
   const { data } = await apiClient.post<ChatResponse>(
     `/sessions/${encodeURIComponent(sessionName)}/chat`,
     payload,
-    { signal: options?.signal },
+    {
+      signal: options?.signal,
+      // Chat completions can exceed the default API timeout, especially on "continue" sends.
+      timeout: options?.timeoutMs ?? 120000,
+    },
   );
   return data;
 }

@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
-from app.providers.base import BaseProvider, ProviderError
+from app.providers.base import BaseProvider, ProviderChatResult, ProviderError
+
+
+def _safe_json(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except Exception:
+        return response.text
 
 
 class OpenAIProvider(BaseProvider):
@@ -38,7 +47,7 @@ class OpenAIProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
-    ) -> str:
+    ) -> ProviderChatResult:
         url = f"{base_url.rstrip('/')}/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}"}
         payload = {
@@ -48,16 +57,36 @@ class OpenAIProvider(BaseProvider):
             "max_tokens": max_tokens,
             "stream": False,
         }
+        request_context = {"method": "POST", "url": url, "payload": payload}
 
+        data: Any = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
+        except httpx.HTTPStatusError as exc:
+            raise ProviderError(
+                "Failed to send chat request",
+                request=request_context,
+                response=_safe_json(exc.response),
+                status_code=exc.response.status_code,
+            ) from exc
         except Exception as exc:
-            raise ProviderError("Failed to send chat request") from exc
+            raise ProviderError("Failed to send chat request", request=request_context) from exc
 
         try:
-            return str(data["choices"][0]["message"]["content"])
+            text = str(data["choices"][0]["message"]["content"])
         except Exception as exc:
-            raise ProviderError("Invalid chat response format") from exc
+            raise ProviderError(
+                "Invalid chat response format",
+                request=request_context,
+                response=data,
+                status_code=response.status_code,
+            ) from exc
+
+        return ProviderChatResult(
+            text=text,
+            request=request_context,
+            response=data,
+        )

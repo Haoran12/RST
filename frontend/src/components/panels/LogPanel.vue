@@ -32,10 +32,19 @@
             <span class="log-name">{{ log.chat_name }}</span>
             <span class="log-time">{{ formatTime(log.request_time) }}</span>
           </div>
-          <div class="log-meta">Model: {{ log.model || '-' }}</div>
+          <div class="log-meta">Provider: {{ log.provider || "-" }}</div>
+          <div class="log-meta">Model: {{ log.model || "-" }}</div>
+          <div class="log-meta">
+            Status:
+            <span :class="['status-chip', statusClass(log.status)]">{{ log.status || "-" }}</span>
+            | Duration: {{ formatDuration(log.duration_ms) }}
+          </div>
+          <div class="log-meta">
+            Tokens: {{ formatTokens(log) }} | Stop: {{ log.stop_reason || "-" }}
+          </div>
           <div class="log-footer">
             <span>Req: {{ formatTime(log.request_time) }}</span>
-            <span>Res: {{ formatTime(log.response_time || '') }}</span>
+            <span>Res: {{ formatTime(log.response_time || "") }}</span>
           </div>
         </button>
       </div>
@@ -54,7 +63,39 @@
             </div>
             <div>
               <div class="detail-label">Model</div>
-              <div class="detail-value">{{ selectedLog.model || '-' }}</div>
+              <div class="detail-value">{{ selectedLog.model || "-" }}</div>
+            </div>
+            <div>
+              <div class="detail-label">Provider</div>
+              <div class="detail-value">{{ selectedLog.provider || "-" }}</div>
+            </div>
+            <div>
+              <div class="detail-label">Status</div>
+              <div class="detail-value">
+                <span :class="['status-chip', statusClass(selectedLog.status)]">
+                  {{ selectedLog.status || "-" }}
+                </span>
+              </div>
+            </div>
+            <div>
+              <div class="detail-label">Duration</div>
+              <div class="detail-value">{{ formatDuration(selectedLog.duration_ms) }}</div>
+            </div>
+            <div>
+              <div class="detail-label">Prompt Tokens</div>
+              <div class="detail-value">{{ formatMaybeNumber(selectedLog.prompt_tokens) }}</div>
+            </div>
+            <div>
+              <div class="detail-label">Completion Tokens</div>
+              <div class="detail-value">{{ formatMaybeNumber(selectedLog.completion_tokens) }}</div>
+            </div>
+            <div>
+              <div class="detail-label">Total Tokens</div>
+              <div class="detail-value">{{ formatMaybeNumber(selectedLog.total_tokens) }}</div>
+            </div>
+            <div>
+              <div class="detail-label">Stop Reason</div>
+              <div class="detail-value">{{ selectedLog.stop_reason || "-" }}</div>
             </div>
             <div>
               <div class="detail-label">Request</div>
@@ -62,7 +103,7 @@
             </div>
             <div>
               <div class="detail-label">Response</div>
-              <div class="detail-value">{{ formatTime(selectedLog.response_time || '') }}</div>
+              <div class="detail-value">{{ formatTime(selectedLog.response_time || "") }}</div>
             </div>
           </div>
         </div>
@@ -101,9 +142,13 @@ onMounted(() => {
   logStore.loadLogs();
 });
 
-function openLogDetail(log: LogEntry) {
-  selectedLog.value = log;
+async function openLogDetail(log: LogEntry) {
   detailVisible.value = true;
+  selectedLog.value = log;
+  const detail = await logStore.loadLogDetail(log.id);
+  if (detail) {
+    selectedLog.value = detail;
+  }
 }
 
 function formatTime(isoString: string) {
@@ -114,7 +159,41 @@ function formatTime(isoString: string) {
   if (Number.isNaN(parsed.getTime())) {
     return isoString;
   }
-  return parsed.toLocaleTimeString();
+  return parsed.toLocaleString();
+}
+
+function formatDuration(duration: number | null | undefined) {
+  if (duration === null || duration === undefined) {
+    return "-";
+  }
+  return `${duration} ms`;
+}
+
+function formatMaybeNumber(value: number | null | undefined) {
+  return value === null || value === undefined ? "-" : String(value);
+}
+
+function formatTokens(log: LogEntry) {
+  if (log.total_tokens !== null && log.total_tokens !== undefined) {
+    return String(log.total_tokens);
+  }
+  if (log.prompt_tokens !== null && log.prompt_tokens !== undefined) {
+    if (log.completion_tokens !== null && log.completion_tokens !== undefined) {
+      return `${log.prompt_tokens}/${log.completion_tokens}`;
+    }
+    return String(log.prompt_tokens);
+  }
+  return "-";
+}
+
+function statusClass(status: string | null | undefined) {
+  if (status === "success") {
+    return "is-success";
+  }
+  if (status === "error") {
+    return "is-error";
+  }
+  return "";
 }
 
 function formatJson(payload: unknown) {
@@ -228,6 +307,26 @@ function formatJson(payload: unknown) {
   font-size: 12px;
   color: var(--rst-text-secondary);
   margin-top: 4px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 8px;
+  border: 1px solid var(--rst-border-color);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.status-chip.is-success {
+  color: #22c55e;
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.status-chip.is-error {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.45);
 }
 
 .log-footer {

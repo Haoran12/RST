@@ -15,6 +15,7 @@
       @rename-confirm="handleRename"
       @delete="handleDelete"
     />
+    <div class="selector-divider" aria-hidden="true"></div>
 
     <div class="panel-body">
       <div v-if="createMode" class="card">
@@ -83,43 +84,44 @@
               <n-slider
                 v-model:value="formState.scan_depth"
                 :min="-1"
-                :max="50"
+                :max="40"
                 :step="1"
                 :format-tooltip="formatDepthTooltip"
-                @update:value="handleImmediateSave"
+                @update:value="handleSliderUpdate('scan_depth')"
+                @change="handleSliderCommit('scan_depth', $event)"
               />
               <n-input-number
                 v-model:value="formState.scan_depth"
                 :min="-1"
-                :max="50"
+                :max="40"
                 :step="1"
                 :precision="0"
                 @blur="handleNumericBlur('scan_depth')"
               />
             </div>
-            <div class="field-hint">-1 表示使用全部可见消息</div>
           </n-form-item>
           <n-form-item label="Mem Length">
             <div class="slider-row">
               <n-slider
                 v-model:value="formState.mem_length"
                 :min="-1"
-                :max="500"
+                :max="400"
                 :step="5"
                 :format-tooltip="formatMemTooltip"
-                @update:value="handleImmediateSave"
+                @update:value="handleSliderUpdate('mem_length')"
+                @change="handleSliderCommit('mem_length', $event)"
               />
               <n-input-number
                 v-model:value="formState.mem_length"
                 :min="-1"
-                :max="500"
+                :max="400"
                 :step="5"
                 :precision="0"
                 @blur="handleNumericBlur('mem_length')"
               />
             </div>
-            <div class="field-hint">-1 表示使用全部可见消息</div>
           </n-form-item>
+          <div class="field-hint">-1 表示使用全部可见消息</div>
           <n-form-item label="User Description">
             <n-input
               v-model:value="formState.user_description"
@@ -168,6 +170,7 @@ const message = useMessage();
 const selectedName = ref<string | null>(null);
 const createMode = ref(false);
 const syncing = ref(false);
+const sliderDraggingField = ref<"scan_depth" | "mem_length" | null>(null);
 
 const modeOptions = [
   { label: "RST", value: "RST" },
@@ -217,8 +220,8 @@ const { saveStatus, markDirty, flush, cancel } = useAutoSave({
     if (!selectedName.value || !store.currentSession) {
       return;
     }
-    formState.scan_depth = coerceNumber(formState.scan_depth, -1, 50, 1);
-    formState.mem_length = coerceNumber(formState.mem_length, -1, 500, 5);
+    formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
+    formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
     await store.saveSession(selectedName.value, {
       mode: formState.mode,
       main_api_config_id: formState.main_api_config_id,
@@ -262,7 +265,12 @@ watch(
 watch(
   formState,
   () => {
-    if (syncing.value || createMode.value || !store.currentSession) {
+    if (
+      syncing.value ||
+      createMode.value ||
+      !store.currentSession ||
+      sliderDraggingField.value !== null
+    ) {
       return;
     }
     markDirty();
@@ -347,6 +355,27 @@ function handleImmediateSave() {
   void flush();
 }
 
+function handleSliderUpdate(field: "scan_depth" | "mem_length") {
+  sliderDraggingField.value = field;
+}
+
+function handleSliderCommit(
+  field: "scan_depth" | "mem_length",
+  value: number,
+) {
+  sliderDraggingField.value = null;
+  if (field === "scan_depth") {
+    formState.scan_depth = coerceNumber(value, -1, 40, 1);
+  } else {
+    formState.mem_length = coerceNumber(value, -1, 400, 5);
+  }
+  if (!selectedName.value) {
+    return;
+  }
+  markDirty();
+  void flush();
+}
+
 function handleNumericBlur(field: "scan_depth" | "mem_length") {
   if (field === "scan_depth") {
     formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
@@ -408,6 +437,11 @@ function formatMemTooltip(value: number) {
   overflow-y: auto;
 }
 
+.selector-divider {
+  margin-top: 12px;
+  border-top: 1px solid var(--rst-border-color);
+}
+
 .card {
   padding: 16px;
   border: 1px solid var(--rst-accent);
@@ -444,8 +478,8 @@ function formatMemTooltip(value: number) {
 
 .slider-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 10px;
   align-items: center;
   width: 100%;
 }
@@ -477,4 +511,3 @@ function formatMemTooltip(value: number) {
   color: var(--rst-text-secondary);
 }
 </style>
-

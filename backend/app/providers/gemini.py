@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
-from app.providers.base import BaseProvider, ProviderError
+from app.providers.base import BaseProvider, ProviderChatResult, ProviderError
+
+
+def _safe_json(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except Exception:
+        return response.text
 
 
 class GeminiProvider(BaseProvider):
@@ -40,7 +49,7 @@ class GeminiProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
-    ) -> str:
+    ) -> ProviderChatResult:
         url = f"{base_url.rstrip('/')}/models/{model}:generateContent"
         system_parts: list[str] = []
         contents: list[dict] = []
@@ -70,17 +79,38 @@ class GeminiProvider(BaseProvider):
         }
         if system_parts:
             payload["systemInstruction"] = {"parts": [{"text": "\n\n".join(system_parts)}]}
+        request_context = {
+            "method": "POST",
+            "url": url,
+            "query": {"key": "[redacted]"},
+            "payload": payload,
+        }
 
+        data: Any = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, params={"key": api_key}, json=payload)
             response.raise_for_status()
             data = response.json()
+        except httpx.HTTPStatusError as exc:
+            raise ProviderError(
+                "Failed to send Gemini chat request",
+                request=request_context,
+                response=_safe_json(exc.response),
+                status_code=exc.response.status_code,
+            ) from exc
         except Exception as exc:
-            raise ProviderError("Failed to send Gemini chat request") from exc
+            raise ProviderError("Failed to send Gemini chat request", request=request_context) from exc
 
         try:
             candidate = data["candidates"][0]["content"]["parts"][0]
-            return str(candidate.get("text", ""))
+            text = str(candidate.get("text", ""))
         except Exception as exc:
-            raise ProviderError("Invalid Gemini response format") from exc
+            raise ProviderError(
+                "Invalid Gemini response format",
+                request=request_context,
+                response=data,
+                status_code=response.status_code,
+            ) from exc
+
+        return ProviderChatResult(text=text, request=request_context, response=data)

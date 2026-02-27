@@ -2,6 +2,7 @@
   <aside
     class="rst-panel-container"
     :class="{ 'is-open': activePanel }"
+    @click.stop
   >
     <div class="rst-icon-bar">
       <div class="rst-icon-group">
@@ -134,15 +135,14 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 .rst-panel-container {
-  position: absolute;
-  inset: 0 auto 0 0;
+  position: relative;
   width: 48px;
+  height: 100%;
   flex-shrink: 0;
   background: var(--rst-bg-panel);
   border-right: 1px solid var(--rst-border-color);
   transition: width 0.2s ease;
   overflow: hidden;
-  z-index: 60;
 }
 
 .rst-panel-container.is-open {

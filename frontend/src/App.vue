@@ -2,7 +2,6 @@
   <n-config-provider :theme="naiveTheme">
     <n-message-provider>
       <div class="rst-app">
-        <PanelShell />
         <main class="rst-main">
           <RouterView />
         </main>
@@ -17,7 +16,6 @@ import { storeToRefs } from "pinia";
 import { NConfigProvider, NMessageProvider, darkTheme } from "naive-ui";
 
 import { useAppearanceStore } from "@/stores/appearance";
-import PanelShell from "@/components/panels/PanelShell.vue";
 
 const appearanceStore = useAppearanceStore();
 const { theme } = storeToRefs(appearanceStore);
@@ -41,7 +39,6 @@ const naiveTheme = computed(() => (theme.value === "dark" ? darkTheme : null));
   display: flex;
   flex-direction: column;
   background: var(--rst-bg-secondary);
-  padding-left: 48px;
 }
 </style>
 

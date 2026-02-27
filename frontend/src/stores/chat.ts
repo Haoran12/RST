@@ -113,20 +113,21 @@ export const useChatStore = defineStore("chat", () => {
 
     const sessionName = activeSession.value;
     const trimmed = content.trim();
-    if (!trimmed && (!attachments || attachments.length === 0)) {
-      return;
+    const hasExplicitInput = trimmed.length > 0 || Boolean(attachments?.length);
+    let userMessage: ChatMessage | null = null;
+    let next = [...(messagesBySession.value[sessionName] ?? [])];
+    if (hasExplicitInput) {
+      userMessage = {
+        id: generateId(),
+        role: "user",
+        content: trimmed,
+        timestamp: new Date().toISOString(),
+        visible: true,
+        attachments: attachments?.length ? attachments : undefined,
+      };
+      next = [...next, userMessage];
+      setMessages(sessionName, next);
     }
-
-    const userMessage: ChatMessage = {
-      id: generateId(),
-      role: "user",
-      content: trimmed,
-      timestamp: new Date().toISOString(),
-      visible: true,
-      attachments: attachments?.length ? attachments : undefined,
-    };
-    const next = [...(messagesBySession.value[sessionName] ?? []), userMessage];
-    setMessages(sessionName, next);
 
     const controller = new AbortController();
     requestController.value = controller;
@@ -138,7 +139,7 @@ export const useChatStore = defineStore("chat", () => {
         {
           content: trimmed,
           attachments,
-          message_id: userMessage.id,
+          message_id: userMessage?.id,
         },
         { signal: controller.signal },
       );

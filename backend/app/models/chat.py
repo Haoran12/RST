@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 
 from app.models.session import ChatAttachment, Message
 
@@ -10,15 +10,9 @@ class ChatRequest(BaseModel):
     attachments: list[ChatAttachment] | None = None
     message_id: str | None = None
 
-    @model_validator(mode="after")
-    def validate_payload(self) -> "ChatRequest":
-        if not self.content.strip() and not self.attachments:
-            raise ValueError("Message content or attachments required")
-        return self
-
 
 class ChatResponse(BaseModel):
-    user_message: Message
+    user_message: Message | None = None
     assistant_message: Message
 
 

@@ -92,6 +92,16 @@ class MessageStore:
             results.extend(self.load_page(page))
         return results
 
+    def find_latest_visible(self) -> Message | None:
+        pages = self._list_pages()
+        for page in sorted(pages, reverse=True):
+            items = self._load_page_raw(page)
+            for raw in reversed(items):
+                msg = Message.model_validate(raw)
+                if msg.visible:
+                    return msg
+        return None
+
     def load_for_frontend(self) -> tuple[list[Message], int]:
         total = self.get_total_count()
         latest = self.get_latest_page_number()

@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
-from app.providers.base import BaseProvider, ProviderError
+from app.providers.base import BaseProvider, ProviderChatResult, ProviderError
+
+
+def _safe_json(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except Exception:
+        return response.text
 
 
 class AnthropicProvider(BaseProvider):
@@ -25,7 +34,7 @@ class AnthropicProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
-    ) -> str:
+    ) -> ProviderChatResult:
         system_parts: list[str] = []
         chat_messages: list[dict] = []
         for item in messages:
@@ -54,20 +63,39 @@ class AnthropicProvider(BaseProvider):
             "content-type": "application/json",
         }
         url = f"{base_url.rstrip('/')}/messages"
+        request_context = {"method": "POST", "url": url, "payload": payload}
 
+        data: Any = None
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
+        except httpx.HTTPStatusError as exc:
+            raise ProviderError(
+                "Failed to send Anthropic chat request",
+                request=request_context,
+                response=_safe_json(exc.response),
+                status_code=exc.response.status_code,
+            ) from exc
         except Exception as exc:
-            raise ProviderError("Failed to send Anthropic chat request") from exc
+            raise ProviderError(
+                "Failed to send Anthropic chat request",
+                request=request_context,
+            ) from exc
 
         try:
             parts = data.get("content", [])
             if not isinstance(parts, list):
                 raise TypeError("Invalid content")
             texts = [part.get("text", "") for part in parts if isinstance(part, dict)]
-            return "".join(texts)
+            text = "".join(texts)
         except Exception as exc:
-            raise ProviderError("Invalid Anthropic response format") from exc
+            raise ProviderError(
+                "Invalid Anthropic response format",
+                request=request_context,
+                response=data,
+                status_code=response.status_code,
+            ) from exc
+
+        return ProviderChatResult(text=text, request=request_context, response=data)

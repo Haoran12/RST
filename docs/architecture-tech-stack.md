@@ -47,7 +47,10 @@
 - timestamp
 - content
 - visible（是否参与提示词组装与 Lore 调度）
-5. 用户必须能编辑与删除单条消息，并触发必要的索引/缓存更新。
+4. 用户必须能编辑与删除单条消息，并触发必要的索引/缓存更新。
+5. 用户输入区为空时，系统仍必须允许触发 Send。
+6. 当本次发送没有显式输入内容（空文本且无附件）时，系统不得新增 user 会话消息。
+7. 当本次发送有显式输入内容（非空文本或附件）时，系统必须新增 user 会话消息，并参与后续提示词组装。
 
 ### 3.2 API 配置管理
 1. 系统必须支持 API 配置的创建、查看、编辑、重命名、删除与列表展示。
@@ -76,9 +79,13 @@
 4. 系统内置条目允许调整顺序与禁用，但其 content 不可直接编辑。
 5. Preset 界面只允许编辑非系统内置条目的 content。
 6. Prompt 组装必须严格按 Preset 条目顺序执行，disabled 条目不参与组装。
+7. 空输入发送时，Prompt 组装必须遵循以下 user_input 规则：
+- 若最新一条 visible 消息的 role 为 user，则将该消息内容作为 user_input，且该消息不得重复出现在 chat_history 展开结果中。
+- 否则，user_input 固定为字符串 "continue"。
+8. 上述两种空输入组装方式都不得新增会话消息。
 
 ### 3.4 RST Lore 数据管理
-1. Lore 必须支持根据会话内容动态更新。
+1. RST Lore 必须支持根据会话内容动态更新, 使用另一个LLM解析会话消息, 与主会话异步进行。
 2. 特定实体范围包括：人物、国家与地区、组织与势力。
 3. 基础设定包括：世界观与地理、人物姓名种族出生、国家与地区制度、地区与组织概况。
 4. 动态状态包括：当前时间地点、人物年龄外貌、人物行动、人物属性、人物记忆、人物关系、地区或组织事件与形势。
@@ -117,6 +124,24 @@
 2. 每个会话必须能分别指定 main_api_config_id 与 scheduler_api_config_id。
 3. UI 必须提供清晰入口分别配置与切换。
 
+### 3.10 请求日志（Log）
+1. 每次会话请求都必须记录日志，成功与失败都不能丢失。
+2. Log 必须保留完整的原始请求与原始响应（raw_request, raw_response），用于排障和复盘。
+3. Log 必须包含以下可检索元信息：
+- chat_name
+- provider
+- model
+- status（success 或 error）
+- request_time
+- response_time
+- duration_ms
+- prompt_tokens
+- completion_tokens
+- total_tokens
+- stop_reason
+4. Log 面板列表必须展示至少以下信息：会话名、Provider、Model、状态、耗时、Token 用量、停止原因、请求/响应时间。
+5. Log 面板详情必须展示完整 raw request / raw response JSON，不得只展示文本内容。
+
 ## 4. 数据与存储要求
 1. 以 JSON 作为主存储格式，确保可读可编辑。
 2. 每份配置一个文件，禁止多个配置共享同一文件。
@@ -147,3 +172,5 @@
 3. Preset 必须强制包含系统条目并参与组装。
 4. Lore 能按条目粒度注入，并可从对话中更新。
 5. ST 与 RST 模式切换后界面与功能符合要求。
+6. 输入区为空时可正常 Send，且空输入发送不新增 user 会话消息。
+7. Log 面板可查看完整请求/响应及关键元数据（tokens、时间戳、stop reason、状态、耗时）。

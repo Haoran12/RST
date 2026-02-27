@@ -15,6 +15,7 @@
       @rename-confirm="handleRename"
       @delete="handleDelete"
     />
+    <div class="selector-divider" aria-hidden="true"></div>
 
     <div class="panel-body">
       <div v-if="createMode" class="card">
@@ -43,10 +44,7 @@
 
       <div v-else-if="store.currentConfig" class="form">
         <n-form size="small" label-placement="top">
-          <n-form-item label="名称">
-            <n-input v-model:value="formState.name" @blur="flush" />
-          </n-form-item>
-          <n-form-item label="Provider">
+          <n-form-item label="来源">
             <n-select
               v-model:value="formState.provider"
               :options="providerOptions"
@@ -79,7 +77,8 @@
                 :min="0"
                 :max="2"
                 :step="0.05"
-                @update:value="handleImmediateSave"
+                @update:value="handleSliderUpdate('temperature')"
+                @change="handleSliderCommit('temperature', $event)"
               />
               <n-input-number
                 v-model:value="formState.temperature"
@@ -98,7 +97,8 @@
                 :min="1"
                 :max="1000000"
                 :step="1"
-                @update:value="handleImmediateSave"
+                @update:value="handleSliderUpdate('max_tokens')"
+                @change="handleSliderCommit('max_tokens', $event)"
               />
               <n-input-number
                 v-model:value="formState.max_tokens"
@@ -140,6 +140,7 @@ import {
 
 import { DEFAULT_BASE_URLS, type ProviderType } from "@/types/api-config";
 import { useApiConfigStore } from "@/stores/api-config";
+import { useSessionStore } from "@/stores/session";
 import { useAutoSave } from "@/composables/useAutoSave";
 
 import ConfigSelector from "@/components/panels/ConfigSelector.vue";
@@ -147,6 +148,7 @@ import SaveIndicator from "@/components/panels/SaveIndicator.vue";
 import ModelSelector from "@/components/api-config/ModelSelector.vue";
 
 const store = useApiConfigStore();
+const sessionStore = useSessionStore();
 const message = useMessage();
 
 const selectedId = ref<string | null>(null);
@@ -154,6 +156,7 @@ const createMode = ref(false);
 const syncing = ref(false);
 const apiKeyInput = ref("");
 const lastProvider = ref<ProviderType>("openai");
+const sliderDraggingField = ref<"temperature" | "max_tokens" | null>(null);
 
 const providerOptions = [
   { label: "OpenAI", value: "openai" },
@@ -219,8 +222,9 @@ const { saveStatus, markDirty, flush, cancel } = useAutoSave({
   delay: 300,
 });
 
-onMounted(() => {
-  store.loadConfigs();
+onMounted(async () => {
+  await store.loadConfigs();
+  await applySessionDefaultConfig();
 });
 
 watch(
@@ -260,7 +264,12 @@ watch(
 watch(
   formState,
   () => {
-    if (syncing.value || createMode.value || !store.currentConfig) {
+    if (
+      syncing.value ||
+      createMode.value ||
+      !store.currentConfig ||
+      sliderDraggingField.value !== null
+    ) {
       return;
     }
     markDirty();
@@ -280,6 +289,24 @@ watch(apiKeyInput, () => {
 watch(selectedId, () => {
   cancel();
 });
+
+async function applySessionDefaultConfig() {
+  if (createMode.value) {
+    return;
+  }
+  const sessionConfigId = sessionStore.currentSession?.main_api_config_id;
+  if (!sessionConfigId) {
+    return;
+  }
+  const exists = store.configs.some((item) => item.id === sessionConfigId);
+  if (!exists) {
+    return;
+  }
+  selectedId.value = sessionConfigId;
+  if (store.currentConfig?.id !== sessionConfigId) {
+    await store.loadConfig(sessionConfigId);
+  }
+}
 
 function handleSelect(value: string) {
   createMode.value = false;
@@ -346,6 +373,27 @@ function handleImmediateSave() {
   void flush();
 }
 
+function handleSliderUpdate(field: "temperature" | "max_tokens") {
+  sliderDraggingField.value = field;
+}
+
+function handleSliderCommit(
+  field: "temperature" | "max_tokens",
+  value: number,
+) {
+  sliderDraggingField.value = null;
+  if (field === "temperature") {
+    formState.temperature = coerceNumber(value, 0, 2, 0.05);
+  } else {
+    formState.max_tokens = coerceNumber(value, 1, 1000000, 1);
+  }
+  if (!selectedId.value) {
+    return;
+  }
+  markDirty();
+  void flush();
+}
+
 function handleApiKeyBlur() {
   if (!selectedId.value) {
     return;
@@ -356,6 +404,17 @@ function handleApiKeyBlur() {
   }
   markDirty();
   void flush();
+}
+
+function coerceNumber(value: number, min: number, max: number, step: number): number {
+  if (Number.isNaN(value)) {
+    return min;
+  }
+  const clamped = Math.min(max, Math.max(min, value));
+  if (step <= 0) {
+    return clamped;
+  }
+  return Math.round(clamped / step) * step;
 }
 </script>
 
@@ -386,6 +445,11 @@ function handleApiKeyBlur() {
   margin-top: 12px;
   flex: 1;
   overflow-y: auto;
+}
+
+.selector-divider {
+  margin-top: 12px;
+  border-top: 1px solid var(--rst-border-color);
 }
 
 .form {

@@ -5,20 +5,18 @@
       <SaveIndicator :status="saveStatus" />
     </header>
 
-    <div class="config-section">
-      <div class="section-label">Preset Selector</div>
-      <ConfigSelector
-        :options="presetOptions"
-        :selected-value="selectedId"
-        placeholder="选择 Preset..."
-        :loading="store.loading"
-        :disabled="hasSelection"
-        @select="handleSelect"
-        @create="startCreate"
-        @rename-confirm="handleRename"
-        @delete="handleDelete"
-      />
-    </div>
+    <ConfigSelector
+      :options="presetOptions"
+      :selected-value="selectedId"
+      placeholder="选择 Preset..."
+      :loading="store.loading"
+      :disabled="hasSelection"
+      @select="handleSelect"
+      @create="startCreate"
+      @rename-confirm="handleRename"
+      @delete="handleDelete"
+    />
+    <div class="selector-divider" aria-hidden="true"></div>
 
     <div class="panel-body">
       <div v-if="createMode" class="card">
@@ -179,6 +177,7 @@ import Draggable from "vuedraggable";
 import type { PresetEntry } from "@/types/preset";
 import { SYSTEM_ENTRIES } from "@/types/preset";
 import { usePresetStore } from "@/stores/preset";
+import { useSessionStore } from "@/stores/session";
 import { fetchPreset, updatePreset } from "@/api/presets";
 
 import ConfigSelector from "@/components/panels/ConfigSelector.vue";
@@ -195,6 +194,7 @@ interface OverlayField {
 }
 
 const store = usePresetStore();
+const sessionStore = useSessionStore();
 const message = useMessage();
 
 const selectedId = ref<string | null>(null);
@@ -240,8 +240,9 @@ const roleOptions = [
   { label: "assistant", value: "assistant" },
 ];
 
-onMounted(() => {
-  store.loadPresets();
+onMounted(async () => {
+  await store.loadPresets();
+  await applySessionDefaultPreset();
 });
 
 watch(
@@ -263,6 +264,24 @@ watch(selectedId, () => {
   editingIsNew.value = false;
   selectedIndexes.value = [];
 });
+
+async function applySessionDefaultPreset() {
+  if (createMode.value) {
+    return;
+  }
+  const sessionPresetId = sessionStore.currentSession?.preset_id;
+  if (!sessionPresetId) {
+    return;
+  }
+  const exists = store.presets.some((item) => item.id === sessionPresetId);
+  if (!exists) {
+    return;
+  }
+  selectedId.value = sessionPresetId;
+  if (store.currentPreset?.id !== sessionPresetId) {
+    await store.loadPreset(sessionPresetId);
+  }
+}
 
 function isSystemEntry(entry: PresetEntry): boolean {
   return SYSTEM_ENTRIES.includes(entry.name);
@@ -524,28 +543,15 @@ async function confirmCopy() {
   text-transform: uppercase;
 }
 
-.config-section {
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid var(--rst-border-color);
-  border-radius: 10px;
-  background: var(--rst-bg-panel);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.section-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--rst-text-secondary);
-}
-
 .panel-body {
   margin-top: 12px;
   flex: 1;
   overflow-y: auto;
+}
+
+.selector-divider {
+  margin-top: 12px;
+  border-top: 1px solid var(--rst-border-color);
 }
 
 .card {

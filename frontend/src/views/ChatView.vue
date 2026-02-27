@@ -25,52 +25,56 @@
       <div class="chat-shell__status">
         <span class="status-label">Backend</span>
         <span :class="['status-pill', `is-${status}`]">{{ statusText }}</span>
+        <span class="model-pill" :title="currentModelDisplay">{{ currentModelDisplay }}</span>
       </div>
     </header>
 
     <div class="chat-shell__body" @click="handleChatBodyClick">
-      <div class="chat-shell__content">
-        <ContentArea />
-      </div>
+      <PanelShell />
+      <div class="chat-shell__workspace">
+        <div class="chat-shell__content">
+          <ContentArea />
+        </div>
 
-      <div class="chat-shell__input">
-        <div class="input-inner">
-          <div v-if="pendingAttachments.length" class="input-attachments">
-            <div
-              v-for="(file, index) in pendingAttachments"
-              :key="`${file.name}-${index}`"
-              class="attachment-item"
-            >
-              <span class="attachment-name" :title="file.name">{{ file.name }}</span>
-              <span class="attachment-size">({{ formatSize(file.size) }})</span>
+        <div class="chat-shell__input">
+          <div class="input-inner">
+            <div v-if="pendingAttachments.length" class="input-attachments">
+              <div
+                v-for="(file, index) in pendingAttachments"
+                :key="`${file.name}-${index}`"
+                class="attachment-item"
+              >
+                <span class="attachment-name" :title="file.name">{{ file.name }}</span>
+                <span class="attachment-size">({{ formatSize(file.size) }})</span>
+                <button
+                  type="button"
+                  class="attachment-remove"
+                  @click="chatStore.removePendingAttachment(index)"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+
+            <div class="input-row">
+              <InputMenu />
+              <textarea
+                ref="inputRef"
+                v-model="inputText"
+                class="chat-input"
+                placeholder="Type your message... (Ctrl+Enter to send)"
+                @keydown="handleKeyDown"
+              ></textarea>
               <button
                 type="button"
-                class="attachment-remove"
-                @click="chatStore.removePendingAttachment(index)"
+                class="send-button"
+                :class="{ 'is-stop': isSending }"
+                :disabled="!canSend"
+                @click="handleSend"
               >
-                Remove
+                {{ isSending ? "Stop" : "Send" }}
               </button>
             </div>
-          </div>
-
-          <div class="input-row">
-            <InputMenu />
-            <textarea
-              ref="inputRef"
-              v-model="inputText"
-              class="chat-input"
-              placeholder="Type your message... (Ctrl+Enter to send)"
-              @keydown="handleKeyDown"
-            ></textarea>
-            <button
-              type="button"
-              class="send-button"
-              :class="{ 'is-stop': isSending }"
-              :disabled="!canSend"
-              @click="handleSend"
-            >
-              {{ isSending ? "🛑 Stop" : "Send" }}
-            </button>
           </div>
         </div>
       </div>
@@ -79,13 +83,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { NSelect } from "naive-ui";
 
 import { fetchHealth } from "@/api/health";
 import ContentArea from "@/components/ContentArea.vue";
 import InputMenu from "@/components/InputMenu.vue";
+import PanelShell from "@/components/panels/PanelShell.vue";
+import { useApiConfigStore } from "@/stores/api-config";
 import { useAppearanceStore } from "@/stores/appearance";
 import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
@@ -94,9 +100,11 @@ import { message } from "@/utils/message";
 type HealthState = "checking" | "ok" | "error";
 
 const sessionStore = useSessionStore();
+const apiConfigStore = useApiConfigStore();
 const chatStore = useChatStore();
 const appearanceStore = useAppearanceStore();
 const { sessions, currentSession, loading: sessionLoading } = storeToRefs(sessionStore);
+const { configs: apiConfigs } = storeToRefs(apiConfigStore);
 const { theme } = storeToRefs(appearanceStore);
 const { pendingAttachments, isSending } = storeToRefs(chatStore);
 
@@ -105,31 +113,53 @@ const sessionOptions = computed(() =>
 );
 const selectedSession = computed(() => currentSession.value?.name ?? null);
 const themeOptions = appearanceStore.themeOptions;
+const currentModelDisplay = computed(() => {
+  const configId = currentSession.value?.main_api_config_id;
+  if (!configId) {
+    return "- : -";
+  }
+  const matched = apiConfigs.value.find((item) => item.id === configId);
+  if (!matched) {
+    return "- : -";
+  }
+  const apiName = matched.name.trim();
+  const model = matched.model.trim();
+  const left = apiName.length > 0 ? apiName : "-";
+  const right = model.length > 0 ? model : "-";
+  return `${left} : ${right}`;
+});
 
 const status = ref<HealthState>("checking");
 const inputText = ref("");
 const inputRef = ref<HTMLTextAreaElement | null>(null);
+let healthProbeTimer: number | null = null;
+const HEALTH_PROBE_INTERVAL_MS = 15000;
 
 const statusText = computed(() => status.value);
 const canSend = computed(() => {
   if (!currentSession.value) {
     return false;
   }
-  if (isSending.value) {
-    return true;
-  }
-  return inputText.value.trim().length > 0 || pendingAttachments.value.length > 0;
+  return true;
 });
 
 onMounted(async () => {
   sessionStore.loadSessions();
-  try {
-    // Probe backend health when shell mounts.
-    const data = await fetchHealth();
-    status.value = data.status === "ok" ? "ok" : "error";
-  } catch (_error) {
-    status.value = "error";
+  apiConfigStore.loadConfigs();
+  await probeHealth();
+  if (typeof window !== "undefined") {
+    healthProbeTimer = window.setInterval(() => {
+      void probeHealth();
+    }, HEALTH_PROBE_INTERVAL_MS);
   }
+});
+
+onUnmounted(() => {
+  if (typeof window === "undefined" || healthProbeTimer === null) {
+    return;
+  }
+  window.clearInterval(healthProbeTimer);
+  healthProbeTimer = null;
 });
 
 watch(
@@ -149,6 +179,16 @@ watch(inputText, () => {
 
 function handleSessionSelect(value: string) {
   sessionStore.loadSession(value);
+}
+
+async function probeHealth() {
+  try {
+    // Keep top-right backend status in sync with real connectivity.
+    const data = await fetchHealth();
+    status.value = data.status === "ok" ? "ok" : "error";
+  } catch (_error) {
+    status.value = "error";
+  }
 }
 
 function handleChatBodyClick() {
@@ -178,9 +218,6 @@ function handleSend() {
     return;
   }
   const content = inputText.value.trim();
-  if (!content && pendingAttachments.value.length === 0) {
-    return;
-  }
   const attachments = pendingAttachments.value.map((item) => ({ ...item }));
   void chatStore.sendMessage(content, attachments);
 
@@ -216,14 +253,14 @@ function formatSize(bytes: number) {
 }
 
 .chat-shell__topbar {
-  min-height: 50px;
+  min-height: 44px;
   background: var(--rst-bg-topbar);
   border-bottom: 1px solid var(--rst-border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 8px 20px;
+  padding: 6px 20px;
 }
 
 .chat-shell__controls {
@@ -292,8 +329,32 @@ function formatSize(bytes: number) {
   background: #ef4444;
 }
 
+.model-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 320px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--rst-border-color);
+  background: var(--rst-bg-secondary);
+  color: var(--rst-text-primary);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chat-shell__body {
   flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-shell__workspace {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -407,7 +468,7 @@ function formatSize(bytes: number) {
 
 @media (max-width: 640px) {
   .chat-shell__topbar {
-    padding: 8px 12px;
+    padding: 6px 12px;
     gap: 12px;
   }
 
