@@ -1,0 +1,42 @@
+:root {
+  --rst-bg-primary: #1e1e1e;
+  --rst-bg-secondary: #1e1e1e;
+  --rst-bg-panel: #252526;
+  --rst-bg-topbar: #2d2d2d;
+  --rst-border-color: #3e3e42;
+  --rst-text-primary: #d4d4d4;
+  --rst-text-secondary: #a0a0b0;
+  --rst-accent: #007acc;
+  --rst-spacing-xs: 4px;
+  --rst-spacing-sm: 8px;
+  --rst-spacing-md: 16px;
+  --rst-spacing-lg: 24px;
+  --rst-spacing-xl: 32px;
+  --rst-radius-sm: 4px;
+  --rst-radius-md: 8px;
+  --rst-radius-lg: 12px;
+  --rst-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --rst-font-size-base: 14px;
+  --rst-success: #22c55e;
+  --rst-danger: #ef4444;
+  --rst-warning: #f59e0b;
+  --rst-overlay-bg: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --rst-bg-primary: #f5f6f8;
+  --rst-bg-secondary: #f1f3f6;
+  --rst-bg-panel: #ffffff;
+  --rst-bg-topbar: #ffffff;
+  --rst-border-color: #d5d7dd;
+  --rst-text-primary: #1f2937;
+  --rst-text-secondary: #5b6475;
+  --rst-accent: #2563eb;
+  --rst-success: #16a34a;
+  --rst-danger: #dc2626;
+  --rst-warning: #d97706;
+  --rst-overlay-bg: rgba(17, 24, 39, 0.3);
+  color-scheme: light;
+}
