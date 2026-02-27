@@ -85,6 +85,13 @@ class MessageStore:
     def load_page(self, page: int) -> list[Message]:
         return [Message.model_validate(item) for item in self._load_page_raw(page)]
 
+    def load_all(self) -> list[Message]:
+        pages = self._list_pages()
+        results: list[Message] = []
+        for page in sorted(pages):
+            results.extend(self.load_page(page))
+        return results
+
     def load_for_frontend(self) -> tuple[list[Message], int]:
         total = self.get_total_count()
         latest = self.get_latest_page_number()

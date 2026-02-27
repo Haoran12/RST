@@ -130,14 +130,32 @@ def get_session(name: str) -> SessionResponse:
     return _to_response(_load_session(name))
 
 
+def get_session_storage(name: str) -> SessionMeta:
+    return _load_session(name)
+
+
+def get_session_dir(name: str) -> Path:
+    return _session_dir(name)
+
+
 def update_session(name: str, payload: SessionUpdate) -> SessionResponse:
     meta = _load_session(name)
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("scan_depth") is None:
+        updates.pop("scan_depth", None)
+    if updates.get("mem_length") is None:
+        updates.pop("mem_length", None)
     updates["updated_at"] = datetime.utcnow()
     updates["version"] = meta.version + 1
     updated = meta.model_copy(update=updates)
     _write_session(updated)
     return _to_response(updated)
+
+
+def touch_session(name: str) -> None:
+    meta = _load_session(name)
+    updated = meta.model_copy(update={"updated_at": datetime.utcnow()})
+    _write_session(updated)
 
 
 def delete_session(name: str) -> None:
@@ -172,7 +190,10 @@ __all__ = [
     "create_session",
     "list_sessions",
     "get_session",
+    "get_session_storage",
+    "get_session_dir",
     "update_session",
+    "touch_session",
     "delete_session",
     "rename_session",
 ]

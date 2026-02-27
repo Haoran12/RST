@@ -33,6 +33,7 @@ const naiveTheme = computed(() => (theme.value === "dark" ? darkTheme : null));
   background: var(--rst-bg-primary);
   color: var(--rst-text-primary);
   font-family: var(--rst-font-family);
+  position: relative;
 }
 
 .rst-main {
@@ -40,6 +41,7 @@ const naiveTheme = computed(() => (theme.value === "dark" ? darkTheme : null));
   display: flex;
   flex-direction: column;
   background: var(--rst-bg-secondary);
+  padding-left: 48px;
 }
 </style>
 

@@ -79,20 +79,46 @@
             />
           </n-form-item>
           <n-form-item label="Scan Depth">
-            <n-input-number
-              v-model:value="formState.scan_depth"
-              :min="1"
-              :max="50"
-              @blur="flush"
-            />
+            <div class="slider-row">
+              <n-slider
+                v-model:value="formState.scan_depth"
+                :min="-1"
+                :max="50"
+                :step="1"
+                :format-tooltip="formatDepthTooltip"
+                @update:value="handleImmediateSave"
+              />
+              <n-input-number
+                v-model:value="formState.scan_depth"
+                :min="-1"
+                :max="50"
+                :step="1"
+                :precision="0"
+                @blur="handleNumericBlur('scan_depth')"
+              />
+            </div>
+            <div class="field-hint">-1 表示使用全部可见消息</div>
           </n-form-item>
           <n-form-item label="Mem Length">
-            <n-input-number
-              v-model:value="formState.mem_length"
-              :min="1"
-              :max="500"
-              @blur="flush"
-            />
+            <div class="slider-row">
+              <n-slider
+                v-model:value="formState.mem_length"
+                :min="-1"
+                :max="500"
+                :step="5"
+                :format-tooltip="formatMemTooltip"
+                @update:value="handleImmediateSave"
+              />
+              <n-input-number
+                v-model:value="formState.mem_length"
+                :min="-1"
+                :max="500"
+                :step="5"
+                :precision="0"
+                @blur="handleNumericBlur('mem_length')"
+              />
+            </div>
+            <div class="field-hint">-1 表示使用全部可见消息</div>
           </n-form-item>
           <n-form-item label="User Description">
             <n-input
@@ -122,6 +148,7 @@ import {
   NInput,
   NInputNumber,
   NSelect,
+  NSlider,
   useMessage,
 } from "naive-ui";
 
@@ -190,6 +217,8 @@ const { saveStatus, markDirty, flush, cancel } = useAutoSave({
     if (!selectedName.value || !store.currentSession) {
       return;
     }
+    formState.scan_depth = coerceNumber(formState.scan_depth, -1, 50, 1);
+    formState.mem_length = coerceNumber(formState.mem_length, -1, 500, 5);
     await store.saveSession(selectedName.value, {
       mode: formState.mode,
       main_api_config_id: formState.main_api_config_id,
@@ -312,8 +341,41 @@ function handleImmediateSave() {
   if (!selectedName.value) {
     return;
   }
+  formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
+  formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
   markDirty();
   void flush();
+}
+
+function handleNumericBlur(field: "scan_depth" | "mem_length") {
+  if (field === "scan_depth") {
+    formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
+  } else {
+    formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
+  }
+  void flush();
+}
+
+function coerceNumber(value: number | null, min: number, max: number, step: number): number {
+  if (value === null || Number.isNaN(value)) {
+    return -1;
+  }
+  if (value === -1) {
+    return -1;
+  }
+  const clamped = Math.min(max, Math.max(min, value));
+  if (step <= 1) {
+    return clamped;
+  }
+  return Math.round(clamped / step) * step;
+}
+
+function formatDepthTooltip(value: number) {
+  return value === -1 ? "All" : `${value}`;
+}
+
+function formatMemTooltip(value: number) {
+  return value === -1 ? "All" : `${value}`;
 }
 </script>
 
@@ -378,6 +440,41 @@ function handleImmediateSave() {
 
 .empty-icon {
   font-size: 24px;
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+}
+
+.slider-row :deep(.n-slider) {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 0;
+  --n-rail-height: 4px;
+  --n-rail-color: var(--rst-border-color);
+  --n-fill-color: var(--rst-accent);
+  --n-handle-size: 14px;
+}
+
+.slider-row :deep(.n-slider-rail) {
+  height: 4px;
+  background: var(--rst-border-color);
+  border-radius: 999px;
+}
+
+.slider-row :deep(.n-slider-rail__fill) {
+  background: var(--rst-accent);
+  border-radius: 999px;
+}
+
+.field-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--rst-text-secondary);
 }
 </style>
 

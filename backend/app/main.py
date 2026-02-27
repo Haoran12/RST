@@ -6,7 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routers.api_configs import router as api_configs_router
+from app.routers.chat import router as chat_router
 from app.routers.health import router as health_router
+from app.routers.logs import router as logs_router
 from app.routers.presets import router as presets_router
 from app.routers.sessions import router as sessions_router
 from app.services.preset_service import ensure_default_preset
@@ -42,6 +44,8 @@ def create_app() -> FastAPI:
     app.include_router(api_configs_router, prefix="/api-configs", tags=["API Configs"])
     app.include_router(sessions_router, prefix="/sessions", tags=["Sessions"])
     app.include_router(presets_router, prefix="/presets", tags=["Presets"])
+    app.include_router(chat_router, tags=["Chat"])
+    app.include_router(logs_router, tags=["Logs"])
     return app
 
 

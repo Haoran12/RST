@@ -66,7 +66,10 @@ import { computed, ref, watch } from "vue";
 import { NButton, NInput, NPopconfirm, NSelect } from "naive-ui";
 import type { SelectOption } from "naive-ui";
 
-type ConfigSelectorOption = SelectOption;
+type ConfigSelectorOption = Omit<SelectOption, "label" | "value"> & {
+  label: string;
+  value: string;
+};
 
 const props = defineProps<{
   options: ConfigSelectorOption[];
@@ -86,7 +89,7 @@ const emit = defineEmits<{
 const isRenaming = ref(false);
 const renameInput = ref("");
 
-const selectedLabel = computed(() => {
+const selectedLabel = computed<string>(() => {
   const selected = props.options.find((option) => option.value === props.selectedValue);
   return selected?.label ?? "";
 });

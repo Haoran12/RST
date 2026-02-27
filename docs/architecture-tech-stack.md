@@ -66,15 +66,15 @@
 ### 3.3 Preset 系统
 1. Preset 用于定义 Prompt 组装顺序与条目内容。
 2. Preset 条目字段必须包含：name, role, content, disabled, comment。
-3. 每份 Preset 必须包含以下系统条目且不可删除、不可改名：
-- Main_Prompt
-- lores
-- user_description
-- chat_history
-- scene
-- user_input
-4. 系统条目允许调整顺序与禁用，但其 content 不可直接编辑。
-5. Preset 界面只允许编辑非系统条目的 content。
+3. 每份 Preset 必须包含以下系统内置条目且不可删除、不可改名：
+- Main_Prompt(用户自定义)
+- lores (Lores注入调度器输出)
+- user_description (Session配置项)
+- chat_history (最近 mem_length 条 visible 消息)
+- scene (对话语境下的时间地点)
+- user_input (用户最新输入)
+4. 系统内置条目允许调整顺序与禁用，但其 content 不可直接编辑。
+5. Preset 界面只允许编辑非系统内置条目的 content。
 6. Prompt 组装必须严格按 Preset 条目顺序执行，disabled 条目不参与组装。
 
 ### 3.4 RST Lore 数据管理
@@ -90,25 +90,26 @@
 
 ### 3.5 Lore 调度器
 1. 调度器必须基于最近 scan_depth 条 visible 消息进行检索与判断。
-2. 调度器必须能基于 tags、name、category 等元数据检索相关条目。
+2. 调度器必须能基于 lore/或rst_data下各个条目的tags、name、category 等元数据检索相关条目。
 3. 可选支持向量检索以增强召回，但不作为必须条件。
 4. 调度器必须调用独立 LLM 对候选条目进行确认、整理与摘要。
 5. 注入粒度必须精细到文件内的单条目或小节，避免整文件注入。
 6. 输出结果必须为可直接用于 Prompt 的注入块。
 
 ### 3.6 Appearance
-1. Appearance 作为独立配置文件存在并可热更新。
-2. 至少支持主题色、字体、间距、圆角与面板密度等基础参数。
-3. 后续扩展不应破坏现有配置兼容性。
+1. Appearance 作为独立配置文件存在并可热更新, 用户必须能创建、编辑、删除自定义主题，并在界面上选择应用。
+2. 支持主题色、字体、间距等基础参数。
+3. 支持会话消息Markdown的样式配置(对标题, 常规段落, 斜体, 中英文双引号包裹的文字, 代码块设置其颜色)
+4. 后续扩展不应破坏现有配置兼容性。
 
 ### 3.7 统一配置面板
-1. Preset, API, Session, Lores, Appearance 每份配置必须存储为单文件。
+1. Preset, API, Session, Lores, Appearance 每份配置必须存储为独立文件。
 2. 系统必须提供统一的新建/删除/重命名/查看/编辑条目的 Panel。
 3. Panel 默认折叠在界面左侧，以图标入口展开。
 4. Panel 的交互与行为必须在上述五类配置中保持一致。
 
 ### 3.8 ST | RST 模式
-1. ST 模式要求：Lore 调度器关闭，RST 专属面板隐藏，Prompt 组装保持 SillyTavern 兼容条目。
+1. ST 模式要求：Lore 调度器关闭，采用传统的常驻/关键词触发决定lore条目注入, RST 专属面板隐藏，Prompt 组装保持 SillyTavern 兼容条目。
 2. RST 模式要求：启用 Lore 调度与动态更新，显示 RST 专属面板，Preset 自动补齐系统条目。
 
 ### 3.9 双 API 管理

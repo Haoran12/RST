@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { createDiscreteApi, darkTheme } from "naive-ui";
 
 import type { ThemeMode } from "@/stores/appearance";
@@ -9,10 +9,12 @@ const messageTheme = ref(
     : darkTheme,
 );
 
+const configProviderProps = computed(() => ({
+  theme: messageTheme.value,
+}));
+
 const { message } = createDiscreteApi(["message"], {
-  configProviderProps: {
-    theme: messageTheme,
-  },
+  configProviderProps,
 });
 
 function setMessageTheme(theme: ThemeMode): void {

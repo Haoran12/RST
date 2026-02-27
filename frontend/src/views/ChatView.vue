@@ -29,29 +29,76 @@
     </header>
 
     <div class="chat-shell__body" @click="handleChatBodyClick">
-      <div class="chat-shell__placeholder">
-        <div class="placeholder-title">Chat Area</div>
-        <div class="placeholder-subtitle">等待后续会话与消息功能接入</div>
+      <div class="chat-shell__content">
+        <ContentArea />
+      </div>
+
+      <div class="chat-shell__input">
+        <div class="input-inner">
+          <div v-if="pendingAttachments.length" class="input-attachments">
+            <div
+              v-for="(file, index) in pendingAttachments"
+              :key="`${file.name}-${index}`"
+              class="attachment-item"
+            >
+              <span class="attachment-name" :title="file.name">{{ file.name }}</span>
+              <span class="attachment-size">({{ formatSize(file.size) }})</span>
+              <button
+                type="button"
+                class="attachment-remove"
+                @click="chatStore.removePendingAttachment(index)"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+
+          <div class="input-row">
+            <InputMenu />
+            <textarea
+              ref="inputRef"
+              v-model="inputText"
+              class="chat-input"
+              placeholder="Type your message... (Ctrl+Enter to send)"
+              @keydown="handleKeyDown"
+            ></textarea>
+            <button
+              type="button"
+              class="send-button"
+              :class="{ 'is-stop': isSending }"
+              :disabled="!canSend"
+              @click="handleSend"
+            >
+              {{ isSending ? "🛑 Stop" : "Send" }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { NSelect } from "naive-ui";
 
 import { fetchHealth } from "@/api/health";
+import ContentArea from "@/components/ContentArea.vue";
+import InputMenu from "@/components/InputMenu.vue";
 import { useAppearanceStore } from "@/stores/appearance";
+import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
+import { message } from "@/utils/message";
 
 type HealthState = "checking" | "ok" | "error";
 
 const sessionStore = useSessionStore();
+const chatStore = useChatStore();
 const appearanceStore = useAppearanceStore();
 const { sessions, currentSession, loading: sessionLoading } = storeToRefs(sessionStore);
 const { theme } = storeToRefs(appearanceStore);
+const { pendingAttachments, isSending } = storeToRefs(chatStore);
 
 const sessionOptions = computed(() =>
   sessions.value.map((session) => ({ label: session.name, value: session.name })),
@@ -60,8 +107,19 @@ const selectedSession = computed(() => currentSession.value?.name ?? null);
 const themeOptions = appearanceStore.themeOptions;
 
 const status = ref<HealthState>("checking");
+const inputText = ref("");
+const inputRef = ref<HTMLTextAreaElement | null>(null);
 
 const statusText = computed(() => status.value);
+const canSend = computed(() => {
+  if (!currentSession.value) {
+    return false;
+  }
+  if (isSending.value) {
+    return true;
+  }
+  return inputText.value.trim().length > 0 || pendingAttachments.value.length > 0;
+});
 
 onMounted(async () => {
   sessionStore.loadSessions();
@@ -74,6 +132,21 @@ onMounted(async () => {
   }
 });
 
+watch(
+  () => currentSession.value?.name ?? null,
+  (name) => {
+    chatStore.setActiveSession(name);
+    inputText.value = "";
+    chatStore.clearPendingAttachments();
+    nextTick(adjustTextareaHeight);
+  },
+  { immediate: true },
+);
+
+watch(inputText, () => {
+  adjustTextareaHeight();
+});
+
 function handleSessionSelect(value: string) {
   sessionStore.loadSession(value);
 }
@@ -83,6 +156,54 @@ function handleChatBodyClick() {
     return;
   }
   window.dispatchEvent(new CustomEvent("rst-chat-area-click"));
+}
+
+function adjustTextareaHeight() {
+  if (!inputRef.value) {
+    return;
+  }
+  inputRef.value.style.height = "auto";
+  const maxHeight = window.innerHeight * 0.4;
+  const nextHeight = Math.min(inputRef.value.scrollHeight, maxHeight);
+  inputRef.value.style.height = `${nextHeight}px`;
+}
+
+function handleSend() {
+  if (isSending.value) {
+    chatStore.cancelSending();
+    return;
+  }
+  if (!currentSession.value) {
+    message.error("Select a session before sending.");
+    return;
+  }
+  const content = inputText.value.trim();
+  if (!content && pendingAttachments.value.length === 0) {
+    return;
+  }
+  const attachments = pendingAttachments.value.map((item) => ({ ...item }));
+  void chatStore.sendMessage(content, attachments);
+
+  inputText.value = "";
+  chatStore.clearPendingAttachments();
+  nextTick(adjustTextareaHeight);
+}
+
+function handleKeyDown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    handleSend();
+  }
+}
+
+function formatSize(bytes: number) {
+  if (!bytes) {
+    return "0 B";
+  }
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
 }
 </script>
 
@@ -174,29 +295,114 @@ function handleChatBodyClick() {
 .chat-shell__body {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.chat-shell__placeholder {
-  width: min(720px, 100%);
-  border: 1px solid var(--rst-border-color);
-  border-radius: 12px;
-  padding: 24px;
+.chat-shell__content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.chat-shell__input {
+  border-top: 1px solid var(--rst-border-color);
   background: var(--rst-bg-panel);
-  text-align: center;
+  padding: 12px 20px;
 }
 
-.placeholder-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 8px;
+.input-inner {
+  max-width: 880px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.placeholder-subtitle {
-  font-size: 13px;
+.input-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rst-border-color);
+  margin: 0;
+}
+
+.attachment-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--rst-border-color);
+  background: var(--rst-bg-secondary);
+  font-size: 12px;
   color: var(--rst-text-secondary);
+}
+
+.attachment-name {
+  color: var(--rst-text-primary);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-remove {
+  border: none;
+  background: transparent;
+  color: var(--rst-danger);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.chat-input {
+  flex: 1;
+  min-height: 44px;
+  max-height: 50vh;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--rst-border-color);
+  background: var(--rst-bg-secondary);
+  color: var(--rst-text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--rst-accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.send-button {
+  border-radius: 10px;
+  border: 1px solid var(--rst-accent);
+  background: var(--rst-accent);
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.send-button.is-stop {
+  border-color: #dc2626;
+  background: #dc2626;
+}
+
+.send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 @media (max-width: 640px) {
@@ -209,8 +415,17 @@ function handleChatBodyClick() {
     min-width: 140px;
   }
 
-  .chat-shell__placeholder {
-    padding: 18px;
+  .chat-shell__input {
+    padding: 10px 12px;
+  }
+
+  .input-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .send-button {
+    width: 100%;
   }
 }
 </style>

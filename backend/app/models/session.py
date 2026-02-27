@@ -13,8 +13,8 @@ class SessionMeta(BaseModel):
     name: str
     mode: Literal["ST", "RST"] = "RST"
     user_description: str = ""
-    scan_depth: int = 4
-    mem_length: int = 40
+    scan_depth: int = Field(default=4, ge=-1, le=50)
+    mem_length: int = Field(default=40, ge=-1, le=500)
     created_at: datetime
     updated_at: datetime
     main_api_config_id: str
@@ -37,8 +37,8 @@ class SessionCreate(BaseModel):
     scheduler_api_config_id: str | None = None
     preset_id: str
     user_description: str = ""
-    scan_depth: int = Field(default=4, ge=1, le=50)
-    mem_length: int = Field(default=40, ge=1, le=500)
+    scan_depth: int = Field(default=4, ge=-1, le=50)
+    mem_length: int = Field(default=40, ge=-1, le=500)
 
     @field_validator("name")
     @classmethod
@@ -56,8 +56,8 @@ class SessionUpdate(BaseModel):
     scheduler_api_config_id: str | None = None
     preset_id: str | None = None
     user_description: str | None = None
-    scan_depth: int | None = Field(default=None, ge=1, le=50)
-    mem_length: int | None = Field(default=None, ge=1, le=500)
+    scan_depth: int | None = Field(default=None, ge=-1, le=50)
+    mem_length: int | None = Field(default=None, ge=-1, le=500)
 
 
 class SessionRename(BaseModel):
@@ -91,9 +91,17 @@ class SessionResponse(BaseModel):
     version: int
 
 
+class ChatAttachment(BaseModel):
+    name: str
+    size: int
+    type: str
+    content: str | None = None
+
+
 class Message(BaseModel):
     id: str
     role: Literal["system", "user", "assistant"]
     content: str
     timestamp: datetime
     visible: bool = True
+    attachments: list[ChatAttachment] | None = None

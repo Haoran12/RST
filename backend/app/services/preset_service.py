@@ -170,6 +170,10 @@ def get_preset(preset_id: str) -> PresetResponse:
     return _to_response(preset)
 
 
+def get_preset_storage(preset_id: str) -> Preset:
+    return _load_preset(preset_id)
+
+
 def update_preset(preset_id: str, payload: PresetUpdate) -> PresetResponse:
     preset = _load_preset(preset_id)
     entries = _validate_and_normalize_entries(payload.entries)
@@ -226,6 +230,7 @@ __all__ = [
     "create_preset",
     "list_presets",
     "get_preset",
+    "get_preset_storage",
     "update_preset",
     "delete_preset",
     "rename_preset",
