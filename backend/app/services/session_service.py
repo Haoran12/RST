@@ -13,6 +13,7 @@ from app.models.session import (
     SessionSummary,
     SessionUpdate,
 )
+from app.models.lore import LoreCategory, LoreFile, LoreIndex, SchedulerPromptTemplate
 from app.storage.file_io import read_json, write_json
 
 
@@ -26,6 +27,10 @@ class SessionNameExistsError(RuntimeError):
     def __init__(self, name: str) -> None:
         super().__init__(f"Session name '{name}' already exists")
         self.name = name
+
+
+class SessionValidationError(RuntimeError):
+    pass
 
 
 def _sessions_dir() -> Path:
@@ -68,6 +73,7 @@ def _to_response(meta: SessionMeta) -> SessionResponse:
         user_description=meta.user_description,
         scan_depth=meta.scan_depth,
         mem_length=meta.mem_length,
+        lore_sync_interval=meta.lore_sync_interval,
         created_at=meta.created_at,
         updated_at=meta.updated_at,
         main_api_config_id=meta.main_api_config_id,
@@ -77,9 +83,19 @@ def _to_response(meta: SessionMeta) -> SessionResponse:
     )
 
 
+def _validate_lore_sync_interval(mem_length: int, lore_sync_interval: int) -> None:
+    upper = 5 if mem_length < 0 else min(5, mem_length)
+    upper = max(1, upper)
+    if lore_sync_interval > upper:
+        raise SessionValidationError(
+            f"lore_sync_interval must be between 1 and {upper} for current mem_length"
+        )
+
+
 def create_session(payload: SessionCreate) -> SessionResponse:
     _sessions_dir().mkdir(parents=True, exist_ok=True)
     _ensure_unique_name(payload.name)
+    _validate_lore_sync_interval(payload.mem_length, payload.lore_sync_interval)
     now = datetime.utcnow()
     meta = SessionMeta(
         name=payload.name,
@@ -88,6 +104,7 @@ def create_session(payload: SessionCreate) -> SessionResponse:
         user_description=payload.user_description,
         scan_depth=payload.scan_depth,
         mem_length=payload.mem_length,
+        lore_sync_interval=payload.lore_sync_interval,
         created_at=now,
         updated_at=now,
         main_api_config_id=payload.main_api_config_id,
@@ -103,6 +120,26 @@ def create_session(payload: SessionCreate) -> SessionResponse:
     rst_data = session_dir / "rst_data"
     (rst_data / "characters").mkdir(parents=True, exist_ok=True)
     (rst_data / ".index").mkdir(parents=True, exist_ok=True)
+    default_world = rst_data / "default"
+    default_world.mkdir(parents=True, exist_ok=True)
+
+    for category in (
+        LoreCategory.WORLD_BASE,
+        LoreCategory.SOCIETY,
+        LoreCategory.PLACE,
+        LoreCategory.FACTION,
+        LoreCategory.SKILLS,
+        LoreCategory.OTHERS,
+        LoreCategory.PLOT,
+    ):
+        lore_file = LoreFile(world_id="default", category=category, entries=[])
+        write_json(default_world / f"{category.value}.json", lore_file.model_dump(mode="json"))
+
+    empty_index = LoreIndex(items=[], updated_at=now)
+    write_json(rst_data / ".index" / "index.json", empty_index.model_dump(mode="json"))
+
+    default_template = SchedulerPromptTemplate()
+    write_json(rst_data / "scheduler_template.json", default_template.model_dump(mode="json"))
     return _to_response(meta)
 
 
@@ -154,6 +191,13 @@ def update_session(name: str, payload: SessionUpdate) -> SessionResponse:
         updates.pop("scan_depth", None)
     if updates.get("mem_length") is None:
         updates.pop("mem_length", None)
+    if updates.get("lore_sync_interval") is None:
+        updates.pop("lore_sync_interval", None)
+
+    next_mem_length = updates.get("mem_length", meta.mem_length)
+    next_sync_interval = updates.get("lore_sync_interval", meta.lore_sync_interval)
+    _validate_lore_sync_interval(next_mem_length, next_sync_interval)
+
     updates["updated_at"] = datetime.utcnow()
     updates["version"] = meta.version + 1
     updated = meta.model_copy(update=updates)
@@ -196,6 +240,7 @@ def rename_session(name: str, payload: SessionRename) -> SessionResponse:
 __all__ = [
     "SessionNotFoundError",
     "SessionNameExistsError",
+    "SessionValidationError",
     "create_session",
     "list_sessions",
     "get_session",

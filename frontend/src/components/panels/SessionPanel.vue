@@ -133,6 +133,26 @@
               />
             </div>
           </n-form-item>
+          <n-form-item label="Lore Sync Interval">
+            <div class="slider-row">
+              <n-slider
+                v-model:value="formState.lore_sync_interval"
+                :min="1"
+                :max="syncIntervalUpperBound"
+                :step="1"
+                @update:value="handleSliderUpdate('lore_sync_interval')"
+                @change="handleSliderCommit('lore_sync_interval', $event)"
+              />
+              <n-input-number
+                v-model:value="formState.lore_sync_interval"
+                :min="1"
+                :max="syncIntervalUpperBound"
+                :step="1"
+                :precision="0"
+                @blur="handleNumericBlur('lore_sync_interval')"
+              />
+            </div>
+          </n-form-item>
           <div class="field-hint">-1 表示使用全部可见消息</div>
           <n-form-item label="User Description">
             <n-input
@@ -186,7 +206,9 @@ const message = useMessage();
 const selectedName = ref<string | null>(null);
 const createMode = ref(false);
 const syncing = ref(false);
-const sliderDraggingField = ref<"scan_depth" | "mem_length" | null>(null);
+const sliderDraggingField = ref<
+  "scan_depth" | "mem_length" | "lore_sync_interval" | null
+>(null);
 
 const modeOptions = [
   { label: "RST", value: "RST" },
@@ -201,6 +223,7 @@ const formState = reactive({
   preset_id: "",
   scan_depth: 4,
   mem_length: 40,
+  lore_sync_interval: 3,
   user_description: "",
 });
 
@@ -209,6 +232,7 @@ const createForm = reactive({
   mode: "RST" as "ST" | "RST",
   main_api_config_id: "",
   preset_id: "",
+  lore_sync_interval: 3,
 });
 
 const sessionOptions = computed(() =>
@@ -232,6 +256,13 @@ const presetOptions = computed(() =>
   })),
 );
 
+const syncIntervalUpperBound = computed(() => {
+  if (formState.mem_length < 0) {
+    return 5;
+  }
+  return Math.max(1, Math.min(5, formState.mem_length));
+});
+
 const { saveStatus, markDirty, flush, cancel } = useAutoSave({
   saveFn: async () => {
     if (!selectedName.value || !store.currentSession) {
@@ -239,6 +270,12 @@ const { saveStatus, markDirty, flush, cancel } = useAutoSave({
     }
     formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
     formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
+    formState.lore_sync_interval = coerceNumber(
+      formState.lore_sync_interval,
+      1,
+      syncIntervalUpperBound.value,
+      1,
+    );
     await store.saveSession(selectedName.value, {
       mode: formState.mode,
       is_closed: formState.is_closed,
@@ -247,6 +284,7 @@ const { saveStatus, markDirty, flush, cancel } = useAutoSave({
       preset_id: formState.preset_id,
       scan_depth: formState.scan_depth,
       mem_length: formState.mem_length,
+      lore_sync_interval: formState.lore_sync_interval,
       user_description: formState.user_description,
     });
   },
@@ -274,6 +312,7 @@ watch(
       formState.preset_id = session.preset_id;
       formState.scan_depth = session.scan_depth;
       formState.mem_length = session.mem_length;
+      formState.lore_sync_interval = session.lore_sync_interval;
       formState.user_description = session.user_description;
     }
     syncing.value = false;
@@ -321,6 +360,7 @@ function startCreate() {
   createForm.mode = "RST";
   createForm.main_api_config_id = "";
   createForm.preset_id = "";
+  createForm.lore_sync_interval = 3;
 }
 
 async function submitCreate() {
@@ -341,6 +381,7 @@ async function submitCreate() {
     mode: createForm.mode,
     main_api_config_id: createForm.main_api_config_id,
     preset_id: createForm.preset_id,
+    lore_sync_interval: createForm.lore_sync_interval,
   });
   if (result) {
     createMode.value = false;
@@ -376,6 +417,12 @@ function handleImmediateSave() {
   }
   formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
   formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
+  formState.lore_sync_interval = coerceNumber(
+    formState.lore_sync_interval,
+    1,
+    syncIntervalUpperBound.value,
+    1,
+  );
   markDirty();
   void flush();
 }
@@ -408,19 +455,28 @@ async function confirmLeaveIfBusy(): Promise<boolean> {
   return true;
 }
 
-function handleSliderUpdate(field: "scan_depth" | "mem_length") {
+function handleSliderUpdate(
+  field: "scan_depth" | "mem_length" | "lore_sync_interval",
+) {
   sliderDraggingField.value = field;
 }
 
 function handleSliderCommit(
-  field: "scan_depth" | "mem_length",
+  field: "scan_depth" | "mem_length" | "lore_sync_interval",
   value: number,
 ) {
   sliderDraggingField.value = null;
   if (field === "scan_depth") {
     formState.scan_depth = coerceNumber(value, -1, 40, 1);
-  } else {
+  } else if (field === "mem_length") {
     formState.mem_length = coerceNumber(value, -1, 400, 5);
+  } else {
+    formState.lore_sync_interval = coerceNumber(
+      value,
+      1,
+      syncIntervalUpperBound.value,
+      1,
+    );
   }
   if (!selectedName.value) {
     return;
@@ -429,11 +485,20 @@ function handleSliderCommit(
   void flush();
 }
 
-function handleNumericBlur(field: "scan_depth" | "mem_length") {
+function handleNumericBlur(
+  field: "scan_depth" | "mem_length" | "lore_sync_interval",
+) {
   if (field === "scan_depth") {
     formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
-  } else {
+  } else if (field === "mem_length") {
     formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
+  } else {
+    formState.lore_sync_interval = coerceNumber(
+      formState.lore_sync_interval,
+      1,
+      syncIntervalUpperBound.value,
+      1,
+    );
   }
   void flush();
 }

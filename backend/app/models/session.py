@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\- \u4e00-\u9fff]{1,64}$")
 
@@ -16,6 +16,7 @@ class SessionMeta(BaseModel):
     user_description: str = ""
     scan_depth: int = Field(default=4, ge=-1, le=50)
     mem_length: int = Field(default=40, ge=-1, le=500)
+    lore_sync_interval: int = Field(default=3, ge=1, le=5)
     created_at: datetime
     updated_at: datetime
     main_api_config_id: str
@@ -30,6 +31,14 @@ class SessionMeta(BaseModel):
             raise ValueError("Session name contains invalid characters or length")
         return value
 
+    @model_validator(mode="after")
+    def validate_sync_interval(self) -> "SessionMeta":
+        upper = 5 if self.mem_length < 0 else min(5, self.mem_length)
+        upper = max(1, upper)
+        if self.lore_sync_interval > upper:
+            raise ValueError(f"lore_sync_interval must be <= {upper} for current mem_length")
+        return self
+
 
 class SessionCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
@@ -41,6 +50,7 @@ class SessionCreate(BaseModel):
     user_description: str = ""
     scan_depth: int = Field(default=4, ge=-1, le=50)
     mem_length: int = Field(default=40, ge=-1, le=500)
+    lore_sync_interval: int = Field(default=3, ge=1, le=5)
 
     @field_validator("name")
     @classmethod
@@ -48,6 +58,14 @@ class SessionCreate(BaseModel):
         if not NAME_PATTERN.fullmatch(value):
             raise ValueError("Session name contains invalid characters or length")
         return value
+
+    @model_validator(mode="after")
+    def validate_sync_interval(self) -> "SessionCreate":
+        upper = 5 if self.mem_length < 0 else min(5, self.mem_length)
+        upper = max(1, upper)
+        if self.lore_sync_interval > upper:
+            raise ValueError(f"lore_sync_interval must be <= {upper} for current mem_length")
+        return self
 
 
 class SessionUpdate(BaseModel):
@@ -61,6 +79,7 @@ class SessionUpdate(BaseModel):
     user_description: str | None = None
     scan_depth: int | None = Field(default=None, ge=-1, le=50)
     mem_length: int | None = Field(default=None, ge=-1, le=500)
+    lore_sync_interval: int | None = Field(default=None, ge=1, le=5)
 
 
 class SessionRename(BaseModel):
@@ -88,6 +107,7 @@ class SessionResponse(BaseModel):
     user_description: str
     scan_depth: int
     mem_length: int
+    lore_sync_interval: int
     created_at: datetime
     updated_at: datetime
     main_api_config_id: str

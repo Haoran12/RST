@@ -12,6 +12,7 @@ export interface SessionDetail {
   user_description: string;
   scan_depth: number;
   mem_length: number;
+  lore_sync_interval: number;
   created_at: string;
   updated_at: string;
   main_api_config_id: string;
@@ -30,6 +31,7 @@ export interface SessionCreate {
   user_description?: string;
   scan_depth?: number;
   mem_length?: number;
+  lore_sync_interval?: number;
 }
 
 export interface SessionUpdate {
@@ -41,6 +43,7 @@ export interface SessionUpdate {
   user_description?: string;
   scan_depth?: number;
   mem_length?: number;
+  lore_sync_interval?: number;
 }
 
 export interface SessionRename {
