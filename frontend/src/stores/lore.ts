@@ -1,4 +1,4 @@
-﻿import { defineStore } from "pinia";
+import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
 import {
@@ -9,8 +9,10 @@ import {
   getSchedulerTemplate,
   getScheduleStatus,
   getSyncStatus,
+  importLore as importLoreApi,
   listCharacters,
   listEntries,
+  reorderEntries,
   triggerSchedule,
   triggerSync,
   updateCharacter,
@@ -24,9 +26,11 @@ import type {
   CharacterCreate,
   CharacterData,
   CharacterUpdate,
+  ConversionReport,
   LoreCategory,
   LoreEntry,
   LoreEntryCreate,
+  LoreEntryReorder,
   LoreEntryUpdate,
   ScheduleStatus,
   SchedulerPromptTemplate,
@@ -37,20 +41,20 @@ import type {
 export const useLoreStore = defineStore("lore", () => {
   const loading = ref(false);
   const entries = ref<LoreEntry[]>([]);
+  const currentEntriesCategory = ref<LoreCategory | null>(null);
   const characters = ref<CharacterData[]>([]);
   const scheduleStatus = ref<ScheduleStatus | null>(null);
   const syncStatus = ref<SyncStatus | null>(null);
   const schedulerTemplate = ref<SchedulerPromptTemplate | null>(null);
 
-  const sortedEntries = computed(() =>
-    [...entries.value].sort((a, b) => a.name.localeCompare(b.name)),
-  );
+  const sortedEntries = computed(() => [...entries.value]);
 
   async function loadEntries(sessionName: string, category?: LoreCategory): Promise<void> {
     loading.value = true;
     try {
       const response = await listEntries(sessionName, category);
       entries.value = response.entries;
+      currentEntriesCategory.value = category ?? null;
     } catch (error) {
       message.error(parseApiError(error));
     } finally {
@@ -65,7 +69,9 @@ export const useLoreStore = defineStore("lore", () => {
     loading.value = true;
     try {
       const entry = await createEntry(sessionName, payload);
-      entries.value = [...entries.value, entry];
+      if (currentEntriesCategory.value === null || currentEntriesCategory.value === entry.category) {
+        entries.value = [...entries.value, entry];
+      }
       return entry;
     } catch (error) {
       message.error(parseApiError(error));
@@ -107,6 +113,25 @@ export const useLoreStore = defineStore("lore", () => {
     }
   }
 
+  async function reorderEntriesAction(
+    sessionName: string,
+    payload: LoreEntryReorder,
+  ): Promise<LoreEntry[] | null> {
+    loading.value = true;
+    try {
+      const response = await reorderEntries(sessionName, payload);
+      if (currentEntriesCategory.value === payload.category) {
+        entries.value = response.entries;
+      }
+      return response.entries;
+    } catch (error) {
+      message.error(parseApiError(error));
+      return null;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function loadCharacters(sessionName: string): Promise<void> {
     loading.value = true;
     try {
@@ -114,6 +139,22 @@ export const useLoreStore = defineStore("lore", () => {
       characters.value = response.characters;
     } catch (error) {
       message.error(parseApiError(error));
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function importLoreAction(
+    sessionName: string,
+    file: File,
+    splitFactionCharacters: boolean,
+  ): Promise<ConversionReport | null> {
+    loading.value = true;
+    try {
+      return await importLoreApi(sessionName, file, splitFactionCharacters);
+    } catch (error) {
+      message.error(parseApiError(error));
+      return null;
     } finally {
       loading.value = false;
     }
@@ -241,10 +282,12 @@ export const useLoreStore = defineStore("lore", () => {
     createEntry: createEntryAction,
     updateEntry: updateEntryAction,
     deleteEntry: deleteEntryAction,
+    reorderEntries: reorderEntriesAction,
     loadCharacters,
     createCharacter: createCharacterAction,
     updateCharacter: updateCharacterAction,
     deleteCharacter: deleteCharacterAction,
+    importLore: importLoreAction,
     refreshSchedulerState,
     triggerSchedule: triggerScheduleAction,
     triggerSync: triggerSyncAction,

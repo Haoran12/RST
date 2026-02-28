@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
@@ -55,8 +55,65 @@ class LoreEntry(BaseModel):
 
 
 class Relationship(BaseModel):
+    """Relationship target is a name (or fuzzy descriptor), not a character id."""
+
     target: str
     relation: str = ""
+
+
+class SourceEntry(BaseModel):
+    """Single entry from legacy static Lore JSON."""
+
+    id: str = ""
+    name: str = ""
+    category: str = ""
+    object: str | None = None
+    role: str = "System"
+    disable: bool = False
+    content: str = ""
+    comment: str = ""
+    constant: bool = False
+    key: list[str] = Field(default_factory=list)
+    preventRecursion: bool = True
+    excludeRecursion: bool = False
+
+
+class SourceLoreFile(BaseModel):
+    """Legacy static Lore JSON payload."""
+
+    scanDepth: int = 4
+    entries: list[SourceEntry] = Field(default_factory=list)
+
+
+class ConversionWarning(BaseModel):
+    source_id: str
+    name: str
+    type: str
+    message: str
+
+
+class ConversionAction(BaseModel):
+    source_id: str
+    name: str
+    source_category: str
+    action: str
+    target_category: str | None = None
+    created_ids: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class ConversionReport(BaseModel):
+    source_file: str
+    session_name: str
+    timestamp: str
+    statistics: dict[str, int] = Field(default_factory=dict)
+    id_mapping: dict[str, str] = Field(default_factory=dict)
+    category_summary: dict[str, int] = Field(default_factory=dict)
+    actions: list[ConversionAction] = Field(default_factory=list)
+    warnings: list[ConversionWarning] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
 
 
 class CharacterMemory(BaseModel):
@@ -190,6 +247,17 @@ class LoreBatchItem(BaseModel):
 
 class LoreBatchUpdate(BaseModel):
     updates: list[LoreBatchItem] = Field(default_factory=list)
+
+
+class LoreEntryReorder(BaseModel):
+    category: LoreCategory
+    entry_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_category(self) -> "LoreEntryReorder":
+        if self.category in {LoreCategory.CHARACTER, LoreCategory.MEMORY}:
+            raise ValueError("Entry category cannot be character or memory")
+        return self
 
 
 class LoreEntryListResponse(BaseModel):

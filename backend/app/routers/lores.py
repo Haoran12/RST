@@ -1,8 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import json
 from time import perf_counter
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 
 from app.models.lore import (
     ActiveFormUpdate,
@@ -12,6 +13,7 @@ from app.models.lore import (
     CharacterListResponse,
     CharacterMemory,
     CharacterUpdate,
+    ConversionReport,
     ConsolidateResult,
     FormCreate,
     FormUpdate,
@@ -20,6 +22,7 @@ from app.models.lore import (
     LoreEntry,
     LoreEntryCreate,
     LoreEntryListResponse,
+    LoreEntryReorder,
     LoreEntryUpdate,
     MemoryCreate,
     MemoryListResponse,
@@ -33,6 +36,7 @@ from app.models.lore import (
 )
 from app.providers.base import ProviderError
 from app.services.api_config_service import ApiConfigNotFoundError
+from app.services.lore_converter import LoreConverter
 from app.services.lore_scheduler import lore_scheduler
 from app.services.lore_service import (
     CharacterNotFoundError,
@@ -80,6 +84,57 @@ def _recent_messages(session_name: str, scan_depth: int):
     return store.load_recent(scan_depth)
 
 
+@router.post(
+    "/sessions/{session_name}/lores/import",
+    response_model=ConversionReport,
+)
+async def import_lore_route(
+    session_name: str,
+    file: UploadFile = File(...),
+    split_faction_characters: bool = Query(default=False),
+    llm_fallback: bool = Query(default=False),
+    llm_api_config_id: str | None = Query(default=None),
+):
+    # Import requires an existing and open session.
+    try:
+        session = get_session_storage(session_name)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if session.is_closed:
+        raise HTTPException(status_code=400, detail="Session is closed")
+
+    raw = await file.read()
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large")
+
+    try:
+        source_data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON file") from exc
+
+    if not isinstance(source_data, dict) or "entries" not in source_data:
+        raise HTTPException(status_code=400, detail="Missing 'entries' field in JSON")
+
+    resolved_llm_api_config_id = (
+        llm_api_config_id.strip()
+        if isinstance(llm_api_config_id, str) and llm_api_config_id.strip()
+        else session.scheduler_api_config_id
+    )
+
+    converter = LoreConverter(
+        session_name=session_name,
+        source_data=source_data,
+        source_filename=file.filename or "unknown",
+        split_faction_characters=split_faction_characters,
+        llm_fallback=llm_fallback,
+        llm_api_config_id=resolved_llm_api_config_id,
+    )
+    try:
+        return await converter.convert()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get(
     "/sessions/{session_name}/lores/entries",
     response_model=LoreEntryListResponse,
@@ -122,6 +177,20 @@ def batch_update_entries_route(session_name: str, payload: LoreBatchUpdate):
         return LoreEntryListResponse(entries=entries, total=len(entries))
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put(
+    "/sessions/{session_name}/lores/entries/reorder",
+    response_model=LoreEntryListResponse,
+)
+def reorder_entries_route(session_name: str, payload: LoreEntryReorder):
+    try:
+        entries = lore_service.reorder_entries(session_name, payload)
+        return LoreEntryListResponse(entries=entries, total=len(entries))
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except LoreValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get(

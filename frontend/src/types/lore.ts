@@ -1,4 +1,4 @@
-﻿export type LoreCategory =
+export type LoreCategory =
   | "world_base"
   | "society"
   | "place"
@@ -12,6 +12,37 @@
 export interface Relationship {
   target: string;
   relation: string;
+}
+
+export interface ConversionWarning {
+  source_id: string;
+  name: string;
+  type: string;
+  message: string;
+}
+
+export interface ConversionReport {
+  source_file: string;
+  session_name: string;
+  timestamp: string;
+  statistics: Record<string, number>;
+  id_mapping: Record<string, string>;
+  category_summary: Record<string, number>;
+  actions: ConversionAction[];
+  warnings: ConversionWarning[];
+  errors: string[];
+}
+
+export interface ConversionAction {
+  source_id: string;
+  name: string;
+  source_category: string;
+  action: string;
+  target_category: string | null;
+  created_ids: string[];
+  notes: string[];
+  warnings: string[];
+  errors: string[];
 }
 
 export interface CharacterMemory {
@@ -110,6 +141,11 @@ export interface LoreBatchItem {
 
 export interface LoreBatchUpdate {
   updates: LoreBatchItem[];
+}
+
+export interface LoreEntryReorder {
+  category: Exclude<LoreCategory, "character" | "memory">;
+  entry_ids: string[];
 }
 
 export interface CharacterListResponse {

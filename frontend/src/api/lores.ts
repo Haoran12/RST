@@ -1,4 +1,4 @@
-﻿import apiClient from "@/api/client";
+import apiClient from "@/api/client";
 
 import type {
   CharacterCreate,
@@ -7,6 +7,7 @@ import type {
   CharacterListResponse,
   CharacterMemory,
   CharacterUpdate,
+  ConversionReport,
   ConsolidateResult,
   FormCreate,
   FormUpdate,
@@ -14,6 +15,7 @@ import type {
   LoreEntry,
   LoreEntryCreate,
   LoreEntryListResponse,
+  LoreEntryReorder,
   LoreEntryUpdate,
   MemoryCreate,
   MemoryListResponse,
@@ -27,6 +29,20 @@ import type {
 } from "@/types/lore";
 
 const BASE = (sessionName: string) => `/sessions/${sessionName}/lores`;
+
+export async function importLore(
+  sessionName: string,
+  file: File,
+  splitFactionCharacters: boolean = false,
+): Promise<ConversionReport> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await apiClient.post<ConversionReport>(`${BASE(sessionName)}/import`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    params: { split_faction_characters: splitFactionCharacters },
+  });
+  return data;
+}
 
 export async function listEntries(
   sessionName: string,
@@ -78,6 +94,17 @@ export async function batchUpdateEntries(
 ): Promise<LoreEntryListResponse> {
   const { data } = await apiClient.put<LoreEntryListResponse>(
     `${BASE(sessionName)}/entries/batch`,
+    payload,
+  );
+  return data;
+}
+
+export async function reorderEntries(
+  sessionName: string,
+  payload: LoreEntryReorder,
+): Promise<LoreEntryListResponse> {
+  const { data } = await apiClient.put<LoreEntryListResponse>(
+    `${BASE(sessionName)}/entries/reorder`,
     payload,
   );
   return data;

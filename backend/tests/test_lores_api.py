@@ -96,6 +96,51 @@ async def test_lore_entry_crud(async_client, sample_api_config) -> None:
 
 
 @pytest.mark.asyncio
+async def test_lore_entry_reorder(async_client, sample_api_config) -> None:
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    await _create_session(async_client, "LoreReorderSession", config_id, preset_id, config_id)
+
+    created_ids: list[str] = []
+    for name in ("条目A", "条目B", "条目C"):
+        created = await async_client.post(
+            "/sessions/LoreReorderSession/lores/entries",
+            json={
+                "name": name,
+                "category": "place",
+                "content": f"{name}内容",
+            },
+        )
+        assert created.status_code == 201
+        created_ids.append(created.json()["id"])
+
+    reordered = await async_client.put(
+        "/sessions/LoreReorderSession/lores/entries/reorder",
+        json={
+            "category": "place",
+            "entry_ids": [created_ids[2], created_ids[0], created_ids[1]],
+        },
+    )
+    assert reordered.status_code == 200
+    assert [item["id"] for item in reordered.json()["entries"]] == [
+        created_ids[2],
+        created_ids[0],
+        created_ids[1],
+    ]
+
+    listed = await async_client.get(
+        "/sessions/LoreReorderSession/lores/entries",
+        params={"category": "place"},
+    )
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["entries"]] == [
+        created_ids[2],
+        created_ids[0],
+        created_ids[1],
+    ]
+
+
+@pytest.mark.asyncio
 async def test_character_and_memory_crud(async_client, sample_api_config) -> None:
     config_id = await _create_api_config(async_client, sample_api_config)
     preset_id = await _create_preset(async_client)

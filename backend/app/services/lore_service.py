@@ -21,6 +21,7 @@ from app.models.lore import (
     LoreEntry,
     LoreEntryCreate,
     LoreEntryListResponse,
+    LoreEntryReorder,
     LoreEntryUpdate,
     MemoryCreate,
     MemoryListResponse,
@@ -172,6 +173,27 @@ class LoreService:
                 updated.append(entry)
         self._rebuild_index(store)
         return updated
+
+    def reorder_entries(self, session_name: str, payload: LoreEntryReorder) -> list[LoreEntry]:
+        if payload.category in {LoreCategory.CHARACTER, LoreCategory.MEMORY}:
+            raise LoreValidationError("Use character routes for character/memory data")
+
+        if len(payload.entry_ids) != len(set(payload.entry_ids)):
+            raise LoreValidationError("entry_ids must not contain duplicates")
+
+        store = self._store(session_name)
+        lore_file = store.load_category_file(payload.category)
+        current_ids = [entry.id for entry in lore_file.entries]
+        requested_ids = payload.entry_ids
+
+        if len(current_ids) != len(requested_ids) or set(current_ids) != set(requested_ids):
+            raise LoreValidationError("entry_ids must include all entries in the category exactly once")
+
+        entry_map = {entry.id: entry for entry in lore_file.entries}
+        lore_file.entries = [entry_map[entry_id] for entry_id in requested_ids]
+        store.save_category_file(lore_file)
+        self._rebuild_index(store)
+        return list(lore_file.entries)
 
     def list_characters(self, session_name: str) -> list[CharacterData]:
         store = self._store(session_name)
