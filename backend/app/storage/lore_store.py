@@ -133,16 +133,17 @@ class LoreStore:
         return True
 
     def list_characters(self) -> list[CharacterData]:
-        results: list[CharacterData] = []
-        for path in sorted(self.characters_dir.glob("*.json")):
+        indexed_results: list[tuple[int, CharacterData]] = []
+        for index, path in enumerate(sorted(self.characters_dir.glob("*.json"))):
             data = read_json(path)
             if not isinstance(data, dict):
                 continue
             try:
-                results.append(CharacterFile.model_validate(data).data)
+                indexed_results.append((index, CharacterFile.model_validate(data).data))
             except Exception:
                 continue
-        return results
+        indexed_results.sort(key=lambda item: (item[1].sort_order, item[0]))
+        return [item[1] for item in indexed_results]
 
     def _empty_lore_file(self, category: LoreCategory, world_id: str) -> LoreFile:
         return LoreFile(world_id=world_id, category=category, entries=[])
@@ -187,9 +188,18 @@ class LoreStore:
         entry, lore_file = found
         merged_updates = {**updates, "updated_at": datetime.utcnow()}
         updated_entry = entry.model_copy(update=merged_updates)
-        lore_file.entries = [
-            updated_entry if item.id == entry_id else item for item in lore_file.entries
-        ]
+
+        # If category changes, move the entry across category files.
+        if updated_entry.category != lore_file.category:
+            lore_file.entries = [item for item in lore_file.entries if item.id != entry_id]
+            self.save_category_file(lore_file)
+
+            target_file = self.load_category_file(updated_entry.category, lore_file.world_id)
+            target_file.entries.append(updated_entry)
+            self.save_category_file(target_file)
+            return updated_entry
+
+        lore_file.entries = [updated_entry if item.id == entry_id else item for item in lore_file.entries]
         self.save_category_file(lore_file)
         return updated_entry
 

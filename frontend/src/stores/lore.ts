@@ -12,11 +12,13 @@ import {
   importLore as importLoreApi,
   listCharacters,
   listEntries,
+  reorderCharacters,
   reorderEntries,
   triggerSchedule,
   triggerSync,
   updateCharacter,
   updateEntry,
+  updateForm,
   updateSchedulerTemplate,
 } from "@/api/lores";
 import { parseApiError } from "@/stores/api-error";
@@ -25,8 +27,11 @@ import { message } from "@/utils/message";
 import type {
   CharacterCreate,
   CharacterData,
+  CharacterForm,
+  CharacterReorder,
   CharacterUpdate,
   ConversionReport,
+  FormUpdate,
   LoreCategory,
   LoreEntry,
   LoreEntryCreate,
@@ -89,9 +94,11 @@ export const useLoreStore = defineStore("lore", () => {
     loading.value = true;
     try {
       const updated = await updateEntry(sessionName, entryId, payload);
-      entries.value = entries.value.map((entry) =>
-        entry.id === entryId ? updated : entry,
-      );
+      if (currentEntriesCategory.value === null || currentEntriesCategory.value === updated.category) {
+        entries.value = entries.value.map((entry) => (entry.id === entryId ? updated : entry));
+      } else {
+        entries.value = entries.value.filter((entry) => entry.id !== entryId);
+      }
       return updated;
     } catch (error) {
       message.error(parseApiError(error));
@@ -197,6 +204,39 @@ export const useLoreStore = defineStore("lore", () => {
     }
   }
 
+  async function updateCharacterFormAction(
+    sessionName: string,
+    characterId: string,
+    formId: string,
+    payload: FormUpdate,
+  ): Promise<CharacterForm | null> {
+    loading.value = true;
+    try {
+      const updatedForm = await updateForm(sessionName, characterId, formId, payload);
+      const target = characters.value.find((character) => character.character_id === characterId);
+      if (!target) {
+        return updatedForm;
+      }
+      const updatedForms = target.forms.map((form) =>
+        form.form_id === formId ? updatedForm : form,
+      );
+      characters.value = characters.value.map((character) =>
+        character.character_id === characterId
+          ? {
+              ...character,
+              forms: updatedForms,
+            }
+          : character,
+      );
+      return updatedForm;
+    } catch (error) {
+      message.error(parseApiError(error));
+      return null;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function deleteCharacterAction(
     sessionName: string,
     characterId: string,
@@ -209,6 +249,23 @@ export const useLoreStore = defineStore("lore", () => {
       );
     } catch (error) {
       message.error(parseApiError(error));
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function reorderCharactersAction(
+    sessionName: string,
+    payload: CharacterReorder,
+  ): Promise<CharacterData[] | null> {
+    loading.value = true;
+    try {
+      const response = await reorderCharacters(sessionName, payload);
+      characters.value = response.characters;
+      return response.characters;
+    } catch (error) {
+      message.error(parseApiError(error));
+      return null;
     } finally {
       loading.value = false;
     }
@@ -286,7 +343,9 @@ export const useLoreStore = defineStore("lore", () => {
     loadCharacters,
     createCharacter: createCharacterAction,
     updateCharacter: updateCharacterAction,
+    updateCharacterForm: updateCharacterFormAction,
     deleteCharacter: deleteCharacterAction,
+    reorderCharacters: reorderCharactersAction,
     importLore: importLoreAction,
     refreshSchedulerState,
     triggerSchedule: triggerScheduleAction,

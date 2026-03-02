@@ -155,6 +155,7 @@ class CharacterData(BaseModel):
 
     name: str = Field(min_length=1, max_length=128)
     race: str = Field(min_length=1, max_length=64)
+    strength: int = Field(default=10, ge=0)
     birth: str = ""
     homeland: str = ""
 
@@ -171,6 +172,7 @@ class CharacterData(BaseModel):
     active_form_id: str = ""
 
     tags: list[str] = Field(default_factory=list)
+    sort_order: int = Field(default=0, ge=0)
     disabled: bool = False
     constant: bool = False
     created_at: datetime
@@ -233,10 +235,17 @@ class LoreEntryCreate(BaseModel):
 
 class LoreEntryUpdate(BaseModel):
     name: str | None = None
+    category: LoreCategory | None = None
     content: str | None = None
     disabled: bool | None = None
     constant: bool | None = None
     tags: list[str] | None = None
+
+    @model_validator(mode="after")
+    def validate_category(self) -> "LoreEntryUpdate":
+        if self.category in {LoreCategory.CHARACTER, LoreCategory.MEMORY}:
+            raise ValueError("Entry category cannot be character or memory")
+        return self
 
 
 class LoreBatchItem(BaseModel):
@@ -268,6 +277,7 @@ class LoreEntryListResponse(BaseModel):
 class CharacterCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     race: str = Field(min_length=1, max_length=64)
+    strength: int = Field(default=10, ge=0)
     birth: str = ""
     homeland: str = ""
     aliases: list[str] = Field(default_factory=list)
@@ -284,6 +294,7 @@ class CharacterCreate(BaseModel):
 class CharacterUpdate(BaseModel):
     name: str | None = None
     race: str | None = None
+    strength: int | None = Field(default=None, ge=0)
     birth: str | None = None
     homeland: str | None = None
     aliases: list[str] | None = None
@@ -295,6 +306,10 @@ class CharacterUpdate(BaseModel):
     tags: list[str] | None = None
     disabled: bool | None = None
     constant: bool | None = None
+
+
+class CharacterReorder(BaseModel):
+    character_ids: list[str] = Field(default_factory=list)
 
 
 class CharacterListResponse(BaseModel):

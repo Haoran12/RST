@@ -86,10 +86,26 @@ async def test_lore_entry_crud(async_client, sample_api_config) -> None:
 
     updated = await async_client.put(
         f"/sessions/LoreEntrySession/lores/entries/{entry_id}",
-        json={"content": "危险森林（已更新）", "disabled": True},
+        json={"content": "危险森林（已更新）", "disabled": True, "category": "society"},
     )
     assert updated.status_code == 200
     assert updated.json()["disabled"] is True
+    assert updated.json()["category"] == "society"
+
+    listed_place = await async_client.get(
+        "/sessions/LoreEntrySession/lores/entries",
+        params={"category": "place"},
+    )
+    assert listed_place.status_code == 200
+    assert listed_place.json()["total"] == 0
+
+    listed_society = await async_client.get(
+        "/sessions/LoreEntrySession/lores/entries",
+        params={"category": "society"},
+    )
+    assert listed_society.status_code == 200
+    assert listed_society.json()["total"] == 1
+    assert listed_society.json()["entries"][0]["id"] == entry_id
 
     deleted = await async_client.delete(f"/sessions/LoreEntrySession/lores/entries/{entry_id}")
     assert deleted.status_code == 204
@@ -151,7 +167,16 @@ async def test_character_and_memory_crud(async_client, sample_api_config) -> Non
         json={"name": "艾琳娜", "race": "人类", "role": "游侠"},
     )
     assert created_character.status_code == 201
-    character_id = created_character.json()["character_id"]
+    created_payload = created_character.json()
+    character_id = created_payload["character_id"]
+    assert created_payload["strength"] == 10
+
+    updated_character = await async_client.put(
+        f"/sessions/LoreCharSession/lores/characters/{character_id}",
+        json={"strength": 16},
+    )
+    assert updated_character.status_code == 200
+    assert updated_character.json()["strength"] == 16
 
     created_memory = await async_client.post(
         f"/sessions/LoreCharSession/lores/characters/{character_id}/memories",
@@ -177,6 +202,45 @@ async def test_character_and_memory_crud(async_client, sample_api_config) -> Non
         f"/sessions/LoreCharSession/lores/characters/{character_id}/memories/{memory_id}"
     )
     assert deleted.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_character_reorder(async_client, sample_api_config) -> None:
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    await _create_session(async_client, "LoreCharacterReorderSession", config_id, preset_id, config_id)
+
+    created_ids: list[str] = []
+    for name in ("角色A", "角色B", "角色C"):
+        created = await async_client.post(
+            "/sessions/LoreCharacterReorderSession/lores/characters",
+            json={"name": name, "race": "人类"},
+        )
+        assert created.status_code == 201
+        created_ids.append(created.json()["character_id"])
+
+    listed = await async_client.get("/sessions/LoreCharacterReorderSession/lores/characters")
+    assert listed.status_code == 200
+    assert [item["character_id"] for item in listed.json()["characters"]] == created_ids
+
+    reordered = await async_client.put(
+        "/sessions/LoreCharacterReorderSession/lores/characters/reorder",
+        json={"character_ids": [created_ids[2], created_ids[0], created_ids[1]]},
+    )
+    assert reordered.status_code == 200
+    assert [item["character_id"] for item in reordered.json()["characters"]] == [
+        created_ids[2],
+        created_ids[0],
+        created_ids[1],
+    ]
+
+    listed_after = await async_client.get("/sessions/LoreCharacterReorderSession/lores/characters")
+    assert listed_after.status_code == 200
+    assert [item["character_id"] for item in listed_after.json()["characters"]] == [
+        created_ids[2],
+        created_ids[0],
+        created_ids[1],
+    ]
 
 
 @pytest.mark.asyncio

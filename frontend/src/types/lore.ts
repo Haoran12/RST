@@ -81,6 +81,7 @@ export interface CharacterData {
   character_id: string;
   name: string;
   race: string;
+  strength: number;
   birth: string;
   homeland: string;
   aliases: string[];
@@ -93,6 +94,7 @@ export interface CharacterData {
   forms: CharacterForm[];
   active_form_id: string;
   tags: string[];
+  sort_order: number;
   disabled: boolean;
   constant: boolean;
   created_at: string;
@@ -122,6 +124,7 @@ export interface LoreEntryCreate {
 
 export interface LoreEntryUpdate {
   name?: string;
+  category?: Exclude<LoreCategory, "character" | "memory">;
   content?: string;
   disabled?: boolean;
   constant?: boolean;
@@ -153,9 +156,14 @@ export interface CharacterListResponse {
   total: number;
 }
 
+export interface CharacterReorder {
+  character_ids: string[];
+}
+
 export interface CharacterCreate {
   name: string;
   race: string;
+  strength?: number;
   birth?: string;
   homeland?: string;
   aliases?: string[];
@@ -172,6 +180,7 @@ export interface CharacterCreate {
 export interface CharacterUpdate {
   name?: string;
   race?: string;
+  strength?: number;
   birth?: string;
   homeland?: string;
   aliases?: string[];

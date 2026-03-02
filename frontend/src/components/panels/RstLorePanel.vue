@@ -1,7 +1,7 @@
 <template>
   <section class="panel" @click.stop>
     <header class="panel-header">
-      <div class="panel-title">RST Lore</div>
+      <div class="panel-title">{{ t("rstPanel.title") }}</div>
       <div class="header-actions">
         <n-button
           size="small"
@@ -9,10 +9,10 @@
           :disabled="!currentSession || loreStore.loading"
           @click="openImportPicker"
         >
-          导入静态 Lore
+          {{ t("rstPanel.import.open") }}
         </n-button>
         <n-tag size="small" :bordered="false" type="info">
-          {{ currentSession?.name ?? "No Session" }}
+          {{ currentSession?.name ?? t("rstPanel.session.unselected") }}
         </n-tag>
       </div>
     </header>
@@ -26,13 +26,13 @@
     />
 
     <div v-if="!currentSession" class="empty">
-      <div class="empty-icon">📚</div>
-      <div>请先在 Session 面板选择会话</div>
+      <div class="empty-icon">{{ t("rstPanel.session.unselected") }}</div>
+      <div>{{ t("rstPanel.empty.hint") }}</div>
     </div>
 
     <n-spin v-else :show="loreStore.loading" class="panel-body">
       <n-tabs v-model:value="activeTab" type="line" animated>
-        <n-tab-pane name="entries" tab="其他设定">
+        <n-tab-pane name="entries" :tab="t('rstPanel.tabs.entries')">
           <div class="entries-filter-row">
             <n-select
               v-model:value="entryFilter"
@@ -44,12 +44,14 @@
 
           <div class="entries-panel">
             <div class="entries-actions-row">
-              <div class="entries-title">Entries</div>
+              <div class="entries-title">{{ t("rstPanel.entries.title") }}</div>
               <div class="entries-actions">
-                <n-button size="small" type="primary" @click="openNewEntryOverlay">+ 添加条目</n-button>
+                <n-button size="small" type="primary" @click="openNewEntryOverlay">
+                  {{ t("rstPanel.entries.new") }}
+                </n-button>
                 <n-popconfirm
                   :show-icon="false"
-                  positive-text="确认删除"
+                  :positive-text="t('common.confirm')"
                   :positive-button-props="{ type: 'error' }"
                   @positive-click="handleBulkDeleteEntries"
                 >
@@ -59,8 +61,8 @@
                       secondary
                       class="entries-action entries-action--danger"
                       :disabled="!hasSelection"
-                      aria-label="删除选中条目"
-                      title="Delete"
+                      :aria-label="t('rstPanel.entries.delete_selected_aria')"
+                      :title="t('rstPanel.actions.delete')"
                     >
                       <svg class="icon-trash" viewBox="0 0 24 24" aria-hidden="true">
                         <path
@@ -70,15 +72,15 @@
                       </svg>
                     </n-button>
                   </template>
-                  确认删除选中条目？
+                  {{ t("rstPanel.entries.delete_selected_confirm") }}
                 </n-popconfirm>
                 <n-button
                   size="small"
                   secondary
                   class="entries-action"
                   :disabled="copyDisabled"
-                  aria-label="复制选中条目"
-                  title="Copy"
+                  :aria-label="t('rstPanel.entries.copy_selected_aria')"
+                  :title="t('rstPanel.actions.copy')"
                   @click="openCopyModal"
                 >
                   ⧉
@@ -110,7 +112,6 @@
                   </div>
                   <div class="entry-main">
                     <span class="entry-name">{{ element.name }}</span>
-                    <span class="entry-meta">{{ element.tags.join(", ") }}</span>
                   </div>
                   <div class="entry-mode">{{ entryTriggerLabel(element) }}</div>
                   <div class="entry-toggle" @click.stop>
@@ -123,23 +124,21 @@
               </template>
             </Draggable>
 
-            <div v-else class="entry-list-empty">
-              当前分类暂无条目
-            </div>
+            <div v-else class="entry-list-empty">{{ t("rstPanel.entries.empty") }}</div>
           </div>
         </n-tab-pane>
 
-        <n-tab-pane name="characters" tab="人物">
+        <n-tab-pane name="characters" :tab="t('rstPanel.tabs.characters')">
           <div class="entries-panel">
             <div class="entries-actions-row">
-              <div class="entries-title">Characters</div>
+              <div class="entries-title">{{ t("rstPanel.characters.title") }}</div>
               <div class="entries-actions">
                 <n-button size="small" type="primary" @click="openNewCharacterOverlay">
-                  + 添加人物
+                  {{ t("rstPanel.characters.new") }}
                 </n-button>
                 <n-popconfirm
                   :show-icon="false"
-                  positive-text="确认删除"
+                  :positive-text="t('common.confirm')"
                   :positive-button-props="{ type: 'error' }"
                   @positive-click="handleBulkDeleteCharacters"
                 >
@@ -149,8 +148,8 @@
                       secondary
                       class="entries-action entries-action--danger"
                       :disabled="!hasCharacterSelection"
-                      aria-label="删除选中人物"
-                      title="Delete"
+                      :aria-label="t('rstPanel.characters.delete_selected_aria')"
+                      :title="t('rstPanel.actions.delete')"
                     >
                       <svg class="icon-trash" viewBox="0 0 24 24" aria-hidden="true">
                         <path
@@ -160,15 +159,15 @@
                       </svg>
                     </n-button>
                   </template>
-                  确认删除选中人物？
+                  {{ t("rstPanel.characters.delete_selected_confirm") }}
                 </n-popconfirm>
                 <n-button
                   size="small"
                   secondary
                   class="entries-action"
                   :disabled="!hasCharacterSelection"
-                  aria-label="复制选中人物"
-                  title="Copy"
+                  :aria-label="t('rstPanel.characters.copy_selected_aria')"
+                  :title="t('rstPanel.actions.copy')"
                   @click="openCharacterCopyModal"
                 >
                   ⧉
@@ -176,90 +175,105 @@
               </div>
             </div>
 
-            <div v-if="charactersSorted.length > 0" class="entry-list">
-              <button
-                v-for="character in charactersSorted"
-                :key="character.character_id"
-                type="button"
-                class="character-row"
-                :class="{ active: character.character_id === activeCharacterId }"
-                @click="openCharacterOverlay(character.character_id)"
-              >
-                <div class="entry-checkbox" @click.stop>
-                  <n-checkbox
-                    size="small"
-                    :checked="selectedCharacterIds.includes(character.character_id)"
-                    @update:checked="(checked) => toggleCharacterSelected(character.character_id, checked)"
-                  />
+            <Draggable
+              v-if="characterRows.length > 0"
+              v-model="characterRows"
+              item-key="character_id"
+              handle=".drag-handle"
+              class="entry-list"
+              @end="handleCharacterReorder"
+            >
+              <template #item="{ element }">
+                <div
+                  class="character-row"
+                  :class="{ active: element.character_id === activeCharacterId }"
+                  @click="openCharacterOverlay(element.character_id)"
+                >
+                  <div class="drag-handle" @click.stop>⋮⋮</div>
+                  <div class="entry-checkbox" @click.stop>
+                    <n-checkbox
+                      size="small"
+                      :checked="selectedCharacterIds.includes(element.character_id)"
+                      @update:checked="(checked) => toggleCharacterSelected(element.character_id, checked)"
+                    />
+                  </div>
+                  <div class="entry-main">
+                    <span class="entry-name">{{ element.name }}</span>
+                  </div>
+                  <div class="entry-mode">{{ characterModeLabel(element) }}</div>
+                  <div class="entry-toggle" @click.stop>
+                    <n-switch
+                      :value="!element.disabled"
+                      @update:value="(enabled) => handleCharacterToggle(element.character_id, enabled)"
+                    />
+                  </div>
                 </div>
-                <div class="entry-main">
-                  <span class="entry-name">{{ character.name }}</span>
-                </div>
-                <div class="entry-mode">{{ characterModeLabel(character) }}</div>
-                <div class="entry-toggle" @click.stop>
-                  <n-switch
-                    :value="!character.disabled"
-                    @update:value="(enabled) => handleCharacterToggle(character.character_id, enabled)"
-                  />
-                </div>
-              </button>
-            </div>
+              </template>
+            </Draggable>
 
-            <div v-else class="entry-list-empty">
-              当前暂无人物条目
-            </div>
+            <div v-else class="entry-list-empty">{{ t("rstPanel.characters.empty") }}</div>
           </div>
         </n-tab-pane>
 
-        <n-tab-pane name="scheduler" tab="调度器">
+        <n-tab-pane name="scheduler" :tab="t('rstPanel.tabs.scheduler')">
           <div class="scheduler-card">
             <div class="status-grid">
               <div>
-                <div class="status-label">Schedule</div>
+                <div class="status-label">{{ t("rstPanel.scheduler.schedule") }}</div>
                 <div class="status-value">
-                  {{ loreStore.scheduleStatus?.running ? "Running" : "Idle" }}
+                  {{ runtimeStateLabel(Boolean(loreStore.scheduleStatus?.running)) }}
                 </div>
                 <div class="status-meta">
-                  匹配数: {{ loreStore.scheduleStatus?.last_matched_count ?? 0 }}
+                  {{ t("rstPanel.scheduler.match_count") }}:
+                  {{ loreStore.scheduleStatus?.last_matched_count ?? 0 }}
                 </div>
               </div>
               <div>
-                <div class="status-label">Sync</div>
+                <div class="status-label">{{ t("rstPanel.scheduler.sync") }}</div>
                 <div class="status-value">
-                  {{ loreStore.syncStatus?.running ? "Running" : "Idle" }}
+                  {{ runtimeStateLabel(Boolean(loreStore.syncStatus?.running)) }}
                 </div>
                 <div class="status-meta">
-                  轮数: {{ loreStore.syncStatus?.rounds_since_last_sync ?? 0 }} /
+                  {{ t("rstPanel.scheduler.round") }}:
+                  {{ loreStore.syncStatus?.rounds_since_last_sync ?? 0 }} /
                   {{ loreStore.syncStatus?.sync_interval ?? 0 }}
                 </div>
               </div>
             </div>
 
             <n-space>
-              <n-button size="small" @click="refreshSchedulerState">刷新状态</n-button>
-              <n-button size="small" type="primary" @click="triggerScheduleNow">手动调度</n-button>
-              <n-button size="small" type="warning" @click="triggerSyncNow">手动同步</n-button>
+              <n-button size="small" @click="refreshSchedulerState">
+                {{ t("rstPanel.scheduler.refresh") }}
+              </n-button>
+              <n-button size="small" type="primary" @click="triggerScheduleNow">
+                {{ t("rstPanel.scheduler.run_schedule") }}
+              </n-button>
+              <n-button size="small" type="warning" @click="triggerSyncNow">
+                {{ t("rstPanel.scheduler.run_sync") }}
+              </n-button>
             </n-space>
 
             <n-input
               v-model:value="templateForm.confirm_prompt"
               type="textarea"
               :autosize="{ minRows: 5 }"
-              placeholder="confirm_prompt"
+              :placeholder="t('rstPanel.scheduler.placeholder.confirm_prompt')"
             />
             <n-input
               v-model:value="templateForm.extract_prompt"
               type="textarea"
               :autosize="{ minRows: 5 }"
-              placeholder="extract_prompt"
+              :placeholder="t('rstPanel.scheduler.placeholder.extract_prompt')"
             />
             <n-input
               v-model:value="templateForm.consolidate_prompt"
               type="textarea"
               :autosize="{ minRows: 5 }"
-              placeholder="consolidate_prompt"
+              :placeholder="t('rstPanel.scheduler.placeholder.consolidate_prompt')"
             />
-            <n-button size="small" type="primary" @click="saveTemplate">保存模板</n-button>
+            <n-button size="small" type="primary" @click="saveTemplate">
+              {{ t("rstPanel.scheduler.save_template") }}
+            </n-button>
           </div>
         </n-tab-pane>
       </n-tabs>
@@ -269,103 +283,115 @@
       :visible="entryOverlayVisible"
       :title="entryOverlayTitle"
       :fields="entryOverlayFields"
+      :bottom-field-keys="['tags']"
       :content-value="entryOverlayContent"
-      content-label="条目内容"
-      :show-delete="Boolean(editingEntryId)"
-      delete-text="删除条目"
+      :content-label="t('rstPanel.overlay.entry.content_label')"
       @save="handleEntryOverlaySave"
       @discard="closeEntryOverlay"
-      @delete="removeEntryFromOverlay"
     />
 
     <ContentOverlay
       :visible="characterOverlayVisible"
       :title="characterOverlayTitle"
       :fields="characterOverlayFields"
+      :sections="characterOverlaySections"
+      :section-collapsible="true"
+      :section-filterable="true"
+      :section-filter-placeholder="t('rstPanel.overlay.character.filter_placeholder')"
       :content-value="characterOverlayContent"
-      content-label="性格描述"
-      :show-delete="Boolean(editingCharacterId)"
-      delete-text="删除人物"
+      :content-label="t('rstPanel.overlay.character.content_label')"
       @save="handleCharacterOverlaySave"
       @discard="closeCharacterOverlay"
-      @delete="removeCharacterFromOverlay"
     />
 
-    <n-modal v-model:show="copyModalVisible" preset="card" title="复制到 Session" size="small">
+    <n-modal
+      v-model:show="copyModalVisible"
+      preset="card"
+      :title="t('rstPanel.copy.modal_title_entry')"
+      size="small"
+    >
       <div class="copy-modal-body">
         <n-select
           v-model:value="copyTargetSession"
           :options="targetSessionOptions"
-          placeholder="选择目标 Session"
+          :placeholder="t('rstPanel.copy.target_placeholder')"
           :disabled="targetSessionOptions.length === 0"
         />
         <div v-if="targetSessionOptions.length === 0" class="copy-hint">
-          暂无可用的目标 Session
+          {{ t("rstPanel.copy.no_target") }}
         </div>
       </div>
       <template #footer>
         <div class="copy-modal-actions">
-          <n-button secondary @click="closeCopyModal">取消</n-button>
+          <n-button secondary @click="closeCopyModal">{{ t("common.cancel") }}</n-button>
           <n-button type="primary" :disabled="copyConfirmDisabled" @click="confirmCopy">
-            确认复制
+            {{ t("rstPanel.copy.confirm") }}
           </n-button>
         </div>
       </template>
     </n-modal>
 
-    <n-modal v-model:show="characterCopyModalVisible" preset="card" title="复制人物到 Session" size="small">
+    <n-modal
+      v-model:show="characterCopyModalVisible"
+      preset="card"
+      :title="t('rstPanel.copy.modal_title_character')"
+      size="small"
+    >
       <div class="copy-modal-body">
         <n-select
           v-model:value="characterCopyTarget"
           :options="targetSessionOptions"
-          placeholder="选择目标 Session"
+          :placeholder="t('rstPanel.copy.target_placeholder')"
           :disabled="targetSessionOptions.length === 0"
         />
         <div v-if="targetSessionOptions.length === 0" class="copy-hint">
-          暂无可用的目标 Session
+          {{ t("rstPanel.copy.no_target") }}
         </div>
       </div>
       <template #footer>
         <div class="copy-modal-actions">
-          <n-button secondary @click="closeCharacterCopyModal">取消</n-button>
+          <n-button secondary @click="closeCharacterCopyModal">{{ t("common.cancel") }}</n-button>
           <n-button
             type="primary"
             :disabled="characterCopyConfirmDisabled"
             @click="confirmCharacterCopy"
           >
-            确认复制
+            {{ t("rstPanel.copy.confirm") }}
           </n-button>
         </div>
       </template>
     </n-modal>
 
-    <n-modal v-model:show="importModalVisible" preset="card" title="导入静态 Lore" size="small">
+    <n-modal
+      v-model:show="importModalVisible"
+      preset="card"
+      :title="t('rstPanel.import.modal_title')"
+      size="small"
+    >
       <div class="import-modal-body">
         <div class="import-meta-row">
-          <span class="import-meta-label">文件</span>
+          <span class="import-meta-label">{{ t("rstPanel.import.file_label") }}</span>
           <span>{{ importingFile?.name ?? "-" }}</span>
         </div>
         <div class="import-meta-row">
-          <span class="import-meta-label">目标 Session</span>
+          <span class="import-meta-label">{{ t("rstPanel.import.target_session_label") }}</span>
           <span>{{ currentSession?.name ?? "-" }}</span>
         </div>
-        <div class="import-warning">
-          导入会以追加模式写入现有数据，不会覆盖已有条目。
-        </div>
+        <div class="import-warning">{{ t("rstPanel.import.warning_append") }}</div>
         <n-checkbox v-model:checked="splitFactionCharacters">
-          拆分 faction 中嵌入的人物
+          {{ t("rstPanel.import.split_faction_characters") }}
         </n-checkbox>
       </div>
       <template #footer>
         <div class="import-modal-actions">
-          <n-button secondary @click="closeImportModal">取消</n-button>
+          <n-button secondary @click="closeImportModal">{{ t("common.cancel") }}</n-button>
           <n-button
             type="primary"
             :disabled="!importingFile"
             :loading="loreStore.loading"
             @click="confirmImportLore"
           >
-            确认导入
+            {{ t("rstPanel.import.confirm") }}
           </n-button>
         </div>
       </template>
@@ -374,18 +400,33 @@
     <n-modal
       v-model:show="reportOverlayVisible"
       preset="card"
-      title="Lore 导入报告"
+      :title="t('rstPanel.report.title')"
       size="large"
     >
       <div v-if="importReport" class="report-modal-body">
         <div class="report-summary">
-          <div>来源文件：{{ importReport.source_file }}</div>
-          <div>Session：{{ importReport.session_name }}</div>
-          <div>总条目：{{ importReport.statistics.total_source_entries ?? 0 }}</div>
-          <div>普通条目：{{ importReport.statistics.converted_entries ?? 0 }}</div>
-          <div>人物：{{ importReport.statistics.converted_characters ?? 0 }}</div>
-          <div>警告：{{ importReport.statistics.warnings_count ?? 0 }}</div>
-          <div>错误：{{ importReport.statistics.errors_count ?? 0 }}</div>
+          <div>{{ t("rstPanel.report.summary.source_file") }}: {{ importReport.source_file }}</div>
+          <div>{{ t("rstPanel.report.summary.session") }}: {{ importReport.session_name }}</div>
+          <div>
+            {{ t("rstPanel.report.summary.total_source_entries") }}:
+            {{ importReport.statistics.total_source_entries ?? 0 }}
+          </div>
+          <div>
+            {{ t("rstPanel.report.summary.converted_entries") }}:
+            {{ importReport.statistics.converted_entries ?? 0 }}
+          </div>
+          <div>
+            {{ t("rstPanel.report.summary.converted_characters") }}:
+            {{ importReport.statistics.converted_characters ?? 0 }}
+          </div>
+          <div>
+            {{ t("rstPanel.report.summary.warnings_count") }}:
+            {{ importReport.statistics.warnings_count ?? 0 }}
+          </div>
+          <div>
+            {{ t("rstPanel.report.summary.errors_count") }}:
+            {{ importReport.statistics.errors_count ?? 0 }}
+          </div>
         </div>
 
         <div class="report-action-list">
@@ -396,50 +437,50 @@
           >
             <div class="report-action-header">
               <div class="report-action-title">
-                {{ index + 1 }}. {{ actionItem.name || "未命名条目" }}
+                {{ index + 1 }}. {{ actionItem.name || t("rstPanel.report.unnamed_entry") }}
               </div>
               <n-tag size="small" :bordered="false" type="info">
                 {{ actionLabel(actionItem.action) }}
               </n-tag>
             </div>
             <div class="report-action-meta">
-              source_id: {{ actionItem.source_id || "-" }}
+              {{ t("rstPanel.report.action.source_id") }}: {{ actionItem.source_id || "-" }}
             </div>
             <div class="report-action-meta">
-              来源类别: {{ actionItem.source_category || "-" }} → 目标类别:
+              {{ t("rstPanel.report.action.category") }}: {{ actionItem.source_category || "-" }} ->
               {{ actionItem.target_category || "-" }}
             </div>
             <div v-if="actionItem.created_ids.length > 0" class="report-action-meta">
-              创建对象: {{ actionItem.created_ids.join(", ") }}
+              {{ t("rstPanel.report.action.created_ids") }}: {{ actionItem.created_ids.join(", ") }}
             </div>
             <div v-if="actionItem.notes.length > 0" class="report-action-section">
-              <div class="report-action-label">处理说明</div>
+              <div class="report-action-label">{{ t("rstPanel.report.action.notes") }}</div>
               <div
                 v-for="(note, noteIndex) in actionItem.notes"
                 :key="`${actionItem.source_id}-note-${noteIndex}`"
                 class="report-action-line"
               >
-                • {{ note }}
+                - {{ note }}
               </div>
             </div>
             <div v-if="actionItem.warnings.length > 0" class="report-action-section warning">
-              <div class="report-action-label">警告</div>
+              <div class="report-action-label">{{ t("rstPanel.report.action.warnings") }}</div>
               <div
                 v-for="(warn, warnIndex) in actionItem.warnings"
                 :key="`${actionItem.source_id}-warn-${warnIndex}`"
                 class="report-action-line"
               >
-                • {{ warn }}
+                - {{ warn }}
               </div>
             </div>
             <div v-if="actionItem.errors.length > 0" class="report-action-section error">
-              <div class="report-action-label">错误</div>
+              <div class="report-action-label">{{ t("rstPanel.report.action.errors") }}</div>
               <div
                 v-for="(err, errIndex) in actionItem.errors"
                 :key="`${actionItem.source_id}-err-${errIndex}`"
                 class="report-action-line"
               >
-                • {{ err }}
+                - {{ err }}
               </div>
             </div>
           </div>
@@ -447,13 +488,14 @@
       </div>
       <template #footer>
         <div class="report-footer">
-          <n-button secondary @click="reportOverlayVisible = false">关闭</n-button>
+          <n-button secondary @click="reportOverlayVisible = false">
+            {{ t("rstPanel.report.close") }}
+          </n-button>
         </div>
       </template>
     </n-modal>
   </section>
 </template>
-
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
@@ -474,23 +516,46 @@ import {
 import Draggable from "vuedraggable";
 
 import ContentOverlay from "@/components/panels/ContentOverlay.vue";
+import { useI18n } from "@/composables/useI18n";
 import { useLoreStore } from "@/stores/lore";
 import { useSessionStore } from "@/stores/session";
 import { message } from "@/utils/message";
 
-import type { CharacterData, ConversionReport, LoreCategory, LoreEntry } from "@/types/lore";
+import type {
+  CharacterData,
+  CharacterForm,
+  ConversionReport,
+  LoreCategory,
+  LoreEntry,
+  Relationship,
+} from "@/types/lore";
 
 interface OverlayField {
   key: string;
   label: string;
-  type: "text" | "select" | "toggle";
+  type: "text" | "textarea" | "number" | "select" | "toggle";
   value: unknown;
   readonly?: boolean;
-  options?: Array<{ label: string; value: string }>;
+  options?: Array<{ label: string; value: string | number }>;
+  placeholder?: string;
+  description?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  wide?: boolean;
+}
+
+interface OverlaySection {
+  key: string;
+  title?: string;
+  description?: string;
+  fields: OverlayField[];
+  columns?: number;
 }
 
 const sessionStore = useSessionStore();
 const loreStore = useLoreStore();
+const { t } = useI18n();
 const { currentSession, sessions } = storeToRefs(sessionStore);
 
 type EntryCategory = Exclude<LoreCategory, "character" | "memory">;
@@ -499,22 +564,22 @@ const activeTab = ref<"entries" | "characters" | "scheduler">("entries");
 const entryCategory = ref<EntryCategory>("world_base");
 const entryFilter = ref<EntryCategory>("world_base");
 
-const entryCategoryOptions = [
-  { label: "基础世界观", value: "world_base" },
-  { label: "社会制度与文化等", value: "society" },
-  { label: "地点", value: "place" },
-  { label: "势力", value: "faction" },
-  { label: "技能", value: "skills" },
-  { label: "其他", value: "others" },
-  { label: "情节", value: "plot" },
-] as Array<{ label: string; value: EntryCategory }>;
+const entryCategoryOptions = computed<Array<{ label: string; value: EntryCategory }>>(() => [
+  { label: t("rstPanel.category.world_base"), value: "world_base" },
+  { label: t("rstPanel.category.society"), value: "society" },
+  { label: t("rstPanel.category.place"), value: "place" },
+  { label: t("rstPanel.category.faction"), value: "faction" },
+  { label: t("rstPanel.category.skills"), value: "skills" },
+  { label: t("rstPanel.category.others"), value: "others" },
+  { label: t("rstPanel.category.plot"), value: "plot" },
+]);
 
-const entryFilterOptions = [...entryCategoryOptions];
+const entryFilterOptions = computed(() => entryCategoryOptions.value);
 
-const triggerModeOptions = [
-  { label: "RST", value: "rst" },
-  { label: "Const", value: "const" },
-];
+const triggerModeOptions = computed(() => [
+  { label: t("rstPanel.mode.rst"), value: "rst" },
+  { label: t("rstPanel.mode.const"), value: "const" },
+]);
 
 const activeEntryId = ref<string | null>(null);
 const editingEntryId = ref<string | null>(null);
@@ -532,7 +597,9 @@ const editingCharacterId = ref<string | null>(null);
 const characterOverlayVisible = ref(false);
 const characterOverlayTitle = ref("");
 const characterOverlayFields = ref<OverlayField[]>([]);
+const characterOverlaySections = ref<OverlaySection[]>([]);
 const characterOverlayContent = ref("");
+const characterRows = ref<CharacterData[]>([]);
 const selectedCharacterIds = ref<string[]>([]);
 const characterCopyModalVisible = ref(false);
 const characterCopyTarget = ref<string | null>(null);
@@ -550,9 +617,6 @@ const splitFactionCharacters = ref(false);
 const reportOverlayVisible = ref(false);
 const importReport = ref<ConversionReport | null>(null);
 
-const charactersSorted = computed(() =>
-  [...loreStore.characters].sort((a, b) => a.name.localeCompare(b.name)),
-);
 const targetSessionOptions = computed(() =>
   sessions.value
     .filter(
@@ -573,7 +637,7 @@ const selectedEntries = computed(() => {
 const hasCharacterSelection = computed(() => selectedCharacterIds.value.length > 0);
 const selectedCharacters = computed(() => {
   const wanted = new Set(selectedCharacterIds.value);
-  return loreStore.characters.filter((character) => wanted.has(character.character_id));
+  return characterRows.value.filter((character) => wanted.has(character.character_id));
 });
 const characterCopyConfirmDisabled = computed(
   () => !hasCharacterSelection.value || !characterCopyTarget.value || targetSessionOptions.value.length === 0,
@@ -612,6 +676,7 @@ watch(
 watch(
   () => loreStore.characters,
   (characters) => {
+    characterRows.value = [...characters];
     const validIds = new Set(characters.map((item) => item.character_id));
     selectedCharacterIds.value = selectedCharacterIds.value.filter((id) => validIds.has(id));
     if (activeCharacterId.value && !validIds.has(activeCharacterId.value)) {
@@ -643,6 +708,7 @@ async function bootstrapCurrentSession() {
     entryRows.value = [];
     entryFilter.value = entryCategory.value;
     resetCharacterListState();
+    characterRows.value = [];
     return;
   }
   await Promise.all([
@@ -655,11 +721,96 @@ async function bootstrapCurrentSession() {
   resetCharacterListState();
 }
 
+function formatText(key: string, params: Record<string, string | number>): string {
+  let text = t(key);
+  Object.entries(params).forEach(([paramKey, paramValue]) => {
+    text = text.replaceAll(`{${paramKey}}`, String(paramValue));
+  });
+  return text;
+}
+
+function runtimeStateLabel(running: boolean): string {
+  return running ? t("rstPanel.scheduler.running") : t("rstPanel.scheduler.idle");
+}
+
 function parseTags(text: string): string[] {
   return text
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseDelimitedText(text: string): string[] {
+  return text
+    .split(/[\n,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatRelationships(relationship: Relationship[]): string {
+  return relationship
+    .map((item) => {
+      const target = item.target.trim();
+      const relation = item.relation.trim();
+      if (!target && !relation) {
+        return "";
+      }
+      if (!relation) {
+        return target;
+      }
+      if (!target) {
+        return `: ${relation}`;
+      }
+      return `${target}: ${relation}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function parseRelationships(text: string): Relationship[] {
+  const rows = text
+    .split("\n")
+    .map((row) => row.trim())
+    .filter(Boolean);
+  return rows
+    .map((row) => {
+      const separator = row.includes("：") ? "：" : ":";
+      if (!row.includes(separator)) {
+        return { target: row, relation: "" };
+      }
+      const [targetRaw, ...relationChunks] = row.split(separator);
+      const target = targetRaw.trim();
+      const relation = relationChunks.join(separator).trim();
+      return { target, relation };
+    })
+    .filter((item) => item.target || item.relation);
+}
+
+function parseNonNegativeInt(value: unknown, fallback: number): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  const integer = Math.floor(numeric);
+  return integer >= 0 ? integer : fallback;
+}
+
+function parseStrength(value: unknown): number {
+  return parseNonNegativeInt(value, 10);
+}
+
+function resolveCharacterActiveForm(character: {
+  forms: CharacterForm[];
+  active_form_id: string;
+}): CharacterForm | null {
+  if (character.forms.length === 0) {
+    return null;
+  }
+  return (
+    character.forms.find((form) => form.form_id === character.active_form_id) ??
+    character.forms[0] ??
+    null
+  );
 }
 
 async function handleEntryFilterChange(value: EntryCategory | null) {
@@ -692,11 +843,12 @@ function resetEntryOverlay() {
 }
 
 function entryTriggerLabel(entry: LoreEntry): string {
-  return entry.constant ? "Const" : "RST";
+  return entry.constant ? t("rstPanel.mode.const_short") : t("rstPanel.mode.rst_short");
 }
 
 function buildEntryOverlayFields(entry: {
   name: string;
+  category: EntryCategory;
   constant: boolean;
   tags: string[];
   disabled: boolean;
@@ -704,26 +856,33 @@ function buildEntryOverlayFields(entry: {
   return [
     {
       key: "name",
-      label: "Name",
+      label: t("rstPanel.overlay.field.name"),
       type: "text",
       value: entry.name,
     },
     {
+      key: "category",
+      label: t("rstPanel.overlay.field.category"),
+      type: "select",
+      value: entry.category,
+      options: entryCategoryOptions.value,
+    },
+    {
       key: "trigger_mode",
-      label: "Mode",
+      label: t("rstPanel.overlay.field.trigger_mode"),
       type: "select",
       value: entry.constant ? "const" : "rst",
-      options: triggerModeOptions,
+      options: triggerModeOptions.value,
     },
     {
       key: "tags",
-      label: "关键词（逗号分隔）",
+      label: t("rstPanel.overlay.field.keywords"),
       type: "text",
       value: entry.tags.join(", "),
     },
     {
       key: "disabled",
-      label: "Disabled",
+      label: t("rstPanel.overlay.field.disabled"),
       type: "toggle",
       value: entry.disabled,
     },
@@ -733,9 +892,10 @@ function buildEntryOverlayFields(entry: {
 function openNewEntryOverlay() {
   editingEntryId.value = null;
   activeEntryId.value = null;
-  entryOverlayTitle.value = "+新建条目";
+  entryOverlayTitle.value = t("rstPanel.overlay.entry.create_title");
   entryOverlayFields.value = buildEntryOverlayFields({
     name: "",
+    category: entryCategory.value,
     constant: false,
     tags: [],
     disabled: false,
@@ -751,8 +911,13 @@ function openEntryOverlay(entryId: string) {
   }
   activeEntryId.value = target.id;
   editingEntryId.value = target.id;
-  entryOverlayTitle.value = `编辑: ${target.name}`;
-  entryOverlayFields.value = buildEntryOverlayFields(target);
+  entryOverlayTitle.value = formatText("rstPanel.overlay.entry.edit_title", {
+    name: target.name,
+  });
+  entryOverlayFields.value = buildEntryOverlayFields({
+    ...target,
+    category: parseEntryCategory(target.category),
+  });
   entryOverlayContent.value = target.content;
   entryOverlayVisible.value = true;
 }
@@ -765,18 +930,26 @@ function closeEntryOverlay() {
   entryOverlayContent.value = "";
 }
 
+function parseEntryCategory(value: unknown): EntryCategory {
+  const selected = String(value ?? "").trim();
+  const matched = entryCategoryOptions.value.find((item) => item.value === selected);
+  return matched ? matched.value : entryCategory.value;
+}
+
 async function handleEntryOverlaySave(data: { fields: Record<string, unknown>; content: string }) {
   if (!currentSession.value?.name) {
     return;
   }
   const name = String(data.fields.name ?? "").trim();
   if (!name) {
-    message.error("请输入条目名称");
+    message.error(t("rstPanel.messages.entry_name_required"));
     return;
   }
+  const category = parseEntryCategory(data.fields.category);
   const triggerMode = String(data.fields.trigger_mode ?? "rst");
   const payload = {
     name,
+    category,
     content: data.content,
     tags: parseTags(String(data.fields.tags ?? "")),
     disabled: Boolean(data.fields.disabled),
@@ -785,28 +958,12 @@ async function handleEntryOverlaySave(data: { fields: Record<string, unknown>; c
 
   const result = editingEntryId.value
     ? await loreStore.updateEntry(currentSession.value.name, editingEntryId.value, payload)
-    : await loreStore.createEntry(currentSession.value.name, {
-        ...payload,
-        category: entryCategory.value,
-      });
+    : await loreStore.createEntry(currentSession.value.name, payload);
 
   if (!result) {
     return;
   }
-  activeEntryId.value = result.id;
-  closeEntryOverlay();
-}
-
-async function removeEntryFromOverlay() {
-  if (!currentSession.value?.name || !editingEntryId.value) {
-    return;
-  }
-  const entryId = editingEntryId.value;
-  await loreStore.deleteEntry(currentSession.value.name, entryId);
-  selectedEntryIds.value = selectedEntryIds.value.filter((id) => id !== entryId);
-  if (activeEntryId.value === entryId) {
-    activeEntryId.value = null;
-  }
+  activeEntryId.value = result.category === entryCategory.value ? result.id : null;
   closeEntryOverlay();
 }
 
@@ -886,7 +1043,11 @@ async function confirmCopy() {
   }
   closeCopyModal();
   if (copiedCount > 0) {
-    message.success(`已复制 ${copiedCount} 个条目到目标 Session`);
+    message.success(
+      formatText("rstPanel.messages.copy_entries_done", {
+        count: copiedCount,
+      }),
+    );
   }
 }
 
@@ -909,6 +1070,7 @@ function resetCharacterOverlay() {
   characterOverlayVisible.value = false;
   characterOverlayTitle.value = "";
   characterOverlayFields.value = [];
+  characterOverlaySections.value = [];
   characterOverlayContent.value = "";
 }
 
@@ -919,86 +1081,387 @@ function resetCharacterListState() {
 }
 
 function characterModeLabel(character: CharacterData): string {
-  return character.constant ? "Const" : "RST";
+  return character.constant ? t("rstPanel.mode.const_short") : t("rstPanel.mode.rst_short");
 }
 
-function buildCharacterOverlayFields(character: {
+interface CharacterOverlayValues {
   name: string;
   race: string;
+  strength: number;
+  form_name: string;
+  is_default: boolean;
+  physique: string;
+  features: string;
+  vitality_max: number;
+  mana_potency: number;
+  toughness: number;
+  weak: string[];
+  resist: string[];
+  element: string[];
+  skills: string[];
+  penetration: string[];
+  clothing: string;
+  body: string;
+  mind: string;
+  vitality_cur: number;
+  activity: string;
+  birth: string;
+  homeland: string;
+  aliases: string[];
   role: string;
   faction: string;
   objective: string;
+  relationship: Relationship[];
   tags: string[];
   constant: boolean;
   disabled: boolean;
-}): OverlayField[] {
-  return [
+}
+
+function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
+  fields: OverlayField[];
+  sections: OverlaySection[];
+} {
+  const fields: OverlayField[] = [
     {
       key: "name",
-      label: "Name",
+      label: t("rstPanel.overlay.field.name"),
       type: "text",
       value: character.name,
+      placeholder: t("rstPanel.overlay.character.placeholder.name"),
     },
     {
       key: "race",
-      label: "Race",
+      label: t("rstPanel.overlay.character.field.race"),
       type: "text",
       value: character.race,
+      placeholder: t("rstPanel.overlay.character.placeholder.race"),
+    },
+    {
+      key: "strength",
+      label: t("rstPanel.overlay.character.field.strength"),
+      type: "number",
+      value: character.strength,
+      min: 0,
+      step: 1,
+      description: t("rstPanel.overlay.character.description.strength"),
+    },
+    {
+      key: "form_name",
+      label: t("rstPanel.overlay.character.field.form_name"),
+      type: "text",
+      value: character.form_name,
+      placeholder: t("rstPanel.overlay.character.placeholder.form_name"),
+      description: t("rstPanel.overlay.character.description.form_name"),
+    },
+    {
+      key: "is_default",
+      label: t("rstPanel.overlay.character.field.is_default"),
+      type: "toggle",
+      value: character.is_default,
+    },
+    {
+      key: "physique",
+      label: t("rstPanel.overlay.character.field.physique"),
+      type: "textarea",
+      value: character.physique,
+      placeholder: t("rstPanel.overlay.character.placeholder.physique"),
+      wide: true,
+    },
+    {
+      key: "features",
+      label: t("rstPanel.overlay.character.field.features"),
+      type: "textarea",
+      value: character.features,
+      placeholder: t("rstPanel.overlay.character.placeholder.features"),
+      wide: true,
+    },
+    {
+      key: "vitality_max",
+      label: t("rstPanel.overlay.character.field.vitality_max"),
+      type: "number",
+      value: character.vitality_max,
+      min: 0,
+      step: 1,
+      description: t("rstPanel.overlay.character.description.vitality_max"),
+    },
+    {
+      key: "mana_potency",
+      label: t("rstPanel.overlay.character.field.mana_potency"),
+      type: "number",
+      value: character.mana_potency,
+      min: 0,
+      step: 1,
+      description: t("rstPanel.overlay.character.description.mana_potency"),
+    },
+    {
+      key: "toughness",
+      label: t("rstPanel.overlay.character.field.toughness"),
+      type: "number",
+      value: character.toughness,
+      min: 0,
+      step: 1,
+      description: t("rstPanel.overlay.character.description.toughness"),
+    },
+    {
+      key: "vitality_cur",
+      label: t("rstPanel.overlay.character.field.vitality_cur"),
+      type: "number",
+      value: character.vitality_cur,
+      min: 0,
+      step: 1,
+      description: t("rstPanel.overlay.character.description.vitality_cur"),
+    },
+    {
+      key: "weak",
+      label: t("rstPanel.overlay.character.field.weak"),
+      type: "textarea",
+      value: character.weak.join(", "),
+      placeholder: t("rstPanel.overlay.character.placeholder.weak"),
+      wide: true,
+    },
+    {
+      key: "resist",
+      label: t("rstPanel.overlay.character.field.resist"),
+      type: "textarea",
+      value: character.resist.join(", "),
+      placeholder: t("rstPanel.overlay.character.placeholder.resist"),
+      wide: true,
+    },
+    {
+      key: "element",
+      label: t("rstPanel.overlay.character.field.element"),
+      type: "textarea",
+      value: character.element.join(", "),
+      placeholder: t("rstPanel.overlay.character.placeholder.element"),
+      wide: true,
+      description: t("rstPanel.overlay.character.description.element"),
+    },
+    {
+      key: "skills",
+      label: t("rstPanel.overlay.character.field.skills"),
+      type: "textarea",
+      value: character.skills.join(", "),
+      placeholder: t("rstPanel.overlay.character.placeholder.skills"),
+      wide: true,
+      description: t("rstPanel.overlay.character.description.skills"),
+    },
+    {
+      key: "penetration",
+      label: t("rstPanel.overlay.character.field.penetration"),
+      type: "textarea",
+      value: character.penetration.join(", "),
+      placeholder: t("rstPanel.overlay.character.placeholder.penetration"),
+      wide: true,
+      description: t("rstPanel.overlay.character.description.penetration"),
+    },
+    {
+      key: "clothing",
+      label: t("rstPanel.overlay.character.field.clothing"),
+      type: "textarea",
+      value: character.clothing,
+      placeholder: t("rstPanel.overlay.character.placeholder.clothing"),
+      wide: true,
+    },
+    {
+      key: "body",
+      label: t("rstPanel.overlay.character.field.body"),
+      type: "textarea",
+      value: character.body,
+      placeholder: t("rstPanel.overlay.character.placeholder.body"),
+      wide: true,
+    },
+    {
+      key: "mind",
+      label: t("rstPanel.overlay.character.field.mind"),
+      type: "textarea",
+      value: character.mind,
+      placeholder: t("rstPanel.overlay.character.placeholder.mind"),
+      wide: true,
+    },
+    {
+      key: "activity",
+      label: t("rstPanel.overlay.character.field.activity"),
+      type: "text",
+      value: character.activity,
+      placeholder: t("rstPanel.overlay.character.placeholder.activity"),
+    },
+    {
+      key: "birth",
+      label: t("rstPanel.overlay.character.field.birth"),
+      type: "text",
+      value: character.birth,
+      placeholder: t("rstPanel.overlay.character.placeholder.birth"),
+    },
+    {
+      key: "homeland",
+      label: t("rstPanel.overlay.character.field.homeland"),
+      type: "text",
+      value: character.homeland,
+      placeholder: t("rstPanel.overlay.character.placeholder.homeland"),
     },
     {
       key: "role",
-      label: "Role",
+      label: t("rstPanel.overlay.character.field.role"),
       type: "text",
       value: character.role,
+      placeholder: t("rstPanel.overlay.character.placeholder.role"),
     },
     {
       key: "faction",
-      label: "Faction",
+      label: t("rstPanel.overlay.character.field.faction"),
       type: "text",
       value: character.faction,
+      placeholder: t("rstPanel.overlay.character.placeholder.faction"),
     },
     {
       key: "objective",
-      label: "Objective",
+      label: t("rstPanel.overlay.character.field.objective"),
       type: "text",
       value: character.objective,
+      placeholder: t("rstPanel.overlay.character.placeholder.objective"),
+    },
+    {
+      key: "aliases",
+      label: t("rstPanel.overlay.character.field.aliases"),
+      type: "text",
+      value: character.aliases.join(", "),
+      placeholder: t("rstPanel.overlay.character.placeholder.aliases"),
     },
     {
       key: "tags",
-      label: "Tags",
+      label: t("rstPanel.overlay.character.field.tags"),
       type: "text",
       value: character.tags.join(", "),
+      placeholder: t("rstPanel.overlay.character.placeholder.tags"),
+    },
+    {
+      key: "relationship",
+      label: t("rstPanel.overlay.character.field.relationship"),
+      type: "textarea",
+      value: formatRelationships(character.relationship),
+      placeholder: t("rstPanel.overlay.character.placeholder.relationship"),
+      wide: true,
+      description: t("rstPanel.overlay.character.description.relationship"),
     },
     {
       key: "mode",
-      label: "Mode",
+      label: t("rstPanel.overlay.field.trigger_mode"),
       type: "select",
       value: character.constant ? "const" : "rst",
-      options: triggerModeOptions,
+      options: triggerModeOptions.value,
     },
     {
       key: "disabled",
-      label: "Disabled",
+      label: t("rstPanel.overlay.field.disabled"),
       type: "toggle",
       value: character.disabled,
     },
   ];
+
+  const fieldByKey = new Map(fields.map((field) => [field.key, field]));
+  const sections: OverlaySection[] = [
+    {
+      key: "identity",
+      title: t("rstPanel.overlay.character.section.identity.title"),
+      description: t("rstPanel.overlay.character.section.identity.description"),
+      columns: 3,
+      fields: [
+        fieldByKey.get("name")!,
+        fieldByKey.get("race")!,
+        fieldByKey.get("birth")!,
+        fieldByKey.get("homeland")!,
+      ],
+    },
+    {
+      key: "profile",
+      title: t("rstPanel.overlay.character.section.profile.title"),
+      description: t("rstPanel.overlay.character.section.profile.description"),
+      columns: 2,
+      fields: [
+        fieldByKey.get("role")!,
+        fieldByKey.get("faction")!,
+        fieldByKey.get("objective")!,
+        fieldByKey.get("aliases")!,
+        fieldByKey.get("tags")!,
+        fieldByKey.get("relationship")!,
+      ],
+    },
+    {
+      key: "status",
+      title: t("rstPanel.overlay.character.section.status.title"),
+      description: t("rstPanel.overlay.character.section.status.description"),
+      columns: 3,
+      fields: [
+        fieldByKey.get("vitality_max")!,
+        fieldByKey.get("form_name")!,
+        fieldByKey.get("is_default")!,
+        fieldByKey.get("strength")!,
+        fieldByKey.get("mana_potency")!,
+        fieldByKey.get("toughness")!,
+        fieldByKey.get("vitality_cur")!,
+        fieldByKey.get("activity")!,
+        fieldByKey.get("physique")!,
+        fieldByKey.get("features")!,
+        fieldByKey.get("weak")!,
+        fieldByKey.get("resist")!,
+        fieldByKey.get("element")!,
+        fieldByKey.get("skills")!,
+        fieldByKey.get("penetration")!,
+        fieldByKey.get("clothing")!,
+        fieldByKey.get("body")!,
+        fieldByKey.get("mind")!,
+      ],
+    },
+    {
+      key: "runtime",
+      title: t("rstPanel.overlay.character.section.runtime.title"),
+      description: t("rstPanel.overlay.character.section.runtime.description"),
+      columns: 2,
+      fields: [fieldByKey.get("mode")!],
+    },
+  ];
+
+  return { fields, sections };
 }
 
 function openNewCharacterOverlay() {
   editingCharacterId.value = null;
   activeCharacterId.value = null;
-  characterOverlayTitle.value = "+新建人物";
-  characterOverlayFields.value = buildCharacterOverlayFields({
+  characterOverlayTitle.value = t("rstPanel.overlay.character.create_title");
+  const config = buildCharacterOverlayConfig({
     name: "",
     race: "",
+    strength: 10,
+    form_name: "默认形态",
+    is_default: true,
+    physique: "",
+    features: "",
+    vitality_max: 100,
+    mana_potency: 100,
+    toughness: 10,
+    weak: [],
+    resist: [],
+    element: [],
+    skills: [],
+    penetration: [],
+    clothing: "",
+    body: "",
+    mind: "",
+    vitality_cur: 50,
+    activity: "",
+    birth: "",
+    homeland: "",
+    aliases: [],
     role: "",
     faction: "",
     objective: "",
+    relationship: [],
     tags: [],
     constant: false,
     disabled: false,
   });
+  characterOverlayFields.value = config.fields;
+  characterOverlaySections.value = config.sections;
   characterOverlayContent.value = "";
   characterOverlayVisible.value = true;
 }
@@ -1010,17 +1473,44 @@ function openCharacterOverlay(characterId: string) {
   }
   activeCharacterId.value = target.character_id;
   editingCharacterId.value = target.character_id;
-  characterOverlayTitle.value = `编辑: ${target.name}`;
-  characterOverlayFields.value = buildCharacterOverlayFields({
+  characterOverlayTitle.value = formatText("rstPanel.overlay.character.edit_title", {
+    name: target.name,
+  });
+  const activeForm = resolveCharacterActiveForm(target);
+  const config = buildCharacterOverlayConfig({
     name: target.name,
     race: target.race,
+    strength: target.strength,
+    form_name: activeForm?.form_name ?? "默认形态",
+    is_default: activeForm?.is_default ?? true,
+    physique: activeForm?.physique ?? "",
+    features: activeForm?.features ?? "",
+    vitality_max: activeForm?.vitality_max ?? 100,
+    mana_potency: activeForm?.mana_potency ?? 100,
+    toughness: activeForm?.toughness ?? 10,
+    weak: [...(activeForm?.weak ?? [])],
+    resist: [...(activeForm?.resist ?? [])],
+    element: [...(activeForm?.element ?? [])],
+    skills: [...(activeForm?.skills ?? [])],
+    penetration: [...(activeForm?.penetration ?? [])],
+    clothing: activeForm?.clothing ?? "",
+    body: activeForm?.body ?? "",
+    mind: activeForm?.mind ?? "",
+    vitality_cur: activeForm?.vitality_cur ?? 50,
+    activity: activeForm?.activity ?? "",
+    birth: target.birth,
+    homeland: target.homeland,
+    aliases: target.aliases,
     role: target.role,
     faction: target.faction,
     objective: target.objective,
+    relationship: target.relationship,
     tags: target.tags,
     constant: target.constant,
     disabled: target.disabled,
   });
+  characterOverlayFields.value = config.fields;
+  characterOverlaySections.value = config.sections;
   characterOverlayContent.value = target.personality;
   characterOverlayVisible.value = true;
 }
@@ -1030,6 +1520,7 @@ function closeCharacterOverlay() {
   editingCharacterId.value = null;
   characterOverlayTitle.value = "";
   characterOverlayFields.value = [];
+  characterOverlaySections.value = [];
   characterOverlayContent.value = "";
 }
 
@@ -1043,19 +1534,43 @@ async function handleCharacterOverlaySave(data: {
   const name = String(data.fields.name ?? "").trim();
   const race = String(data.fields.race ?? "").trim();
   if (!name || !race) {
-    message.error("人物名称和种族不能为空");
+    message.error(t("rstPanel.messages.character_required_fields"));
     return;
   }
   const payload = {
     name,
     race,
+    strength: parseStrength(data.fields.strength),
+    birth: String(data.fields.birth ?? "").trim(),
+    homeland: String(data.fields.homeland ?? "").trim(),
+    aliases: parseDelimitedText(String(data.fields.aliases ?? "")),
     role: String(data.fields.role ?? ""),
     faction: String(data.fields.faction ?? ""),
     objective: String(data.fields.objective ?? ""),
     personality: data.content,
+    relationship: parseRelationships(String(data.fields.relationship ?? "")),
     tags: parseTags(String(data.fields.tags ?? "")),
     disabled: Boolean(data.fields.disabled),
     constant: String(data.fields.mode ?? "rst") === "const",
+  };
+  const formPayload = {
+    form_name: String(data.fields.form_name ?? "").trim() || undefined,
+    is_default: Boolean(data.fields.is_default),
+    physique: String(data.fields.physique ?? "").trim(),
+    features: String(data.fields.features ?? "").trim(),
+    vitality_max: parseNonNegativeInt(data.fields.vitality_max, 100),
+    mana_potency: parseNonNegativeInt(data.fields.mana_potency, 100),
+    toughness: parseNonNegativeInt(data.fields.toughness, 10),
+    weak: parseDelimitedText(String(data.fields.weak ?? "")),
+    resist: parseDelimitedText(String(data.fields.resist ?? "")),
+    element: parseDelimitedText(String(data.fields.element ?? "")),
+    skills: parseDelimitedText(String(data.fields.skills ?? "")),
+    penetration: parseDelimitedText(String(data.fields.penetration ?? "")),
+    clothing: String(data.fields.clothing ?? "").trim(),
+    body: String(data.fields.body ?? "").trim(),
+    mind: String(data.fields.mind ?? "").trim(),
+    vitality_cur: parseNonNegativeInt(data.fields.vitality_cur, 50),
+    activity: String(data.fields.activity ?? "").trim(),
   };
 
   const result = editingCharacterId.value
@@ -1065,20 +1580,16 @@ async function handleCharacterOverlaySave(data: {
   if (!result) {
     return;
   }
+  const activeForm = resolveCharacterActiveForm(result);
+  if (activeForm) {
+    await loreStore.updateCharacterForm(
+      currentSession.value.name,
+      result.character_id,
+      activeForm.form_id,
+      formPayload,
+    );
+  }
   activeCharacterId.value = result.character_id;
-  closeCharacterOverlay();
-}
-
-async function removeCharacterFromOverlay() {
-  if (!currentSession.value?.name || !editingCharacterId.value) {
-    return;
-  }
-  const characterId = editingCharacterId.value;
-  await loreStore.deleteCharacter(currentSession.value.name, characterId);
-  selectedCharacterIds.value = selectedCharacterIds.value.filter((id) => id !== characterId);
-  if (activeCharacterId.value === characterId) {
-    activeCharacterId.value = null;
-  }
   closeCharacterOverlay();
 }
 
@@ -1093,6 +1604,18 @@ async function handleCharacterToggle(characterId: string, enabled: boolean) {
   await loreStore.updateCharacter(currentSession.value.name, characterId, {
     disabled: !enabled,
   });
+}
+
+async function handleCharacterReorder() {
+  if (!currentSession.value?.name || characterRows.value.length === 0) {
+    return;
+  }
+  const reordered = await loreStore.reorderCharacters(currentSession.value.name, {
+    character_ids: characterRows.value.map((character) => character.character_id),
+  });
+  if (!reordered) {
+    characterRows.value = [...loreStore.characters];
+  }
 }
 
 function toggleCharacterSelected(characterId: string, checked: boolean) {
@@ -1144,6 +1667,7 @@ async function confirmCharacterCopy() {
     const created = await loreStore.createCharacter(characterCopyTarget.value, {
       name: character.name,
       race: character.race,
+      strength: character.strength,
       birth: character.birth,
       homeland: character.homeland,
       aliases: [...character.aliases],
@@ -1162,7 +1686,11 @@ async function confirmCharacterCopy() {
   }
   closeCharacterCopyModal();
   if (copiedCount > 0) {
-    message.success(`已复制 ${copiedCount} 个人物到目标 Session`);
+    message.success(
+      formatText("rstPanel.messages.copy_characters_done", {
+        count: copiedCount,
+      }),
+    );
   }
 }
 
@@ -1241,10 +1769,18 @@ async function confirmImportLore() {
   const characterCount = report.statistics.converted_characters ?? 0;
   const warningCount = report.statistics.warnings_count ?? 0;
   message.success(
-    `导入完成：${entryCount} 个条目 + ${characterCount} 个人物，${warningCount} 个警告`,
+    formatText("rstPanel.messages.import_done", {
+      entries: entryCount,
+      characters: characterCount,
+      warnings: warningCount,
+    }),
   );
   if ((report.errors?.length ?? 0) > 0) {
-    message.warning(`导入包含 ${report.errors.length} 条错误，请检查转换报告。`);
+    message.warning(
+      formatText("rstPanel.messages.import_has_errors", {
+        count: report.errors.length,
+      }),
+    );
   }
   importReport.value = report;
   reportOverlayVisible.value = true;
@@ -1256,13 +1792,15 @@ async function confirmImportLore() {
 
 function actionLabel(action: string): string {
   const labels: Record<string, string> = {
-    generic_entry_created: "普通条目导入",
-    faction_entry_created: "势力条目导入",
-    faction_kept_with_embedded_characters: "势力条目保留（含内嵌人物）",
-    faction_split_into_characters: "势力条目拆分人物",
-    character_structured_created: "人物结构化导入",
-    character_yaml_fallback_created: "人物兜底导入",
-    entry_failed: "条目导入失败",
+    generic_entry_created: t("rstPanel.report.action_type.generic_entry_created"),
+    faction_entry_created: t("rstPanel.report.action_type.faction_entry_created"),
+    faction_kept_with_embedded_characters: t(
+      "rstPanel.report.action_type.faction_kept_with_embedded_characters",
+    ),
+    faction_split_into_characters: t("rstPanel.report.action_type.faction_split_into_characters"),
+    character_structured_created: t("rstPanel.report.action_type.character_structured_created"),
+    character_yaml_fallback_created: t("rstPanel.report.action_type.character_yaml_fallback_created"),
+    entry_failed: t("rstPanel.report.action_type.entry_failed"),
   };
   return labels[action] ?? action;
 }
@@ -1469,11 +2007,6 @@ function actionLabel(action: string): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.entry-meta {
-  font-size: 11px;
-  color: var(--rst-text-secondary);
 }
 
 .entry-toggle {
@@ -1728,3 +2261,4 @@ function actionLabel(action: string): string {
   }
 }
 </style>
+
