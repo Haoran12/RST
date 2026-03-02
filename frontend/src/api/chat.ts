@@ -1,4 +1,4 @@
-import apiClient from "@/api/client";
+import apiClient, { API_TIMEOUT_MS } from "@/api/client";
 import type { ChatAttachment, ChatMessage } from "@/types/chat";
 
 export interface MessageListResponse {
@@ -34,8 +34,7 @@ export async function sendChatMessage(
     payload,
     {
       signal: options?.signal,
-      // Chat completions can exceed the default API timeout, especially on "continue" sends.
-      timeout: options?.timeoutMs ?? 120000,
+      timeout: options?.timeoutMs ?? API_TIMEOUT_MS,
     },
   );
   return data;

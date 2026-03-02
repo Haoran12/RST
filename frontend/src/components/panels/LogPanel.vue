@@ -2,14 +2,21 @@
   <section class="panel" @click.stop>
     <header class="panel-header">
       <div class="panel-title">Log</div>
-      <button
-        type="button"
-        class="refresh-button"
-        :disabled="logStore.loading"
-        @click="logStore.loadLogs"
-      >
-        Refresh
-      </button>
+      <div class="header-actions">
+        <select v-model="sourceFilter" class="source-filter" :disabled="logStore.loading">
+          <option value="all">All LLM Requests</option>
+          <option value="main">Main Session LLM</option>
+          <option value="scheduler">Scheduler LLM</option>
+        </select>
+        <button
+          type="button"
+          class="refresh-button"
+          :disabled="logStore.loading"
+          @click="logStore.loadLogs"
+        >
+          Refresh
+        </button>
+      </div>
     </header>
 
     <div class="panel-body">
@@ -17,12 +24,12 @@
       <div v-else-if="logStore.error" class="placeholder error">
         {{ logStore.error }}
       </div>
-      <div v-else-if="logStore.logs.length === 0" class="placeholder">
+      <div v-else-if="filteredLogs.length === 0" class="placeholder">
         No logs recorded yet.
       </div>
       <div v-else class="log-list">
         <button
-          v-for="log in logStore.logs"
+          v-for="log in filteredLogs"
           :key="log.id"
           type="button"
           class="log-card"
@@ -34,6 +41,7 @@
           </div>
           <div class="log-meta">Provider: {{ log.provider || "-" }}</div>
           <div class="log-meta">Model: {{ log.model || "-" }}</div>
+          <div class="log-meta">Source: {{ sourceLabel(log.request_source) }}</div>
           <div class="log-meta">
             Status:
             <span :class="['status-chip', statusClass(log.status)]">{{ log.status || "-" }}</span>
@@ -50,7 +58,7 @@
       </div>
     </div>
 
-    <div class="panel-footer">Showing last 5 requests</div>
+    <div class="panel-footer">Showing recent requests</div>
 
     <n-modal v-model:show="detailVisible" preset="card" title="Log Detail" size="large">
       <div v-if="selectedLog" class="detail-body">
@@ -68,6 +76,10 @@
             <div>
               <div class="detail-label">Provider</div>
               <div class="detail-value">{{ selectedLog.provider || "-" }}</div>
+            </div>
+            <div>
+              <div class="detail-label">Source</div>
+              <div class="detail-value">{{ sourceLabel(selectedLog.request_source) }}</div>
             </div>
             <div>
               <div class="detail-label">Status</div>
@@ -128,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { NButton, NModal } from "naive-ui";
 
 import { useLogStore } from "@/stores/log";
@@ -137,6 +149,14 @@ import type { LogEntry } from "@/types/log";
 const logStore = useLogStore();
 const selectedLog = ref<LogEntry | null>(null);
 const detailVisible = ref(false);
+const sourceFilter = ref<"all" | "main" | "scheduler">("all");
+
+const filteredLogs = computed(() => {
+  if (sourceFilter.value === "all") {
+    return logStore.logs;
+  }
+  return logStore.logs.filter((log) => normalizeSource(log.request_source) === sourceFilter.value);
+});
 
 onMounted(() => {
   logStore.loadLogs();
@@ -196,6 +216,20 @@ function statusClass(status: string | null | undefined) {
   return "";
 }
 
+function normalizeSource(source: string | undefined) {
+  if (source === "scheduler") {
+    return "scheduler";
+  }
+  return "main";
+}
+
+function sourceLabel(source: string | undefined) {
+  if (normalizeSource(source) === "scheduler") {
+    return "Scheduler LLM";
+  }
+  return "Main Session LLM";
+}
+
 function formatJson(payload: unknown) {
   try {
     return JSON.stringify(payload, null, 2);
@@ -226,6 +260,21 @@ function formatJson(payload: unknown) {
   font-size: 14px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.source-filter {
+  border: 1px solid var(--rst-border-color);
+  background: var(--rst-bg-topbar);
+  color: var(--rst-text-secondary);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
 }
 
 .refresh-button {

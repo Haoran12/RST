@@ -1,3 +1,4 @@
+import axios from "axios";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
@@ -42,6 +43,12 @@ import type {
   SchedulerTemplateUpdate,
   SyncStatus,
 } from "@/types/lore";
+
+interface ImportLoreResult {
+  report: ConversionReport | null;
+  timedOut: boolean;
+  errorMessage: string | null;
+}
 
 export const useLoreStore = defineStore("lore", () => {
   const loading = ref(false);
@@ -155,16 +162,36 @@ export const useLoreStore = defineStore("lore", () => {
     sessionName: string,
     file: File,
     splitFactionCharacters: boolean,
-  ): Promise<ConversionReport | null> {
+    llmFallback: boolean = true,
+  ): Promise<ImportLoreResult> {
     loading.value = true;
     try {
-      return await importLoreApi(sessionName, file, splitFactionCharacters);
+      const report = await importLoreApi(sessionName, file, splitFactionCharacters, llmFallback);
+      return {
+        report,
+        timedOut: false,
+        errorMessage: null,
+      };
     } catch (error) {
-      message.error(parseApiError(error));
-      return null;
+      return {
+        report: null,
+        timedOut: isTimeoutError(error),
+        errorMessage: parseApiError(error),
+      };
     } finally {
       loading.value = false;
     }
+  }
+
+  function isTimeoutError(error: unknown): boolean {
+    if (!axios.isAxiosError(error)) {
+      return false;
+    }
+    const code = error.code?.toUpperCase();
+    if (code === "ECONNABORTED" || code === "ETIMEDOUT") {
+      return true;
+    }
+    return error.message.toLowerCase().includes("timeout");
   }
 
   async function createCharacterAction(

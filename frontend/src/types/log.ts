@@ -1,6 +1,7 @@
 export interface LogEntry {
   id: string;
   chat_name: string;
+  request_source?: string;
   provider: string;
   model: string;
   status: string;

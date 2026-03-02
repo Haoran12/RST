@@ -1,4 +1,4 @@
-import apiClient from "@/api/client";
+import apiClient, { API_TIMEOUT_MS } from "@/api/client";
 
 import type {
   CharacterCreate,
@@ -35,12 +35,17 @@ export async function importLore(
   sessionName: string,
   file: File,
   splitFactionCharacters: boolean = false,
+  llmFallback: boolean = true,
 ): Promise<ConversionReport> {
   const formData = new FormData();
   formData.append("file", file);
   const { data } = await apiClient.post<ConversionReport>(`${BASE(sessionName)}/import`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
-    params: { split_faction_characters: splitFactionCharacters },
+    timeout: API_TIMEOUT_MS,
+    params: {
+      split_faction_characters: splitFactionCharacters,
+      llm_fallback: llmFallback,
+    },
   });
   return data;
 }

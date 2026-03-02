@@ -8,6 +8,7 @@ from pydantic import BaseModel
 class LogEntry(BaseModel):
     id: str
     chat_name: str
+    request_source: str = "main"
     provider: str
     model: str
     status: str

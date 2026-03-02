@@ -6,7 +6,7 @@ from app.models.log import LogEntry
 
 
 class LogService:
-    def __init__(self, max_logs: int = 5):
+    def __init__(self, max_logs: int = 100):
         self.max_logs = max_logs
         self.logs: List[LogEntry] = []
 

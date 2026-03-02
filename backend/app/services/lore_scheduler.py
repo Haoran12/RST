@@ -3,6 +3,7 @@
 from datetime import datetime
 from time import perf_counter
 
+from app.models import generate_id
 from app.models.api_config import ApiConfig
 from app.models.lore import (
     LoreCategory,
@@ -10,9 +11,12 @@ from app.models.lore import (
     ScheduleStatus,
     SchedulerPromptTemplate,
 )
+from app.models.log import LogEntry
 from app.models.session import Message
+from app.providers.base import ProviderError
 from app.providers.registry import get_provider
 from app.services.api_config_service import get_api_config_storage
+from app.services.log_service import log_service
 from app.services.lore_nlp import LoreNlpEngine
 from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import get_session_dir, get_session_storage
@@ -186,19 +190,95 @@ class LoreScheduler:
 
     async def _call_scheduler_llm(
         self,
+        session_name: str,
         api_config: ApiConfig,
         prompt: str,
     ) -> str:
+        request_time = datetime.utcnow().isoformat()
+        started_at = perf_counter()
+        provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
         provider = get_provider(api_config.provider)
-        result = await provider.chat(
-            api_config.base_url,
-            api_key,
-            messages=[{"role": "user", "content": prompt}],
-            model=api_config.model,
-            temperature=api_config.temperature,
-            max_tokens=api_config.max_tokens,
-            stream=False,
+        prompt_messages = [{"role": "user", "content": prompt}]
+        raw_request = {
+            "provider": provider_name,
+            "base_url": api_config.base_url,
+            "model": api_config.model,
+            "temperature": api_config.temperature,
+            "max_tokens": api_config.max_tokens,
+            "stream": False,
+            "prompt_messages": prompt_messages,
+            "stage": "scheduler_confirm",
+        }
+        try:
+            result = await provider.chat(
+                api_config.base_url,
+                api_key,
+                messages=prompt_messages,
+                model=api_config.model,
+                temperature=api_config.temperature,
+                max_tokens=api_config.max_tokens,
+                stream=False,
+            )
+        except ProviderError as exc:
+            response_time = datetime.utcnow().isoformat()
+            duration_ms = int((perf_counter() - started_at) * 1000)
+            log_service.add_log(
+                LogEntry(
+                    id=generate_id(),
+                    chat_name=session_name,
+                    request_source="scheduler",
+                    provider=provider_name,
+                    model=api_config.model,
+                    status="error",
+                    request_time=request_time,
+                    response_time=response_time,
+                    duration_ms=duration_ms,
+                    raw_request={**raw_request, "provider_request": exc.request},
+                    raw_response={
+                        "error": str(exc),
+                        "status_code": exc.status_code,
+                        "provider_response": exc.response,
+                    },
+                )
+            )
+            raise
+        except Exception as exc:  # pragma: no cover - defensive guard
+            response_time = datetime.utcnow().isoformat()
+            duration_ms = int((perf_counter() - started_at) * 1000)
+            log_service.add_log(
+                LogEntry(
+                    id=generate_id(),
+                    chat_name=session_name,
+                    request_source="scheduler",
+                    provider=provider_name,
+                    model=api_config.model,
+                    status="error",
+                    request_time=request_time,
+                    response_time=response_time,
+                    duration_ms=duration_ms,
+                    raw_request=raw_request,
+                    raw_response={"error": str(exc)},
+                )
+            )
+            raise
+
+        response_time = datetime.utcnow().isoformat()
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        log_service.add_log(
+            LogEntry(
+                id=generate_id(),
+                chat_name=session_name,
+                request_source="scheduler",
+                provider=provider_name,
+                model=api_config.model,
+                status="success",
+                request_time=request_time,
+                response_time=response_time,
+                duration_ms=duration_ms,
+                raw_request={**raw_request, "provider_request": result.request},
+                raw_response=result.response,
+            )
         )
         return result.text.strip()
 
@@ -265,7 +345,7 @@ class LoreScheduler:
 
         prompt = self._render_confirm_prompt(template, context, candidate_text)
         api_config = get_api_config_storage(scheduler_api_config_id)
-        injection_block = await self._call_scheduler_llm(api_config, prompt)
+        injection_block = await self._call_scheduler_llm(session_name, api_config, prompt)
 
         rst_runtime_service.update_session_state(
             session_name,

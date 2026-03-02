@@ -4,7 +4,13 @@ from typing import Any
 
 import httpx
 
-from app.providers.base import BaseProvider, ProviderChatResult, ProviderError
+from app.providers.base import (
+    PROVIDER_CHAT_TIMEOUT_SECONDS,
+    PROVIDER_LIST_MODELS_TIMEOUT_SECONDS,
+    BaseProvider,
+    ProviderChatResult,
+    ProviderError,
+)
 
 
 def _safe_json(response: httpx.Response) -> Any:
@@ -20,7 +26,7 @@ class GeminiProvider(BaseProvider):
     async def list_models(self, base_url: str, api_key: str) -> list[str]:
         url = f"{base_url.rstrip('/')}/models"
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=PROVIDER_LIST_MODELS_TIMEOUT_SECONDS) as client:
                 response = await client.get(url, params={"key": api_key})
             response.raise_for_status()
             payload = response.json()
@@ -88,7 +94,7 @@ class GeminiProvider(BaseProvider):
 
         data: Any = None
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=PROVIDER_CHAT_TIMEOUT_SECONDS) as client:
                 response = await client.post(url, params={"key": api_key}, json=payload)
             response.raise_for_status()
             data = response.json()

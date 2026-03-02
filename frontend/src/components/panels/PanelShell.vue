@@ -146,12 +146,12 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   background: var(--rst-bg-panel);
   border-right: 1px solid var(--rst-border-color);
-  transition: width 0.2s ease;
-  overflow: hidden;
+  overflow: visible;
+  z-index: 6;
 }
 
 .rst-panel-container.is-open {
-  width: 408px;
+  z-index: 12;
 }
 
 .rst-icon-bar {
@@ -207,11 +207,15 @@ onBeforeUnmount(() => {
 
 .rst-panel {
   position: absolute;
-  inset: 0 0 0 48px;
+  top: 0;
+  bottom: 0;
+  left: 48px;
   width: 360px;
   background: var(--rst-bg-panel);
   height: 100%;
   overflow: hidden;
+  border-right: 1px solid var(--rst-border-color);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.24);
 }
 
 .panel-slide-enter-active,
@@ -242,10 +246,6 @@ onBeforeUnmount(() => {
 
 
 @media (max-width: 900px) {
-  .rst-panel-container.is-open {
-    width: 100vw;
-  }
-
   .rst-panel {
     width: calc(100vw - 48px);
   }

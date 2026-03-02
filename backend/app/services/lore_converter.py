@@ -22,8 +22,11 @@ from app.models.lore import (
     SourceEntry,
     SourceLoreFile,
 )
+from app.models.log import LogEntry
+from app.providers.base import ProviderError
 from app.providers.registry import get_provider
 from app.services.api_config_service import ApiConfigNotFoundError, get_api_config_storage
+from app.services.log_service import log_service
 from app.services.session_service import get_session_dir
 from app.storage.encryption import EncryptionError, decrypt_api_key
 from app.storage.lore_store import LoreStore
@@ -45,6 +48,9 @@ class LoreConverter:
     }
 
     _name_block_pattern = re.compile(r"(?im)^\s*name\s*:\s*.+$")
+    _llm_batch_max_items = 12
+    _llm_batch_max_chars = 48000
+    _llm_single_fallback_budget_default = 2
 
     def __init__(
         self,
@@ -68,6 +74,9 @@ class LoreConverter:
         self._llm_ready = self.llm_fallback
         self._llm_unavailable_reason: str | None = None
         self._llm_unavailable_reported = False
+        self._llm_batch_prepared = False
+        self._llm_batch_cache: dict[str, dict[str, Any]] = {}
+        self._llm_single_fallback_budget = self._llm_single_fallback_budget_default
         if self.llm_fallback and not self.llm_api_config_id:
             self._llm_ready = False
             self._llm_unavailable_reason = "LLM fallback requested but no API config id is available."
@@ -86,6 +95,8 @@ class LoreConverter:
             source = SourceLoreFile.model_validate(self.source_data)
         except ValidationError as exc:
             raise ValueError("Invalid source lore format") from exc
+
+        await self._prepare_llm_batch_for_failed_characters(source.entries)
 
         for src in source.entries:
             try:
@@ -442,7 +453,292 @@ class LoreConverter:
                 merged.update(doc)
         return merged or None
 
+    async def _prepare_llm_batch_for_failed_characters(self, entries: list[SourceEntry]) -> None:
+        if not self.llm_fallback:
+            return
+        self._llm_batch_prepared = True
+
+        # Batch mode only activates when multiple character entries fail YAML parsing.
+        # Single-entry fallback remains on the existing per-entry LLM path.
+        candidates: list[SourceEntry] = []
+        for src in entries:
+            mapped = self.CATEGORY_MAP.get(src.category.strip().lower())
+            if mapped != LoreCategory.CHARACTER:
+                continue
+            if self._parse_character_yaml(src.content) is None:
+                candidates.append(src)
+
+        if len(candidates) <= 1:
+            return
+
+        api_config = self._resolve_llm_api_config()
+        if api_config is None:
+            if self._llm_unavailable_reason and not self._llm_unavailable_reported:
+                self._warn(candidates[0], "llm_parse_skipped", self._llm_unavailable_reason)
+                self._llm_unavailable_reported = True
+            return
+
+        pending_by_id = {src.id: src for src in candidates}
+        for batch in self._iter_llm_character_batches(candidates):
+            prompt = self._render_llm_batch_character_prompt(batch)
+            batch_ids = {src.id for src in batch}
+
+            try:
+                raw = await self._call_llm_for_character_batch(batch, api_config, prompt)
+            except Exception as exc:  # pragma: no cover - provider/network guard
+                message = f"LLM batch fallback call failed: {exc}"
+                for src in batch:
+                    self._warn(src, "llm_parse_error", message)
+                continue
+
+            payload = self._extract_json_value(raw)
+            parsed_by_id = self._normalize_batch_character_results(payload, batch_ids)
+            for src_id, parsed in parsed_by_id.items():
+                self._llm_batch_cache[src_id] = parsed
+                pending_by_id.pop(src_id, None)
+
+            missing = [pending_by_id[src_id] for src_id in batch_ids if src_id in pending_by_id]
+            for src in missing:
+                self._warn(
+                    src,
+                    "llm_parse_error",
+                    "LLM batch fallback did not return a valid structured object for this character.",
+                )
+
+    def _iter_llm_character_batches(self, candidates: list[SourceEntry]) -> list[list[SourceEntry]]:
+        batches: list[list[SourceEntry]] = []
+        current: list[SourceEntry] = []
+        current_chars = 0
+
+        for src in candidates:
+            approx = len(src.id) + len(src.name) + len(src.content) + 128
+            exceeds_size = current and (current_chars + approx > self._llm_batch_max_chars)
+            exceeds_count = current and (len(current) >= self._llm_batch_max_items)
+            if exceeds_size or exceeds_count:
+                batches.append(current)
+                current = []
+                current_chars = 0
+
+            current.append(src)
+            current_chars += approx
+
+        if current:
+            batches.append(current)
+        return batches
+
+    def _render_llm_batch_character_prompt(self, batch: list[SourceEntry]) -> str:
+        sections: list[str] = []
+        for src in batch:
+            sections.append(
+                "\n".join(
+                    [
+                        f"SOURCE_ID: {src.id}",
+                        f"NAME_HINT: {src.name.strip() or '(unknown)'}",
+                        "CONTENT:",
+                        src.content,
+                    ]
+                )
+            )
+
+        joined = "\n\n---\n\n".join(sections)
+        return (
+            "Convert each character lore section into structured JSON.\n"
+            "Output JSON only, no markdown and no extra text.\n"
+            "Required output schema:\n"
+            "{\n"
+            '  "items": [\n'
+            '    { "source_id": "SOURCE_ID", "parsed": { ...structured fields... } }\n'
+            "  ]\n"
+            "}\n"
+            "Use source_id exactly as provided. Keep semantics faithful to source text.\n"
+            "Prefer parser-compatible keys when present:\n"
+            "name, species, race, strength, power, combat_power, age, birth, gender, homeland, origin, identities, aliases, "
+            "nicknames, faction, organization, objective, goal, personality, temperament, "
+            "social_deportment, habitual_mannerisms, relationships, relationship, appearance, "
+            "physique, overall_impression, facial_features, hair_style, features, clothing, "
+            "clothing_style, abilities, growth_experience, experience, key_events, "
+            "family_background, hobbies, vocal_characteristics, common_phrases, speech_style, "
+            "communication, accessories.\n"
+            "Character sections:\n"
+            f"{joined}"
+        )
+
+    async def _call_llm_for_character_batch(
+        self,
+        batch: list[SourceEntry],
+        api_config,
+        prompt: str,
+    ) -> str:
+        request_time = datetime.utcnow().isoformat()
+        started_at = datetime.utcnow()
+        provider_name = api_config.provider.value
+        source_ids = [src.id for src in batch]
+
+        api_key = decrypt_api_key(api_config.encrypted_key)
+        provider = get_provider(api_config.provider)
+        prompt_messages = [{"role": "user", "content": prompt}]
+        raw_request = {
+            "provider": provider_name,
+            "base_url": api_config.base_url,
+            "model": api_config.model,
+            "temperature": api_config.temperature,
+            "max_tokens": api_config.max_tokens,
+            "stream": False,
+            "prompt_messages": prompt_messages,
+            "stage": "import_character_llm_batch",
+            "source_ids": source_ids,
+        }
+        try:
+            result = await provider.chat(
+                api_config.base_url,
+                api_key,
+                messages=prompt_messages,
+                model=api_config.model,
+                temperature=api_config.temperature,
+                max_tokens=api_config.max_tokens,
+                stream=False,
+            )
+        except ProviderError as exc:
+            response_time = datetime.utcnow().isoformat()
+            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            log_service.add_log(
+                LogEntry(
+                    id=generate_id(),
+                    chat_name=self.session_name,
+                    request_source="scheduler",
+                    provider=provider_name,
+                    model=api_config.model,
+                    status="error",
+                    request_time=request_time,
+                    response_time=response_time,
+                    duration_ms=duration_ms,
+                    raw_request={**raw_request, "provider_request": exc.request},
+                    raw_response={
+                        "error": str(exc),
+                        "status_code": exc.status_code,
+                        "provider_response": exc.response,
+                    },
+                )
+            )
+            raise
+        except Exception as exc:  # pragma: no cover - defensive guard
+            response_time = datetime.utcnow().isoformat()
+            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            log_service.add_log(
+                LogEntry(
+                    id=generate_id(),
+                    chat_name=self.session_name,
+                    request_source="scheduler",
+                    provider=provider_name,
+                    model=api_config.model,
+                    status="error",
+                    request_time=request_time,
+                    response_time=response_time,
+                    duration_ms=duration_ms,
+                    raw_request=raw_request,
+                    raw_response={"error": str(exc)},
+                )
+            )
+            raise
+
+        response_time = datetime.utcnow().isoformat()
+        duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+        log_service.add_log(
+            LogEntry(
+                id=generate_id(),
+                chat_name=self.session_name,
+                request_source="scheduler",
+                provider=provider_name,
+                model=api_config.model,
+                status="success",
+                request_time=request_time,
+                response_time=response_time,
+                duration_ms=duration_ms,
+                raw_request={**raw_request, "provider_request": result.request},
+                raw_response=result.response,
+            )
+        )
+        return result.text.strip()
+
+    def _extract_json_value(self, text: str) -> Any | None:
+        raw = text.strip()
+        if not raw:
+            return None
+
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+
+        decoder = json.JSONDecoder()
+        for marker in ("{", "["):
+            start = raw.find(marker)
+            while start != -1:
+                try:
+                    parsed, _ = decoder.raw_decode(raw[start:])
+                    return parsed
+                except json.JSONDecodeError:
+                    start = raw.find(marker, start + 1)
+        return None
+
+    def _normalize_batch_character_results(
+        self,
+        payload: Any,
+        expected_ids: set[str],
+    ) -> dict[str, dict[str, Any]]:
+        normalized: dict[str, dict[str, Any]] = {}
+
+        if isinstance(payload, dict):
+            items = payload.get("items")
+            if isinstance(items, list):
+                payload_items = items
+            else:
+                payload_items = []
+                for key, value in payload.items():
+                    src_id = str(key).strip()
+                    if src_id in expected_ids and isinstance(value, dict):
+                        normalized[src_id] = {str(k): v for k, v in value.items()}
+                return normalized
+        elif isinstance(payload, list):
+            payload_items = payload
+        else:
+            return normalized
+
+        for item in payload_items:
+            if not isinstance(item, dict):
+                continue
+            src_id = str(item.get("source_id") or item.get("id") or "").strip()
+            if not src_id or src_id not in expected_ids:
+                continue
+
+            parsed = item.get("parsed")
+            if not isinstance(parsed, dict):
+                for key in ("fields", "data", "result", "output"):
+                    candidate = item.get(key)
+                    if isinstance(candidate, dict):
+                        parsed = candidate
+                        break
+            if not isinstance(parsed, dict):
+                continue
+
+            payload_dict = {str(key): value for key, value in parsed.items()}
+            if payload_dict:
+                normalized[src_id] = payload_dict
+        return normalized
+
     async def _parse_character_with_llm(self, src: SourceEntry) -> tuple[dict[str, Any] | None, str]:
+        cached = self._llm_batch_cache.get(src.id)
+        if cached is not None:
+            return cached, "LLM batch fallback parsed character content successfully."
+
+        if self._llm_batch_prepared and self._llm_single_fallback_budget <= 0:
+            message = (
+                "LLM batch fallback did not cover this character and single-entry fallback was "
+                "skipped to reduce request count."
+            )
+            self._warn(src, "llm_parse_skipped", message)
+            return None, message
+
         api_config = self._resolve_llm_api_config()
         if api_config is None:
             note = ""
@@ -452,9 +748,12 @@ class LoreConverter:
                 note = self._llm_unavailable_reason
             return None, note
 
+        if self._llm_batch_prepared and self._llm_single_fallback_budget > 0:
+            self._llm_single_fallback_budget -= 1
+
         prompt = self._render_llm_character_prompt(src)
         try:
-            raw = await self._call_llm_for_character_yaml(api_config, prompt)
+            raw = await self._call_llm_for_character_yaml(src, api_config, prompt)
         except (ApiConfigNotFoundError, EncryptionError) as exc:
             self._llm_ready = False
             self._llm_unavailable_reason = f"LLM fallback disabled: {exc}"
@@ -496,17 +795,94 @@ class LoreConverter:
             )
             return None
 
-    async def _call_llm_for_character_yaml(self, api_config, prompt: str) -> str:
+    async def _call_llm_for_character_yaml(self, src: SourceEntry, api_config, prompt: str) -> str:
+        request_time = datetime.utcnow().isoformat()
+        started_at = datetime.utcnow()
+        provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
         provider = get_provider(api_config.provider)
-        result = await provider.chat(
-            api_config.base_url,
-            api_key,
-            messages=[{"role": "user", "content": prompt}],
-            model=api_config.model,
-            temperature=api_config.temperature,
-            max_tokens=api_config.max_tokens,
-            stream=False,
+        prompt_messages = [{"role": "user", "content": prompt}]
+        raw_request = {
+            "provider": provider_name,
+            "base_url": api_config.base_url,
+            "model": api_config.model,
+            "temperature": api_config.temperature,
+            "max_tokens": api_config.max_tokens,
+            "stream": False,
+            "prompt_messages": prompt_messages,
+            "stage": "import_character_llm_fallback",
+            "source_id": src.id,
+            "source_name": src.name,
+        }
+        try:
+            result = await provider.chat(
+                api_config.base_url,
+                api_key,
+                messages=prompt_messages,
+                model=api_config.model,
+                temperature=api_config.temperature,
+                max_tokens=api_config.max_tokens,
+                stream=False,
+            )
+        except ProviderError as exc:
+            response_time = datetime.utcnow().isoformat()
+            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            log_service.add_log(
+                LogEntry(
+                    id=generate_id(),
+                    chat_name=self.session_name,
+                    request_source="scheduler",
+                    provider=provider_name,
+                    model=api_config.model,
+                    status="error",
+                    request_time=request_time,
+                    response_time=response_time,
+                    duration_ms=duration_ms,
+                    raw_request={**raw_request, "provider_request": exc.request},
+                    raw_response={
+                        "error": str(exc),
+                        "status_code": exc.status_code,
+                        "provider_response": exc.response,
+                    },
+                )
+            )
+            raise
+        except Exception as exc:  # pragma: no cover - defensive guard
+            response_time = datetime.utcnow().isoformat()
+            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            log_service.add_log(
+                LogEntry(
+                    id=generate_id(),
+                    chat_name=self.session_name,
+                    request_source="scheduler",
+                    provider=provider_name,
+                    model=api_config.model,
+                    status="error",
+                    request_time=request_time,
+                    response_time=response_time,
+                    duration_ms=duration_ms,
+                    raw_request=raw_request,
+                    raw_response={"error": str(exc)},
+                )
+            )
+            raise
+
+        response_time = datetime.utcnow().isoformat()
+        duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+        log_service.add_log(
+            LogEntry(
+                id=generate_id(),
+                chat_name=self.session_name,
+                request_source="scheduler",
+                provider=provider_name,
+                model=api_config.model,
+                status="success",
+                request_time=request_time,
+                response_time=response_time,
+                duration_ms=duration_ms,
+                raw_request={**raw_request, "provider_request": result.request},
+                raw_response=result.response,
+            )
         )
         return result.text.strip()
 

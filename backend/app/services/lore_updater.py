@@ -20,9 +20,12 @@ from app.models.lore import (
     SyncResult,
     SyncStatus,
 )
+from app.models.log import LogEntry
 from app.models.session import Message
+from app.providers.base import ProviderError
 from app.providers.registry import get_provider
 from app.services.api_config_service import get_api_config_storage
+from app.services.log_service import log_service
 from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import get_session_dir, get_session_storage
 from app.storage.encryption import decrypt_api_key
@@ -68,17 +71,98 @@ class LoreUpdater:
             return "(none)"
         return "\n".join(f"- {char.name} ({char.character_id})" for char in chars)
 
-    async def _call_llm(self, api_config: ApiConfig, prompt: str) -> str:
+    async def _call_llm(
+        self,
+        session_name: str,
+        api_config: ApiConfig,
+        prompt: str,
+        stage: str,
+    ) -> str:
+        request_time = datetime.utcnow().isoformat()
+        started_at = perf_counter()
+        provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
         provider = get_provider(api_config.provider)
-        result = await provider.chat(
-            api_config.base_url,
-            api_key,
-            messages=[{"role": "user", "content": prompt}],
-            model=api_config.model,
-            temperature=api_config.temperature,
-            max_tokens=api_config.max_tokens,
-            stream=False,
+        prompt_messages = [{"role": "user", "content": prompt}]
+        raw_request = {
+            "provider": provider_name,
+            "base_url": api_config.base_url,
+            "model": api_config.model,
+            "temperature": api_config.temperature,
+            "max_tokens": api_config.max_tokens,
+            "stream": False,
+            "prompt_messages": prompt_messages,
+            "stage": stage,
+        }
+        try:
+            result = await provider.chat(
+                api_config.base_url,
+                api_key,
+                messages=prompt_messages,
+                model=api_config.model,
+                temperature=api_config.temperature,
+                max_tokens=api_config.max_tokens,
+                stream=False,
+            )
+        except ProviderError as exc:
+            response_time = datetime.utcnow().isoformat()
+            duration_ms = int((perf_counter() - started_at) * 1000)
+            log_service.add_log(
+                LogEntry(
+                    id=generate_id(),
+                    chat_name=session_name,
+                    request_source="scheduler",
+                    provider=provider_name,
+                    model=api_config.model,
+                    status="error",
+                    request_time=request_time,
+                    response_time=response_time,
+                    duration_ms=duration_ms,
+                    raw_request={**raw_request, "provider_request": exc.request},
+                    raw_response={
+                        "error": str(exc),
+                        "status_code": exc.status_code,
+                        "provider_response": exc.response,
+                    },
+                )
+            )
+            raise
+        except Exception as exc:  # pragma: no cover - defensive guard
+            response_time = datetime.utcnow().isoformat()
+            duration_ms = int((perf_counter() - started_at) * 1000)
+            log_service.add_log(
+                LogEntry(
+                    id=generate_id(),
+                    chat_name=session_name,
+                    request_source="scheduler",
+                    provider=provider_name,
+                    model=api_config.model,
+                    status="error",
+                    request_time=request_time,
+                    response_time=response_time,
+                    duration_ms=duration_ms,
+                    raw_request=raw_request,
+                    raw_response={"error": str(exc)},
+                )
+            )
+            raise
+
+        response_time = datetime.utcnow().isoformat()
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        log_service.add_log(
+            LogEntry(
+                id=generate_id(),
+                chat_name=session_name,
+                request_source="scheduler",
+                provider=provider_name,
+                model=api_config.model,
+                status="success",
+                request_time=request_time,
+                response_time=response_time,
+                duration_ms=duration_ms,
+                raw_request={**raw_request, "provider_request": result.request},
+                raw_response=result.response,
+            )
         )
         return result.text.strip()
 
@@ -265,7 +349,12 @@ class LoreUpdater:
             )
 
             api_config = get_api_config_storage(scheduler_api_config_id)
-            raw_text = await self._call_llm(api_config, prompt)
+            raw_text = await self._call_llm(
+                session_name,
+                api_config,
+                prompt,
+                stage="scheduler_sync_extract",
+            )
             instructions = self._extract_json_array(raw_text)
 
             updated_entries: list[str] = []
@@ -476,7 +565,12 @@ class LoreUpdater:
         prompt = self._render_consolidate_prompt(template, char_file.data.name, prompt_memories)
 
         api_config = get_api_config_storage(scheduler_api_config_id)
-        raw_text = await self._call_llm(api_config, prompt)
+        raw_text = await self._call_llm(
+            session_name,
+            api_config,
+            prompt,
+            stage="scheduler_memory_consolidate",
+        )
         merged = self._extract_json_array(raw_text)
 
         new_memories: list[CharacterMemory] = []

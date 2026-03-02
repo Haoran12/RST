@@ -8,8 +8,9 @@ from app.providers.base import BaseProvider, ProviderChatResult
 
 
 class _ImportLlmStubProvider(BaseProvider):
-    def __init__(self, text: str) -> None:
-        self._text = text
+    def __init__(self, text: str | list[str]) -> None:
+        self._texts = [text] if isinstance(text, str) else text
+        self.calls = 0
 
     async def list_models(self, base_url: str, api_key: str) -> list[str]:
         return []
@@ -25,8 +26,10 @@ class _ImportLlmStubProvider(BaseProvider):
         max_tokens: int,
         stream: bool = False,
     ) -> ProviderChatResult:
+        self.calls += 1
+        index = min(self.calls - 1, len(self._texts) - 1)
         return ProviderChatResult(
-            text=self._text,
+            text=self._texts[index],
             request={"messages": messages, "model": model},
             response={"choices": [{"finish_reason": "stop"}]},
         )
@@ -297,6 +300,99 @@ async def test_import_lore_llm_fallback_can_parse_invalid_yaml(
     assert character["race"] == "human"
     assert character["strength"] == 10
     assert character["relationship"][0]["target"] == "wu_zhong"
+
+
+@pytest.mark.asyncio
+async def test_import_lore_llm_fallback_batches_multiple_characters(
+    async_client,
+    sample_api_config,
+    monkeypatch,
+) -> None:
+    stub_provider = _ImportLlmStubProvider(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "source_id": "legacy-char-batch-1",
+                        "parsed": {
+                            "species": "human",
+                            "identities": ["merchant"],
+                            "personality": "friendly",
+                        },
+                    },
+                    {
+                        "source_id": "legacy-char-batch-2",
+                        "parsed": {
+                            "race": "elf",
+                            "relationships": [{"lin_mu": "friend"}],
+                        },
+                    },
+                ]
+            },
+            ensure_ascii=False,
+        )
+    )
+    monkeypatch.setattr("app.services.lore_converter.get_provider", lambda _: stub_provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client, "ImportLoreLlmBatchPreset")
+    await _create_session(async_client, "ImportLoreLlmBatch", config_id, preset_id, config_id)
+
+    source_payload = {
+        "entries": [
+            {
+                "id": "legacy-char-batch-1",
+                "name": "lin_mu",
+                "category": "characters",
+                "disable": False,
+                "content": (
+                    "# profile\n"
+                    "name: lin_mu\n"
+                    "abilities:\n"
+                    "  spirit_level: 4k\n"
+                    "  masters basic sword and fire skills\n"
+                ),
+                "constant": False,
+                "key": ["character"],
+            },
+            {
+                "id": "legacy-char-batch-2",
+                "name": "qing_he",
+                "category": "characters",
+                "disable": False,
+                "content": (
+                    "# profile\n"
+                    "name: qing_he\n"
+                    "abilities:\n"
+                    "  spirit_level: 5k\n"
+                    "  masters water and wind skills\n"
+                ),
+                "constant": False,
+                "key": ["character"],
+            },
+        ]
+    }
+
+    response = await async_client.post(
+        "/sessions/ImportLoreLlmBatch/lores/import",
+        params={"llm_fallback": True},
+        files=_upload_payload(source_payload),
+    )
+    assert response.status_code == 200
+    report = response.json()
+
+    assert stub_provider.calls == 1
+    actions = [item for item in report["actions"] if item["target_category"] == "character"]
+    assert len(actions) == 2
+    assert all(item["action"] == "character_llm_structured_created" for item in actions)
+
+    characters_response = await async_client.get("/sessions/ImportLoreLlmBatch/lores/characters")
+    assert characters_response.status_code == 200
+    assert characters_response.json()["total"] == 2
+    by_name = {item["name"]: item for item in characters_response.json()["characters"]}
+    assert by_name["lin_mu"]["race"] == "human"
+    assert by_name["qing_he"]["race"] == "elf"
+    assert by_name["qing_he"]["relationship"][0]["target"] == "lin_mu"
 
 
 @pytest.mark.asyncio

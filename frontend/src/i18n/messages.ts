@@ -190,6 +190,8 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "Import appends to current lore and will not overwrite existing entries.",
     "rstPanel.import.split_faction_characters":
       "Split embedded faction characters into standalone character entries",
+    "rstPanel.import.llm_fallback":
+      "Use Scheduler LLM fallback for character extraction (recommended)",
     "rstPanel.import.confirm": "Confirm Import",
     "rstPanel.report.title": "Lore Import Report",
     "rstPanel.report.summary.source_file": "Source File",
@@ -320,6 +322,12 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "Import complete: {entries} entries + {characters} characters, {warnings} warnings.",
     "rstPanel.messages.import_has_errors":
       "Import includes {count} errors. Please review the report.",
+    "rstPanel.messages.import_timeout_tracking":
+      "Import request timed out after 60s. Import may still be running; auto-refresh is now tracking the result.",
+    "rstPanel.messages.import_timeout_recovered":
+      "Background import detected and synced. RST panel has been refreshed.",
+    "rstPanel.messages.import_timeout_refresh_done":
+      "Background check finished. RST panel has been refreshed to latest data.",
     "rstPanel.report.action_type.generic_entry_created": "Generic entry imported",
     "rstPanel.report.action_type.faction_entry_created": "Faction entry imported",
     "rstPanel.report.action_type.faction_kept_with_embedded_characters":
@@ -328,6 +336,8 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "Faction split into character entries",
     "rstPanel.report.action_type.character_structured_created":
       "Character created from structured data",
+    "rstPanel.report.action_type.character_llm_structured_created":
+      "Character created from LLM-extracted structured data",
     "rstPanel.report.action_type.character_yaml_fallback_created":
       "Character imported via raw fallback format",
     "rstPanel.report.action_type.entry_failed": "Entry import failed",
@@ -536,6 +546,8 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "\u5bfc\u5165\u4f1a\u8ffd\u52a0\u5230\u73b0\u6709\u8bbe\u5b9a\u4e2d\uff0c\u4e0d\u4f1a\u8986\u76d6\u5df2\u6709\u8bcd\u6761\u3002",
     "rstPanel.import.split_faction_characters":
       "\u5c06\u9635\u8425\u4e2d\u7684\u5d4c\u5165\u4eba\u7269\u62c6\u5206\u4e3a\u72ec\u7acb\u4eba\u7269\u8bcd\u6761",
+    "rstPanel.import.llm_fallback":
+      "\u5f00\u542f\u8c03\u5ea6 LLM \u4eba\u7269\u5b57\u6bb5\u63d0\u53d6\u5160\u5e95\uff08\u63a8\u8350\uff09",
     "rstPanel.import.confirm": "\u786e\u8ba4\u5bfc\u5165",
     "rstPanel.report.title": "\u8bbe\u5b9a\u5bfc\u5165\u62a5\u544a",
     "rstPanel.report.summary.source_file": "\u6e90\u6587\u4ef6",
@@ -593,7 +605,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.overlay.character.field.activity": "\u5f53\u524d\u884c\u4e3a",
     "rstPanel.overlay.character.field.birth": "\u51fa\u751f",
     "rstPanel.overlay.character.field.homeland": "\u51fa\u8eab\u5730",
-    "rstPanel.overlay.character.field.role": "\u89d2\u8272",
+    "rstPanel.overlay.character.field.role": "身份/职业",
     "rstPanel.overlay.character.field.faction": "\u9635\u8425",
     "rstPanel.overlay.character.field.objective": "\u76ee\u6807",
     "rstPanel.overlay.character.field.aliases": "\u522b\u540d",
@@ -669,6 +681,12 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "\u5bfc\u5165\u5b8c\u6210\uff1a{entries} \u6761\u8bcd\u6761 + {characters} \u4e2a\u4eba\u7269\uff0c{warnings} \u6761\u8b66\u544a",
     "rstPanel.messages.import_has_errors":
       "\u5bfc\u5165\u5305\u542b {count} \u6761\u9519\u8bef\uff0c\u8bf7\u67e5\u770b\u62a5\u544a",
+    "rstPanel.messages.import_timeout_tracking":
+      "\u5bfc\u5165\u8bf7\u6c42\u5728 60 \u79d2\u8d85\u65f6\u3002\u540e\u53f0\u53ef\u80fd\u4ecd\u5728\u5bfc\u5165\uff0c\u6b63\u5728\u81ea\u52a8\u8ddf\u8e2a\u5e76\u5237\u65b0\u9762\u677f",
+    "rstPanel.messages.import_timeout_recovered":
+      "\u5df2\u68c0\u6d4b\u5230\u540e\u53f0\u5bfc\u5165\u5e76\u5b8c\u6210\u540c\u6b65\uff0cRST \u9762\u677f\u5df2\u5237\u65b0",
+    "rstPanel.messages.import_timeout_refresh_done":
+      "\u540e\u53f0\u8ddf\u8e2a\u5df2\u5b8c\u6210\uff0cRST \u9762\u677f\u5df2\u5237\u65b0\u5230\u6700\u65b0\u6570\u636e",
     "rstPanel.report.action_type.generic_entry_created": "\u5df2\u5bfc\u5165\u901a\u7528\u8bcd\u6761",
     "rstPanel.report.action_type.faction_entry_created": "\u5df2\u5bfc\u5165\u9635\u8425\u8bcd\u6761",
     "rstPanel.report.action_type.faction_kept_with_embedded_characters":
@@ -677,6 +695,8 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "\u9635\u8425\u5df2\u62c6\u5206\u4e3a\u4eba\u7269\u8bcd\u6761",
     "rstPanel.report.action_type.character_structured_created":
       "\u5df2\u4ece\u7ed3\u6784\u5316\u6570\u636e\u89e3\u6790\u4eba\u7269",
+    "rstPanel.report.action_type.character_llm_structured_created":
+      "\u5df2\u901a\u8fc7 LLM \u63d0\u53d6\u7ed3\u6784\u5316\u6570\u636e\u521b\u5efa\u4eba\u7269",
     "rstPanel.report.action_type.character_yaml_fallback_created":
       "\u4eba\u7269\u5bfc\u5165\u4e3a\u539f\u59cb\u56de\u9000\u683c\u5f0f",
     "rstPanel.report.action_type.entry_failed": "\u8bcd\u6761\u5bfc\u5165\u5931\u8d25",

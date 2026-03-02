@@ -340,6 +340,7 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
             LogEntry(
                 id=generate_id(),
                 chat_name=session_name,
+                request_source="main",
                 provider=provider_name,
                 model=api_config.model,
                 status="error",
@@ -398,6 +399,7 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
         LogEntry(
             id=generate_id(),
             chat_name=session_name,
+            request_source="main",
             provider=provider_name,
             model=api_config.model,
             status="success",

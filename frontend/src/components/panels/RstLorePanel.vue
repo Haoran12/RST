@@ -381,6 +381,9 @@
         <n-checkbox v-model:checked="splitFactionCharacters">
           {{ t("rstPanel.import.split_faction_characters") }}
         </n-checkbox>
+        <n-checkbox v-model:checked="importLlmFallback">
+          {{ t("rstPanel.import.llm_fallback") }}
+        </n-checkbox>
       </div>
       <template #footer>
         <div class="import-modal-actions">
@@ -515,6 +518,7 @@ import {
 } from "naive-ui";
 import Draggable from "vuedraggable";
 
+import { listCharacters, listEntries } from "@/api/lores";
 import ContentOverlay from "@/components/panels/ContentOverlay.vue";
 import { useI18n } from "@/composables/useI18n";
 import { useLoreStore } from "@/stores/lore";
@@ -551,6 +555,11 @@ interface OverlaySection {
   description?: string;
   fields: OverlayField[];
   columns?: number;
+}
+
+interface LoreTotals {
+  entries: number;
+  characters: number;
 }
 
 const sessionStore = useSessionStore();
@@ -614,8 +623,10 @@ const importInputRef = ref<HTMLInputElement | null>(null);
 const importModalVisible = ref(false);
 const importingFile = ref<File | null>(null);
 const splitFactionCharacters = ref(false);
+const importLlmFallback = ref(true);
 const reportOverlayVisible = ref(false);
 const importReport = ref<ConversionReport | null>(null);
+const importRecoveryToken = ref(0);
 
 const targetSessionOptions = computed(() =>
   sessions.value
@@ -653,6 +664,7 @@ onMounted(async () => {
 watch(
   () => currentSession.value?.name,
   async () => {
+    importRecoveryToken.value += 1;
     await bootstrapCurrentSession();
   },
 );
@@ -1741,6 +1753,7 @@ function handleFileChange(event: Event) {
   }
   importingFile.value = files[0];
   splitFactionCharacters.value = false;
+  importLlmFallback.value = true;
   importModalVisible.value = true;
   // Reset input value so selecting the same file triggers change again.
   target.value = "";
@@ -1750,21 +1763,106 @@ function closeImportModal() {
   importModalVisible.value = false;
   importingFile.value = null;
   splitFactionCharacters.value = false;
+  importLlmFallback.value = true;
+}
+
+async function refreshLorePanelData(sessionName: string) {
+  await Promise.all([
+    loreStore.loadEntries(sessionName, entryCategory.value),
+    loreStore.loadCharacters(sessionName),
+  ]);
+}
+
+async function fetchLoreTotals(sessionName: string): Promise<LoreTotals | null> {
+  try {
+    const [entriesResponse, charactersResponse] = await Promise.all([
+      listEntries(sessionName),
+      listCharacters(sessionName),
+    ]);
+    return {
+      entries: entriesResponse.total ?? entriesResponse.entries.length,
+      characters: charactersResponse.total ?? charactersResponse.characters.length,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function didLoreTotalsChange(before: LoreTotals | null, after: LoreTotals | null): boolean {
+  if (!before || !after) {
+    return false;
+  }
+  return before.entries !== after.entries || before.characters !== after.characters;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function recoverImportAfterTimeout(sessionName: string, baseline: LoreTotals | null) {
+  const recoveryToken = ++importRecoveryToken.value;
+  const maxAttempts = 8;
+  const intervalMs = 4000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await wait(intervalMs);
+    if (importRecoveryToken.value !== recoveryToken) {
+      return;
+    }
+    if (currentSession.value?.name !== sessionName) {
+      return;
+    }
+    const currentTotals = await fetchLoreTotals(sessionName);
+    if (didLoreTotalsChange(baseline, currentTotals)) {
+      await refreshLorePanelData(sessionName);
+      message.success(t("rstPanel.messages.import_timeout_recovered"));
+      return;
+    }
+  }
+
+  if (currentSession.value?.name !== sessionName) {
+    return;
+  }
+  await refreshLorePanelData(sessionName);
+  message.info(t("rstPanel.messages.import_timeout_refresh_done"));
 }
 
 async function confirmImportLore() {
   if (!currentSession.value?.name || !importingFile.value) {
     return;
   }
-  const report = await loreStore.importLore(
-    currentSession.value.name,
+
+  const sessionName = currentSession.value.name;
+  importRecoveryToken.value += 1;
+  const baselineTotals = await fetchLoreTotals(sessionName);
+
+  const result = await loreStore.importLore(
+    sessionName,
     importingFile.value,
     splitFactionCharacters.value,
+    importLlmFallback.value,
   );
-  if (!report) {
+  if (!result.report) {
+    if (result.timedOut) {
+      closeImportModal();
+      message.warning(t("rstPanel.messages.import_timeout_tracking"));
+      await recoverImportAfterTimeout(sessionName, baselineTotals);
+      return;
+    }
+    if (result.errorMessage) {
+      message.error(result.errorMessage);
+    }
+    return;
+  }
+
+  const report = result.report;
+  if (currentSession.value?.name !== sessionName) {
     return;
   }
   closeImportModal();
+  await refreshLorePanelData(sessionName);
   const entryCount = report.statistics.converted_entries ?? 0;
   const characterCount = report.statistics.converted_characters ?? 0;
   const warningCount = report.statistics.warnings_count ?? 0;
@@ -1784,10 +1882,6 @@ async function confirmImportLore() {
   }
   importReport.value = report;
   reportOverlayVisible.value = true;
-  await Promise.all([
-    loreStore.loadEntries(currentSession.value.name, entryCategory.value),
-    loreStore.loadCharacters(currentSession.value.name),
-  ]);
 }
 
 function actionLabel(action: string): string {
@@ -1799,6 +1893,9 @@ function actionLabel(action: string): string {
     ),
     faction_split_into_characters: t("rstPanel.report.action_type.faction_split_into_characters"),
     character_structured_created: t("rstPanel.report.action_type.character_structured_created"),
+    character_llm_structured_created: t(
+      "rstPanel.report.action_type.character_llm_structured_created",
+    ),
     character_yaml_fallback_created: t("rstPanel.report.action_type.character_yaml_fallback_created"),
     entry_failed: t("rstPanel.report.action_type.entry_failed"),
   };

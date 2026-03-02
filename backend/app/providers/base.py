@@ -2,7 +2,29 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import os
 from typing import Any
+
+
+def _env_positive_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+PROVIDER_LIST_MODELS_TIMEOUT_SECONDS = _env_positive_float(
+    "RST_PROVIDER_LIST_MODELS_TIMEOUT_SECONDS",
+    60.0,
+)
+PROVIDER_CHAT_TIMEOUT_SECONDS = _env_positive_float(
+    "RST_PROVIDER_CHAT_TIMEOUT_SECONDS",
+    300.0,
+)
 
 
 class ProviderError(RuntimeError):

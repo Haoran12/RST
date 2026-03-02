@@ -4,7 +4,13 @@ from typing import Any
 
 import httpx
 
-from app.providers.base import BaseProvider, ProviderChatResult, ProviderError
+from app.providers.base import (
+    PROVIDER_CHAT_TIMEOUT_SECONDS,
+    PROVIDER_LIST_MODELS_TIMEOUT_SECONDS,
+    BaseProvider,
+    ProviderChatResult,
+    ProviderError,
+)
 
 
 def _safe_json(response: httpx.Response) -> Any:
@@ -21,7 +27,7 @@ class OpenAIProvider(BaseProvider):
         url = f"{base_url.rstrip('/')}/models"
         headers = {"Authorization": f"Bearer {api_key}"}
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=PROVIDER_LIST_MODELS_TIMEOUT_SECONDS) as client:
                 response = await client.get(url, headers=headers)
             response.raise_for_status()
             payload = response.json()
@@ -61,7 +67,7 @@ class OpenAIProvider(BaseProvider):
 
         data: Any = None
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=PROVIDER_CHAT_TIMEOUT_SECONDS) as client:
                 response = await client.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
