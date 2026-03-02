@@ -3,6 +3,7 @@
 import pytest
 
 from app.providers.base import BaseProvider, ProviderChatResult
+from app.services.rst_runtime_service import rst_runtime_service
 
 
 class _SchedulerStubProvider(BaseProvider):
@@ -271,3 +272,54 @@ async def test_schedule_route_returns_injection_block(
     assert scheduled.status_code == 200
     payload = scheduled.json()
     assert payload["injection_block"] == "injected lore block"
+
+
+@pytest.mark.asyncio
+async def test_sync_status_includes_last_result_details(async_client, sample_api_config) -> None:
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "LoreSyncStatusSession"
+    await _create_session(async_client, session_name, config_id, preset_id, config_id)
+
+    rst_runtime_service.update_session_state(
+        session_name,
+        sync_running=False,
+        sync_last_run_at="2026-03-02T10:00:00",
+        rounds_since_sync=2,
+        sync_interval=3,
+        sync_last_result={
+            "updated_entries": ["char-1"],
+            "created_entries": ["entry-1"],
+            "new_memories": 1,
+            "new_plot_events": 0,
+            "duration_ms": 123,
+            "changes": [
+                {
+                    "entry_id": "char-1",
+                    "name": "Alice",
+                    "category": "character",
+                    "action": "updated",
+                    "summary": "Character fields updated",
+                    "before_content": None,
+                    "after_content": None,
+                    "content_append": None,
+                    "tags_added": [],
+                    "field_changes": [
+                        {"field": "strength", "before": "10", "after": "12"},
+                    ],
+                    "memory_event": None,
+                }
+            ],
+        },
+    )
+
+    status = await async_client.get(f"/sessions/{session_name}/lores/sync/status")
+    assert status.status_code == 200
+    payload = status.json()
+    assert payload["running"] is False
+    assert payload["rounds_since_last_sync"] == 2
+    assert payload["sync_interval"] == 3
+    assert payload["last_result"] is not None
+    assert payload["last_result"]["updated_entries"] == ["char-1"]
+    assert payload["last_result"]["created_entries"] == ["entry-1"]
+    assert payload["last_result"]["changes"][0]["field_changes"][0]["field"] == "strength"

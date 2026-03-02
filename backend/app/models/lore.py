@@ -392,7 +392,28 @@ class ScheduleStatus(BaseModel):
     running: bool
     last_run_at: str | None = None
     last_matched_count: int | None = None
+    last_matched_entry_ids: list[str] = Field(default_factory=list)
     cached_candidates: list[str] = Field(default_factory=list)
+
+
+class SyncFieldChange(BaseModel):
+    field: str
+    before: str
+    after: str
+
+
+class SyncChange(BaseModel):
+    entry_id: str
+    name: str
+    category: str
+    action: str
+    summary: str = ""
+    before_content: str | None = None
+    after_content: str | None = None
+    content_append: str | None = None
+    tags_added: list[str] = Field(default_factory=list)
+    field_changes: list[SyncFieldChange] = Field(default_factory=list)
+    memory_event: str | None = None
 
 
 class SyncResult(BaseModel):
@@ -401,6 +422,7 @@ class SyncResult(BaseModel):
     new_memories: int = 0
     new_plot_events: int = 0
     duration_ms: int = 0
+    changes: list[SyncChange] = Field(default_factory=list)
 
 
 class SyncStatus(BaseModel):
@@ -408,6 +430,7 @@ class SyncStatus(BaseModel):
     last_run_at: str | None = None
     rounds_since_last_sync: int = 0
     sync_interval: int = 3
+    last_result: SyncResult | None = None
 
 
 class ConsolidateResult(BaseModel):

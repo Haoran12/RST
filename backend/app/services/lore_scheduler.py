@@ -452,6 +452,7 @@ class LoreScheduler:
             running=bool(state.get("schedule_running", False)),
             last_run_at=state.get("last_schedule_at"),
             last_matched_count=state.get("last_matched_count"),
+            last_matched_entry_ids=list(state.get("last_matched_entry_ids", [])),
             cached_candidates=list(state.get("pre_retrieve_candidates", [])),
         )
 

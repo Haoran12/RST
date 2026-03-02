@@ -223,57 +223,88 @@
                 <div class="status-value">
                   {{ runtimeStateLabel(Boolean(loreStore.scheduleStatus?.running)) }}
                 </div>
-                <div class="status-meta">
-                  {{ t("rstPanel.scheduler.match_count") }}:
-                  {{ loreStore.scheduleStatus?.last_matched_count ?? 0 }}
-                </div>
+                <button class="status-meta status-meta--interactive" type="button" @click="openSchedulerHitsOverlay">
+                  <span>
+                    {{ t("rstPanel.scheduler.match_count") }}:
+                    {{ loreStore.scheduleStatus?.last_matched_count ?? 0 }}
+                  </span>
+                  <span class="status-meta-hint">{{ t("rstPanel.scheduler.view_hits") }}</span>
+                </button>
               </div>
               <div>
                 <div class="status-label">{{ t("rstPanel.scheduler.sync") }}</div>
                 <div class="status-value">
                   {{ runtimeStateLabel(Boolean(loreStore.syncStatus?.running)) }}
                 </div>
-                <div class="status-meta">
-                  {{ t("rstPanel.scheduler.round") }}:
-                  {{ loreStore.syncStatus?.rounds_since_last_sync ?? 0 }} /
-                  {{ loreStore.syncStatus?.sync_interval ?? 0 }}
-                </div>
+                <button class="status-meta status-meta--interactive" type="button" @click="openSyncChangesOverlay">
+                  <span>
+                    {{ t("rstPanel.scheduler.round") }}:
+                    {{ loreStore.syncStatus?.rounds_since_last_sync ?? 0 }} /
+                    {{ loreStore.syncStatus?.sync_interval ?? 0 }}
+                  </span>
+                  <span class="status-meta-hint">{{ t("rstPanel.scheduler.view_sync_changes") }}</span>
+                </button>
               </div>
             </div>
 
-            <n-space>
-              <n-button size="small" @click="refreshSchedulerState">
-                {{ t("rstPanel.scheduler.refresh") }}
+            <div class="scheduler-actions-row">
+              <n-space>
+                <n-button size="small" @click="refreshSchedulerState">
+                  {{ t("rstPanel.scheduler.refresh") }}
+                </n-button>
+                <n-button size="small" type="primary" @click="triggerScheduleNow">
+                  {{ t("rstPanel.scheduler.run_schedule") }}
+                </n-button>
+                <n-button size="small" type="warning" @click="triggerSyncNow">
+                  {{ t("rstPanel.scheduler.run_sync") }}
+                </n-button>
+              </n-space>
+              <n-button size="small" type="primary" @click="saveTemplate">
+                {{ t("rstPanel.scheduler.save_template") }}
               </n-button>
-              <n-button size="small" type="primary" @click="triggerScheduleNow">
-                {{ t("rstPanel.scheduler.run_schedule") }}
-              </n-button>
-              <n-button size="small" type="warning" @click="triggerSyncNow">
-                {{ t("rstPanel.scheduler.run_sync") }}
-              </n-button>
-            </n-space>
+            </div>
 
-            <n-input
-              v-model:value="templateForm.confirm_prompt"
-              type="textarea"
-              :autosize="{ minRows: 5 }"
-              :placeholder="t('rstPanel.scheduler.placeholder.confirm_prompt')"
-            />
-            <n-input
-              v-model:value="templateForm.extract_prompt"
-              type="textarea"
-              :autosize="{ minRows: 5 }"
-              :placeholder="t('rstPanel.scheduler.placeholder.extract_prompt')"
-            />
-            <n-input
-              v-model:value="templateForm.consolidate_prompt"
-              type="textarea"
-              :autosize="{ minRows: 5 }"
-              :placeholder="t('rstPanel.scheduler.placeholder.consolidate_prompt')"
-            />
-            <n-button size="small" type="primary" @click="saveTemplate">
-              {{ t("rstPanel.scheduler.save_template") }}
-            </n-button>
+            <div class="scheduler-prompts-panel">
+              <div class="scheduler-prompts-header">
+                <div class="scheduler-prompts-title">{{ t("rstPanel.scheduler.prompt_templates") }}</div>
+                <n-button text size="tiny" @click="toggleAllSchedulerPrompts">
+                  {{
+                    allSchedulerPromptsCollapsed
+                      ? t("rstPanel.scheduler.expand_all")
+                      : t("rstPanel.scheduler.collapse_all")
+                  }}
+                </n-button>
+              </div>
+              <div class="scheduler-prompts-scroll">
+                <section
+                  v-for="prompt in schedulerPromptConfigs"
+                  :key="prompt.key"
+                  class="scheduler-prompt-section"
+                >
+                  <button
+                    type="button"
+                    class="scheduler-prompt-toggle"
+                    @click="toggleSchedulerPrompt(prompt.key)"
+                  >
+                    <span class="scheduler-prompt-label">{{ prompt.label }}</span>
+                    <span
+                      class="scheduler-prompt-arrow"
+                      :class="{ collapsed: collapsedSchedulerPrompts[prompt.key] }"
+                    >
+                      ⌄
+                    </span>
+                  </button>
+                  <div v-show="!collapsedSchedulerPrompts[prompt.key]" class="scheduler-prompt-input">
+                    <n-input
+                      v-model:value="templateForm[prompt.key]"
+                      type="textarea"
+                      :autosize="{ minRows: 5 }"
+                      :placeholder="prompt.placeholder"
+                    />
+                  </div>
+                </section>
+              </div>
+            </div>
           </div>
         </n-tab-pane>
       </n-tabs>
@@ -303,6 +334,122 @@
       @save="handleCharacterOverlaySave"
       @discard="closeCharacterOverlay"
     />
+
+    <n-modal
+      v-model:show="schedulerHitsOverlayVisible"
+      preset="card"
+      :title="t('rstPanel.scheduler.hit_overlay_title')"
+      size="medium"
+    >
+      <div class="scheduler-hit-overlay-body">
+        <div class="scheduler-hit-summary">
+          {{
+            formatText("rstPanel.scheduler.hit_overlay_summary", {
+              count: schedulerHitItems.length,
+            })
+          }}
+        </div>
+        <div v-if="schedulerHitLoading" class="scheduler-hit-empty">
+          {{ t("rstPanel.scheduler.hit_overlay_loading") }}
+        </div>
+        <div v-else-if="schedulerHitItems.length === 0" class="scheduler-hit-empty">
+          {{ t("rstPanel.scheduler.hit_overlay_empty") }}
+        </div>
+        <div v-else class="scheduler-hit-list">
+          <div v-for="item in schedulerHitItems" :key="item.id" class="scheduler-hit-item">
+            <div class="scheduler-hit-item-main">
+              <div class="scheduler-hit-name">{{ item.name }}</div>
+              <div class="scheduler-hit-id">{{ item.id }}</div>
+            </div>
+            <n-tag size="small" :bordered="false">{{ item.typeLabel }}</n-tag>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="copy-modal-actions">
+          <n-button secondary @click="schedulerHitsOverlayVisible = false">
+            {{ t("rstPanel.scheduler.hit_overlay_close") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="syncChangesOverlayVisible"
+      preset="card"
+      :title="t('rstPanel.scheduler.sync_overlay_title')"
+      size="large"
+    >
+      <div class="sync-change-overlay-body">
+        <div class="sync-change-summary">
+          {{
+            formatText("rstPanel.scheduler.sync_overlay_summary", {
+              created: syncOverlayCreatedCount,
+              updated: syncOverlayUpdatedCount,
+              memories: syncOverlayMemoryCount,
+              events: syncOverlayPlotCount,
+              changes: syncOverlayItems.length,
+            })
+          }}
+        </div>
+        <div v-if="syncOverlayItems.length === 0" class="sync-change-empty">
+          {{ t("rstPanel.scheduler.sync_overlay_empty") }}
+        </div>
+        <div v-else class="sync-change-list">
+          <div v-for="(item, index) in syncOverlayItems" :key="`${item.entry_id}-${item.action}-${index}`" class="sync-change-card">
+            <div class="sync-change-header">
+              <div class="sync-change-title">{{ item.name || item.entry_id }}</div>
+              <n-tag size="small" :bordered="false">{{ syncActionLabel(item.action) }}</n-tag>
+            </div>
+            <div class="sync-change-meta">
+              {{ syncCategoryLabel(item.category) }} · {{ item.entry_id }}
+            </div>
+            <div v-if="item.summary" class="sync-change-section">
+              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.summary") }}</div>
+              <div class="sync-change-line">{{ item.summary }}</div>
+            </div>
+            <div v-if="item.field_changes.length > 0" class="sync-change-section">
+              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.fields") }}</div>
+              <div
+                v-for="(fieldItem, fieldIndex) in item.field_changes"
+                :key="`${item.entry_id}-${fieldItem.field}-${fieldIndex}`"
+                class="sync-change-line"
+              >
+                {{ fieldItem.field }}: {{ fieldItem.before || "(empty)" }} -> {{ fieldItem.after || "(empty)" }}
+              </div>
+            </div>
+            <div v-if="item.memory_event" class="sync-change-section">
+              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.memory_event") }}</div>
+              <div class="sync-change-line">{{ item.memory_event }}</div>
+            </div>
+            <div v-if="item.content_append" class="sync-change-section">
+              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.appended") }}</div>
+              <div class="sync-change-block">{{ item.content_append }}</div>
+            </div>
+            <div v-if="item.before_content || item.after_content" class="sync-change-section">
+              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.content") }}</div>
+              <div v-if="item.before_content" class="sync-change-line">
+                {{ t("rstPanel.scheduler.sync_change.before") }}: {{ item.before_content }}
+              </div>
+              <div v-if="item.after_content" class="sync-change-line">
+                {{ t("rstPanel.scheduler.sync_change.after") }}: {{ item.after_content }}
+              </div>
+            </div>
+            <div v-if="item.tags_added.length > 0" class="sync-change-section">
+              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.tags") }}</div>
+              <div class="sync-change-line">{{ item.tags_added.join(", ") }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="copy-modal-actions">
+          <n-button secondary @click="syncChangesOverlayVisible = false">
+            {{ t("rstPanel.scheduler.sync_overlay_close") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
 
     <n-modal
       v-model:show="copyModalVisible"
@@ -532,6 +679,7 @@ import type {
   LoreCategory,
   LoreEntry,
   Relationship,
+  SyncChange,
 } from "@/types/lore";
 
 interface OverlayField {
@@ -560,6 +708,28 @@ interface OverlaySection {
 interface LoreTotals {
   entries: number;
   characters: number;
+}
+
+type SchedulerPromptKey = "confirm_prompt" | "extract_prompt" | "consolidate_prompt";
+
+interface SchedulerHitItem {
+  id: string;
+  name: string;
+  typeLabel: string;
+}
+
+interface SyncOverlayItem {
+  entry_id: string;
+  name: string;
+  category: string;
+  action: string;
+  summary: string;
+  before_content: string | null;
+  after_content: string | null;
+  content_append: string | null;
+  tags_added: string[];
+  field_changes: Array<{ field: string; before: string; after: string }>;
+  memory_event: string | null;
 }
 
 const sessionStore = useSessionStore();
@@ -618,6 +788,15 @@ const templateForm = reactive({
   extract_prompt: "",
   consolidate_prompt: "",
 });
+const collapsedSchedulerPrompts = reactive<Record<SchedulerPromptKey, boolean>>({
+  confirm_prompt: false,
+  extract_prompt: false,
+  consolidate_prompt: false,
+});
+const schedulerHitsOverlayVisible = ref(false);
+const schedulerHitLoading = ref(false);
+const schedulerHitItems = ref<SchedulerHitItem[]>([]);
+const syncChangesOverlayVisible = ref(false);
 
 const importInputRef = ref<HTMLInputElement | null>(null);
 const importModalVisible = ref(false);
@@ -653,6 +832,91 @@ const selectedCharacters = computed(() => {
 const characterCopyConfirmDisabled = computed(
   () => !hasCharacterSelection.value || !characterCopyTarget.value || targetSessionOptions.value.length === 0,
 );
+const schedulerPromptConfigs = computed<
+  Array<{ key: SchedulerPromptKey; label: string; placeholder: string }>
+>(() => [
+  {
+    key: "confirm_prompt",
+    label: t("rstPanel.scheduler.prompt.confirm"),
+    placeholder: t("rstPanel.scheduler.placeholder.confirm_prompt"),
+  },
+  {
+    key: "extract_prompt",
+    label: t("rstPanel.scheduler.prompt.extract"),
+    placeholder: t("rstPanel.scheduler.placeholder.extract_prompt"),
+  },
+  {
+    key: "consolidate_prompt",
+    label: t("rstPanel.scheduler.prompt.consolidate"),
+    placeholder: t("rstPanel.scheduler.placeholder.consolidate_prompt"),
+  },
+]);
+const allSchedulerPromptsCollapsed = computed(() =>
+  schedulerPromptConfigs.value.every((prompt) => collapsedSchedulerPrompts[prompt.key]),
+);
+const schedulerMatchedIds = computed(() => {
+  const matched = loreStore.scheduleStatus?.last_matched_entry_ids ?? [];
+  if (matched.length > 0) {
+    return matched;
+  }
+  return loreStore.scheduleStatus?.cached_candidates ?? [];
+});
+const syncLastResult = computed(() => loreStore.syncStatus?.last_result ?? null);
+const syncOverlayCreatedCount = computed(() => syncLastResult.value?.created_entries.length ?? 0);
+const syncOverlayUpdatedCount = computed(() => syncLastResult.value?.updated_entries.length ?? 0);
+const syncOverlayMemoryCount = computed(() => syncLastResult.value?.new_memories ?? 0);
+const syncOverlayPlotCount = computed(() => syncLastResult.value?.new_plot_events ?? 0);
+const syncOverlayItems = computed<SyncOverlayItem[]>(() => {
+  const result = syncLastResult.value;
+  if (!result) {
+    return [];
+  }
+  const syncChanges: SyncChange[] = result.changes;
+  if (syncChanges.length > 0) {
+    return syncChanges.map((change) => ({
+      ...change,
+      summary: change.summary || "",
+      before_content: change.before_content,
+      after_content: change.after_content,
+      content_append: change.content_append,
+      tags_added: [...change.tags_added],
+      field_changes: change.field_changes.map((item) => ({ ...item })),
+      memory_event: change.memory_event,
+    }));
+  }
+  const fallbackItems: SyncOverlayItem[] = [];
+  result.created_entries.forEach((entryId) => {
+    fallbackItems.push({
+      entry_id: entryId,
+      name: entryId,
+      category: "unknown",
+      action: "created",
+      summary: "",
+      before_content: null,
+      after_content: null,
+      content_append: null,
+      tags_added: [],
+      field_changes: [],
+      memory_event: null,
+    });
+  });
+  result.updated_entries.forEach((entryId) => {
+    fallbackItems.push({
+      entry_id: entryId,
+      name: entryId,
+      category: "unknown",
+      action: "updated",
+      summary: "",
+      before_content: null,
+      after_content: null,
+      content_append: null,
+      tags_added: [],
+      field_changes: [],
+      memory_event: null,
+    });
+  });
+  return fallbackItems;
+});
 
 onMounted(async () => {
   if (sessions.value.length === 0) {
@@ -715,6 +979,10 @@ watch(
 );
 
 async function bootstrapCurrentSession() {
+  schedulerHitsOverlayVisible.value = false;
+  schedulerHitLoading.value = false;
+  schedulerHitItems.value = [];
+  syncChangesOverlayVisible.value = false;
   if (!currentSession.value?.name) {
     resetEntryListState();
     entryRows.value = [];
@@ -1706,6 +1974,116 @@ async function confirmCharacterCopy() {
   }
 }
 
+function toggleSchedulerPrompt(promptKey: SchedulerPromptKey) {
+  collapsedSchedulerPrompts[promptKey] = !collapsedSchedulerPrompts[promptKey];
+}
+
+function toggleAllSchedulerPrompts() {
+  const nextCollapsed = !allSchedulerPromptsCollapsed.value;
+  schedulerPromptConfigs.value.forEach((prompt) => {
+    collapsedSchedulerPrompts[prompt.key] = nextCollapsed;
+  });
+}
+
+function buildSchedulerHitLookup(entries: LoreEntry[], characters: CharacterData[]): Map<string, SchedulerHitItem> {
+  const lookup = new Map<string, SchedulerHitItem>();
+
+  entries.forEach((entry) => {
+    lookup.set(entry.id, {
+      id: entry.id,
+      name: entry.name || entry.id,
+      typeLabel: t("rstPanel.scheduler.hit_type.entry"),
+    });
+  });
+
+  characters.forEach((character) => {
+    lookup.set(character.character_id, {
+      id: character.character_id,
+      name: character.name || character.character_id,
+      typeLabel: t("rstPanel.scheduler.hit_type.character"),
+    });
+    character.memories.forEach((memory) => {
+      const memoryName = memory.event
+        ? `${character.name || character.character_id}: ${memory.event}`
+        : `${character.name || character.character_id}: ${memory.memory_id}`;
+      lookup.set(memory.memory_id, {
+        id: memory.memory_id,
+        name: memoryName,
+        typeLabel: t("rstPanel.scheduler.hit_type.memory"),
+      });
+    });
+  });
+
+  return lookup;
+}
+
+async function openSchedulerHitsOverlay() {
+  if (!currentSession.value?.name) {
+    return;
+  }
+  schedulerHitsOverlayVisible.value = true;
+  const ids = [...schedulerMatchedIds.value];
+  schedulerHitItems.value = [];
+  if (ids.length === 0) {
+    schedulerHitLoading.value = false;
+    return;
+  }
+
+  schedulerHitLoading.value = true;
+  try {
+    const entriesResponse = await listEntries(currentSession.value.name);
+    const hitLookup = buildSchedulerHitLookup(entriesResponse.entries, characterRows.value);
+    schedulerHitItems.value = ids.map((id) => {
+      const found = hitLookup.get(id);
+      if (found) {
+        return found;
+      }
+      return {
+        id,
+        name: id,
+        typeLabel: t("rstPanel.scheduler.hit_type.unknown"),
+      };
+    });
+  } catch {
+    schedulerHitItems.value = ids.map((id) => ({
+      id,
+      name: id,
+      typeLabel: t("rstPanel.scheduler.hit_type.unknown"),
+    }));
+    message.error(t("rstPanel.messages.scheduler_hits_load_failed"));
+  } finally {
+    schedulerHitLoading.value = false;
+  }
+}
+
+function openSyncChangesOverlay() {
+  syncChangesOverlayVisible.value = true;
+}
+
+function syncActionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    created: t("rstPanel.scheduler.sync_change.action.created"),
+    updated: t("rstPanel.scheduler.sync_change.action.updated"),
+    memory_added: t("rstPanel.scheduler.sync_change.action.memory_added"),
+  };
+  return labels[action] ?? t("rstPanel.scheduler.sync_change.action.unknown");
+}
+
+function syncCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    world_base: t("rstPanel.category.world_base"),
+    society: t("rstPanel.category.society"),
+    place: t("rstPanel.category.place"),
+    faction: t("rstPanel.category.faction"),
+    skills: t("rstPanel.category.skills"),
+    others: t("rstPanel.category.others"),
+    plot: t("rstPanel.category.plot"),
+    character: t("rstPanel.scheduler.hit_type.character"),
+    memory: t("rstPanel.scheduler.hit_type.memory"),
+  };
+  return labels[category] ?? category;
+}
+
 async function refreshSchedulerState() {
   if (!currentSession.value?.name) {
     return;
@@ -2199,9 +2577,251 @@ function actionLabel(action: string): string {
 }
 
 .scheduler-card {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 10px;
+  background: var(--rst-bg-topbar);
+  padding: 10px;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.scheduler-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--rst-bg-topbar);
+}
+
+.scheduler-actions-row :deep(.n-space) {
+  flex-wrap: wrap;
+}
+
+.scheduler-prompts-panel {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--rst-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.scheduler-prompts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rst-border-color);
+}
+
+.scheduler-prompts-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scheduler-prompts-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scheduler-prompt-section {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.scheduler-prompt-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.scheduler-prompt-label {
+  font-weight: 600;
+}
+
+.scheduler-prompt-arrow {
+  transition: transform 0.2s ease;
+}
+
+.scheduler-prompt-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+.scheduler-prompt-input {
+  border-top: 1px solid var(--rst-border-color);
+  padding: 8px;
+}
+
+.scheduler-hit-overlay-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 220px;
+  max-height: 65vh;
+}
+
+.scheduler-hit-summary {
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.scheduler-hit-empty {
+  border: 1px dashed var(--rst-border-color);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.scheduler-hit-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.scheduler-hit-item {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.scheduler-hit-item-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.scheduler-hit-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scheduler-hit-id {
+  font-size: 11px;
+  color: var(--rst-text-secondary);
+  word-break: break-all;
+}
+
+.sync-change-overlay-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 260px;
+  max-height: 70vh;
+}
+
+.sync-change-summary {
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.sync-change-empty {
+  border: 1px dashed var(--rst-border-color);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.sync-change-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.sync-change-card {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--rst-bg-topbar);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sync-change-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-change-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sync-change-meta {
+  font-size: 11px;
+  color: var(--rst-text-secondary);
+}
+
+.sync-change-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sync-change-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sync-change-line {
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.sync-change-block {
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+  line-height: 1.4;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px dashed var(--rst-border-color);
+  white-space: pre-wrap;
 }
 
 .copy-modal-body {
@@ -2350,11 +2970,35 @@ function actionLabel(action: string): string {
 .status-meta {
   font-size: 11px;
   color: var(--rst-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-meta--interactive {
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.status-meta-hint {
+  color: #2563eb;
+}
+
+.status-meta--interactive:hover .status-meta-hint {
+  text-decoration: underline;
 }
 
 @media (max-width: 720px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .scheduler-actions-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

@@ -17,6 +17,8 @@ from app.models.lore import (
     LoreCategory,
     LoreEntry,
     SchedulerPromptTemplate,
+    SyncChange,
+    SyncFieldChange,
     SyncResult,
     SyncStatus,
 )
@@ -204,6 +206,18 @@ class LoreUpdater:
         prompt = prompt.replace("{character_list}", character_list)
         return prompt
 
+    def _format_change_value(self, value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float, bool)):
+            return str(value)
+        try:
+            return json.dumps(value, ensure_ascii=False)
+        except Exception:
+            return str(value)
+
     def _render_consolidate_prompt(
         self,
         template: SchedulerPromptTemplate,
@@ -287,20 +301,24 @@ class LoreUpdater:
         tags: list[str],
         created_entries: list[str],
         updated_entries: list[str],
+        changes: list[SyncChange],
     ) -> None:
         category_file = store.load_category_file(category)
         now = datetime.utcnow()
         for index, entry in enumerate(category_file.entries):
             if entry.name.strip().lower() != name.strip().lower():
                 continue
+            append_text = content_append.strip()
+            before_content = entry.content
             merged_content = entry.content
-            if content_append.strip():
+            if append_text:
                 merged_content = (
-                    f"{entry.content}\n{content_append.strip()}".strip()
+                    f"{entry.content}\n{append_text}".strip()
                     if entry.content.strip()
-                    else content_append.strip()
+                    else append_text
                 )
             merged_tags = list(dict.fromkeys([*entry.tags, *tags]))
+            tags_added = [tag for tag in tags if tag not in entry.tags]
             category_file.entries[index] = entry.model_copy(
                 update={
                     "content": merged_content,
@@ -310,13 +328,27 @@ class LoreUpdater:
             )
             store.save_category_file(category_file)
             updated_entries.append(entry.id)
+            changes.append(
+                SyncChange(
+                    entry_id=entry.id,
+                    name=entry.name,
+                    category=category.value,
+                    action="updated",
+                    summary="Lore content appended",
+                    before_content=before_content or None,
+                    after_content=merged_content or None,
+                    content_append=append_text or None,
+                    tags_added=tags_added,
+                )
+            )
             return
 
+        append_text = content_append.strip()
         new_entry = LoreEntry(
             id=generate_id(),
             name=name,
             category=category,
-            content=content_append.strip(),
+            content=append_text,
             disabled=False,
             constant=False,
             tags=list(dict.fromkeys(tags)),
@@ -326,6 +358,18 @@ class LoreUpdater:
         category_file.entries.append(new_entry)
         store.save_category_file(category_file)
         created_entries.append(new_entry.id)
+        changes.append(
+            SyncChange(
+                entry_id=new_entry.id,
+                name=new_entry.name,
+                category=category.value,
+                action="created",
+                summary="Lore entry created",
+                after_content=new_entry.content or None,
+                content_append=append_text or None,
+                tags_added=list(dict.fromkeys(tags)),
+            )
+        )
 
     async def sync_from_conversation(
         self,
@@ -362,6 +406,7 @@ class LoreUpdater:
             new_memories = 0
             new_plot_events = 0
             affected_characters: set[str] = set()
+            changes: list[SyncChange] = []
 
             for item in instructions:
                 action_type = str(item.get("type", "")).strip().lower()
@@ -375,6 +420,7 @@ class LoreUpdater:
                         continue
 
                     char_file = self._ensure_character(store, name)
+                    old_data = char_file.data
                     char_updates: dict[str, Any] = {}
                     form_updates: dict[str, Any] = {}
                     char_fields = set(CharacterData.model_fields.keys())
@@ -385,7 +431,7 @@ class LoreUpdater:
                         elif key in form_fields:
                             form_updates[key] = value
 
-                    data = char_file.data
+                    data = old_data
                     if char_updates:
                         data = data.model_copy(update=char_updates)
                     if form_updates and data.forms:
@@ -396,10 +442,66 @@ class LoreUpdater:
                         ]
                         data = data.model_copy(update={"forms": forms})
 
+                    field_changes: list[SyncFieldChange] = []
+                    for key in char_updates:
+                        before_text = self._format_change_value(getattr(old_data, key, None))
+                        after_text = self._format_change_value(getattr(data, key, None))
+                        if before_text == after_text:
+                            continue
+                        field_changes.append(
+                            SyncFieldChange(
+                                field=key,
+                                before=before_text,
+                                after=after_text,
+                            )
+                        )
+
+                    old_active_form = None
+                    if old_data.forms:
+                        old_active_id = old_data.active_form_id or old_data.forms[0].form_id
+                        old_active_form = next(
+                            (form for form in old_data.forms if form.form_id == old_active_id),
+                            old_data.forms[0],
+                        )
+                    new_active_form = None
+                    if data.forms:
+                        new_active_id = data.active_form_id or data.forms[0].form_id
+                        new_active_form = next(
+                            (form for form in data.forms if form.form_id == new_active_id),
+                            data.forms[0],
+                        )
+
+                    for key in form_updates:
+                        before_text = self._format_change_value(
+                            getattr(old_active_form, key, None) if old_active_form else None
+                        )
+                        after_text = self._format_change_value(
+                            getattr(new_active_form, key, None) if new_active_form else None
+                        )
+                        if before_text == after_text:
+                            continue
+                        field_changes.append(
+                            SyncFieldChange(
+                                field=f"active_form.{key}",
+                                before=before_text,
+                                after=after_text,
+                            )
+                        )
+
                     data = data.model_copy(update={"updated_at": datetime.utcnow()})
                     store.save_character(CharacterFile(data=data, version=char_file.version))
                     updated_entries.append(data.character_id)
                     affected_characters.add(data.character_id)
+                    changes.append(
+                        SyncChange(
+                            entry_id=data.character_id,
+                            name=data.name,
+                            category=LoreCategory.CHARACTER.value,
+                            action="updated",
+                            summary="Character fields updated",
+                            field_changes=field_changes,
+                        )
+                    )
                     continue
 
                 if action_type == "plot_event":
@@ -416,6 +518,7 @@ class LoreUpdater:
                         tags,
                         created_entries,
                         updated_entries,
+                        changes,
                     )
                     new_plot_events += 1
                     continue
@@ -453,6 +556,17 @@ class LoreUpdater:
                     store.add_memory(char_file.data.character_id, memory)
                     new_memories += 1
                     affected_characters.add(char_file.data.character_id)
+                    changes.append(
+                        SyncChange(
+                            entry_id=char_file.data.character_id,
+                            name=char_file.data.name,
+                            category=LoreCategory.MEMORY.value,
+                            action="memory_added",
+                            summary="Character memory added",
+                            memory_event=memory.event,
+                            tags_added=list(memory.tags),
+                        )
+                    )
                     continue
 
                 if action_type == "lore_update":
@@ -476,6 +590,7 @@ class LoreUpdater:
                         tags,
                         created_entries,
                         updated_entries,
+                        changes,
                     )
 
             store.rebuild_index()
@@ -502,6 +617,7 @@ class LoreUpdater:
                 new_memories=new_memories,
                 new_plot_events=new_plot_events,
                 duration_ms=duration_ms,
+                changes=changes,
             )
 
             rst_runtime_service.update_session_state(
@@ -623,11 +739,19 @@ class LoreUpdater:
     def get_status(self, session_name: str) -> SyncStatus:
         session = get_session_storage(session_name)
         state = rst_runtime_service.get_session_state(session_name)
+        last_result_raw = state.get("sync_last_result")
+        last_result: SyncResult | None = None
+        if isinstance(last_result_raw, dict):
+            try:
+                last_result = SyncResult.model_validate(last_result_raw)
+            except Exception:
+                last_result = None
         return SyncStatus(
             running=bool(state.get("sync_running", False)),
             last_run_at=state.get("sync_last_run_at"),
             rounds_since_last_sync=int(state.get("rounds_since_sync", 0)),
             sync_interval=int(state.get("sync_interval", session.lore_sync_interval)),
+            last_result=last_result,
         )
 
 

@@ -274,7 +274,28 @@ export interface ScheduleStatus {
   running: boolean;
   last_run_at: string | null;
   last_matched_count: number | null;
+  last_matched_entry_ids: string[];
   cached_candidates: string[];
+}
+
+export interface SyncFieldChange {
+  field: string;
+  before: string;
+  after: string;
+}
+
+export interface SyncChange {
+  entry_id: string;
+  name: string;
+  category: string;
+  action: string;
+  summary: string;
+  before_content: string | null;
+  after_content: string | null;
+  content_append: string | null;
+  tags_added: string[];
+  field_changes: SyncFieldChange[];
+  memory_event: string | null;
 }
 
 export interface SyncResult {
@@ -283,6 +304,7 @@ export interface SyncResult {
   new_memories: number;
   new_plot_events: number;
   duration_ms: number;
+  changes: SyncChange[];
 }
 
 export interface SyncStatus {
@@ -290,6 +312,7 @@ export interface SyncStatus {
   last_run_at: string | null;
   rounds_since_last_sync: number;
   sync_interval: number;
+  last_result: SyncResult | null;
 }
 
 export interface ConsolidateResult {
