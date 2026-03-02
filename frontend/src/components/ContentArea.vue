@@ -1,6 +1,10 @@
 ﻿<template>
   <main class="content-area">
-    <div v-if="!hasSession" class="content-empty">
+    <div v-if="isCurrentSessionClosed" class="content-empty">
+      <div class="empty-title">{{ t("contentArea.closed.title") }}</div>
+      <div class="empty-subtitle">{{ t("contentArea.closed.subtitle") }}</div>
+    </div>
+    <div v-else-if="!hasSession" class="content-empty">
       <div class="empty-title">Select a session to begin</div>
       <div class="empty-subtitle">Use the Sessions panel to create or load a chat.</div>
     </div>
@@ -25,10 +29,10 @@
               <input
                 type="checkbox"
                 :checked="selectedIds.includes(msg.id)"
-                @change="chatStore.toggleSelection(msg.id)"
+                @change="handleSelectionChange($event, msg.id)"
               />
             </label>
-            <span class="meta-index">#{{ index }}</span>
+            <span class="meta-index">#{{ index + 1 }}</span>
             <span class="meta-role">{{ msg.role }}</span>
             <span class="meta-time">{{ formatTime(msg.timestamp) }}</span>
 
@@ -41,14 +45,14 @@
                 {{ msg.visible ? "Hide" : "Show" }}
               </button>
               <button type="button" class="meta-button" @click="startEdit(msg)">
-                Edit
+                ✏
               </button>
               <button
                 type="button"
                 class="meta-button danger"
                 @click="handleDelete(msg.id)"
               >
-                Delete
+                🗑
               </button>
             </div>
           </header>
@@ -65,7 +69,7 @@
                 </button>
               </div>
             </div>
-            <div v-else class="message-text">{{ msg.content }}</div>
+            <MarkdownMessage v-else :content="msg.content" class="message-text" />
 
             <div v-if="msg.attachments?.length" class="attachment-list">
               <div v-for="file in msg.attachments" :key="file.name" class="attachment-chip">
@@ -88,38 +92,46 @@
 
     <div v-if="isBatchMode" class="batch-bar">
       <div class="batch-info">
-        {{ selectedIds.length }} selected
+        {{ selectedIds.length }} {{ t("contentArea.batch.selected") }}
       </div>
       <button
         type="button"
         class="batch-button"
         @click="handleBatchConfirm"
       >
-        {{ batchAction === "delete" ? "Confirm Delete" : "Confirm Hide" }}
+        {{ batchAction === "delete" ? t("contentArea.batch.confirm_delete") : t("contentArea.batch.confirm_hide") }}
       </button>
       <button type="button" class="batch-button secondary" @click="chatStore.exitBatchMode">
-        Cancel
+        {{ t("common.cancel") }}
       </button>
     </div>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { message } from "@/utils/message";
 
+import { useI18n } from "@/composables/useI18n";
+import MarkdownMessage from "@/components/MarkdownMessage.vue";
 import type { ChatMessage } from "@/types/chat";
 import { useChatStore } from "@/stores/chat";
+import { useSessionStore } from "@/stores/session";
 
 const chatStore = useChatStore();
+const sessionStore = useSessionStore();
+const { t } = useI18n();
 const { activeSession, batchAction, currentMessages, isBatchMode, selectedIds } = storeToRefs(chatStore);
+const { currentSession } = storeToRefs(sessionStore);
 
 const messagesContainer = ref<HTMLDivElement | null>(null);
 const editingId = ref<string | null>(null);
 const editContent = ref("");
+const GOTO_MESSAGE_EVENT = "rst-chat-goto-message";
 
 const hasSession = computed(() => Boolean(activeSession.value));
+const isCurrentSessionClosed = computed(() => Boolean(currentSession.value?.is_closed));
 const hasMessages = computed(() => currentMessages.value.length > 0);
 
 const scrollToBottom = async () => {
@@ -127,6 +139,20 @@ const scrollToBottom = async () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
+};
+
+const scrollToMessageTop = async (index: number) => {
+  await nextTick();
+  const container = messagesContainer.value;
+  if (!container) {
+    return;
+  }
+  const target = container.querySelector<HTMLElement>(`#message-${index}`);
+  if (!target) {
+    return;
+  }
+  const offset = target.offsetTop - container.offsetTop;
+  container.scrollTop = Math.max(0, offset);
 };
 
 watch(
@@ -145,6 +171,29 @@ watch(
   },
   { immediate: true },
 );
+
+const handleGotoMessage = (event: Event) => {
+  const customEvent = event as CustomEvent<{ index?: number }>;
+  const index = customEvent.detail?.index;
+  if (typeof index !== "number" || Number.isNaN(index)) {
+    return;
+  }
+  void scrollToMessageTop(index);
+};
+
+onMounted(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.addEventListener(GOTO_MESSAGE_EVENT, handleGotoMessage as EventListener);
+});
+
+onUnmounted(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.removeEventListener(GOTO_MESSAGE_EVENT, handleGotoMessage as EventListener);
+});
 
 const startEdit = (msg: ChatMessage) => {
   editingId.value = msg.id;
@@ -167,6 +216,11 @@ const cancelEdit = () => {
   editContent.value = "";
 };
 
+const handleSelectionChange = (event: Event, messageId: string) => {
+  const target = event.target as HTMLInputElement | null;
+  chatStore.toggleSelection(messageId, target?.checked ?? false);
+};
+
 const handleDelete = (id: string) => {
   if (confirm("Delete this message?")) {
     chatStore.deleteMessage(id);
@@ -175,7 +229,7 @@ const handleDelete = (id: string) => {
 
 const handleBatchConfirm = () => {
   if (batchAction.value === "delete") {
-    if (confirm(`Delete ${selectedIds.value.length} messages?`)) {
+    if (confirm(t("contentArea.batch.delete_prompt"))) {
       chatStore.confirmBatchDelete();
     }
     return;
@@ -346,9 +400,6 @@ const removeAttachment = (messageId: string, attachmentName: string) => {
 }
 
 .message-text {
-  white-space: pre-wrap;
-  font-size: 14px;
-  line-height: 1.6;
   color: var(--rst-text-primary);
 }
 

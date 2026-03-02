@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <aside
     class="rst-panel-container"
     :class="{ 'is-open': activePanel }"
@@ -12,9 +12,9 @@
           class="icon-button"
           :class="{ 'is-active': activePanel === item.type }"
           type="button"
-          @click="togglePanel(item.type)"
           :aria-label="item.label"
           :title="item.label"
+          @click="togglePanel(item.type)"
         >
           <span class="icon-emoji" aria-hidden="true">{{ item.icon }}</span>
         </button>
@@ -24,9 +24,9 @@
           class="icon-button"
           :class="{ 'is-active': activePanel === 'log' }"
           type="button"
+          :aria-label="t('panelShell.item.log')"
+          :title="t('panelShell.item.log')"
           @click="togglePanel('log')"
-          aria-label="Log"
-          title="Log"
         >
           <span class="icon-emoji" aria-hidden="true">📜</span>
         </button>
@@ -54,6 +54,7 @@ import LorePanel from "@/components/panels/LorePanel.vue";
 import PresetPanel from "@/components/panels/PresetPanel.vue";
 import RstLorePanel from "@/components/panels/RstLorePanel.vue";
 import SessionPanel from "@/components/panels/SessionPanel.vue";
+import { useI18n } from "@/composables/useI18n";
 
 type PanelType =
   | "session"
@@ -67,15 +68,19 @@ type PanelType =
   | null;
 
 const activePanel = ref<PanelType>(null);
-const panelItems = [
-  { label: "Presets", icon: "📝", type: "preset" as const },
-  { label: "API", icon: "🔌", type: "api" as const },
-  { label: "Lores", icon: "📚", type: "lore" as const },
-  { label: "RST Lores", icon: "🌍", type: "rst-lore" as const },
-  { label: "Sessions", icon: "💬", type: "session" as const },
-  { label: "Appearance", icon: "🎨", type: "appearance" as const },
-  { label: "Extensions", icon: "🧩", type: "extensions" as const },
-];
+const { t } = useI18n();
+
+type PanelMenuType = Exclude<PanelType, "log" | null>;
+
+const panelItems = computed<Array<{ label: string; icon: string; type: PanelMenuType }>>(() => [
+  { label: t("panelShell.item.preset"), icon: "📝", type: "preset" },
+  { label: t("panelShell.item.api"), icon: "🔌", type: "api" },
+  { label: t("panelShell.item.lore"), icon: "📚", type: "lore" },
+  { label: t("panelShell.item.rst_lore"), icon: "🌍", type: "rst-lore" },
+  { label: t("panelShell.item.session"), icon: "💬", type: "session" },
+  { label: t("panelShell.item.appearance"), icon: "🎨", type: "appearance" },
+  { label: t("panelShell.item.extensions"), icon: "🧩", type: "extensions" },
+]);
 
 const panelComponent = computed(() => {
   switch (activePanel.value) {

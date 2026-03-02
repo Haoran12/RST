@@ -77,6 +77,7 @@ def _render_character_for_st_mode(character: CharacterData) -> str:
     lines = [
         f"# Character: {character.name}",
         f"race: {character.race}",
+        f"strength: {character.strength}",
         f"role: {character.role}",
         f"faction: {character.faction}",
         f"objective: {character.objective}",

@@ -9,7 +9,7 @@
     />
 
     <button type="button" class="input-menu__trigger" @click="toggleMenu">
-      Actions
+      {{ t("inputMenu.trigger") }}
     </button>
 
     <div v-if="isMenuOpen" class="input-menu__panel">
@@ -34,22 +34,28 @@
 import { computed, ref } from "vue";
 import { storeToRefs } from "pinia";
 
+import { useI18n } from "@/composables/useI18n";
 import { message } from "@/utils/message";
 import { useChatStore } from "@/stores/chat";
 
 const chatStore = useChatStore();
+const { t } = useI18n();
 const { hasMessages } = storeToRefs(chatStore);
 
 const isMenuOpen = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const menuItems = computed(() => [
-  { label: "Attach file", action: "attach", disabled: false },
-  { label: "Batch delete", action: "batch-delete", disabled: !hasMessages.value },
-  { label: "Batch hide", action: "batch-hide", disabled: !hasMessages.value },
-  { label: "Regenerate (soon)", action: "regenerate", disabled: true },
-  { label: "Preview prompt (soon)", action: "preview", disabled: true },
-  { label: "AI assist (soon)", action: "assist", disabled: true },
+  { label: t("inputMenu.action.attach_file"), action: "attach", disabled: false },
+  {
+    label: t("inputMenu.action.batch_delete"),
+    action: "batch-delete",
+    disabled: !hasMessages.value,
+  },
+  { label: t("inputMenu.action.batch_hide"), action: "batch-hide", disabled: !hasMessages.value },
+  { label: t("inputMenu.action.regenerate_soon"), action: "regenerate", disabled: true },
+  { label: t("inputMenu.action.preview_prompt_soon"), action: "preview", disabled: true },
+  { label: t("inputMenu.action.ai_assist_soon"), action: "assist", disabled: true },
 ]);
 
 const toggleMenu = () => {
@@ -76,7 +82,7 @@ const handleAction = (action: string) => {
       chatStore.enterBatchMode("hide");
       break;
     default:
-      message.info("This action is not available yet.");
+      message.info(t("inputMenu.info.unavailable"));
       break;
   }
 };
@@ -156,7 +162,9 @@ const handleFileChange = (event: Event) => {
   color: var(--rst-text-primary);
   cursor: pointer;
   font-size: 12px;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
 }
 
 .input-menu__item:hover {

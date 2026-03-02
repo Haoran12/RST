@@ -6,6 +6,7 @@ import type {
   CharacterForm,
   CharacterListResponse,
   CharacterMemory,
+  CharacterReorder,
   CharacterUpdate,
   ConversionReport,
   ConsolidateResult,
@@ -112,6 +113,17 @@ export async function reorderEntries(
 
 export async function listCharacters(sessionName: string): Promise<CharacterListResponse> {
   const { data } = await apiClient.get<CharacterListResponse>(`${BASE(sessionName)}/characters`);
+  return data;
+}
+
+export async function reorderCharacters(
+  sessionName: string,
+  payload: CharacterReorder,
+): Promise<CharacterListResponse> {
+  const { data } = await apiClient.put<CharacterListResponse>(
+    `${BASE(sessionName)}/characters/reorder`,
+    payload,
+  );
   return data;
 }
 

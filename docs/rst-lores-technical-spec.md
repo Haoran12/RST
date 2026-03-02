@@ -104,7 +104,7 @@ skills 范畴分为两种条目:
 
 ```python
 class Relationship(BaseModel):
-    target: str                      # 对方人物id（character_id）
+    target: str                      # 对方人物名称或泛指目标（如“朝廷官员”）
     relation: str                    # 关系描述
 ```
 
@@ -119,8 +119,9 @@ class CharacterForm(BaseModel):
     # --- 长期属性（随故事发展更新，长期作用） ---
     physique: str = ""               # 身体特征：身高/体型/肤色/瞳色等
     features: str = ""               # 其他特点
-    vitality_max: int = 100            # 精力/元气上限（数值）
-    mana_potency: int = 100            # 法力水平（数值）
+    vitality_max: int = 100           # 精力/元气上限（数值）
+    strength: int = 100               # 力量水平（数值）
+    mana_potency: int = 100           # 法力水平（数值）
     toughness: int = 10               # 韧性/防御水平（数值）
     weak: list[str] = []             # 虚弱的技能元素
     resist: list[str] = []           # 耐受的技能元素
@@ -1341,7 +1342,7 @@ export type LoreCategory =
   | 'memory'        // v1.1 新增（仅用于索引标识）
 
 export interface Relationship {
-  target: string       // character_id
+  target: string       // 人物名称或泛指目标
   relation: string
 }
 
@@ -1847,7 +1848,7 @@ dependencies = [
 | 4 | 关键词匹配算法 | jieba 分词 + BM25 检索（层级 1+2） |
 | 5 | 调度器 Prompt 模板 | 用户可编辑，独立于主 Preset，UI 默认折叠 |
 | 6 | 动态更新策略 | Character：字段级覆盖；其他范畴：内容追加 |
-| 7a | relationship 格式 | 结构化列表 `list[{target, relation}]`，target 为 character_id |
+| 7a | relationship 格式 | 结构化列表 `list[{target, relation}]`，target 为人物名称或泛指目标 |
 | 7b | element/skills 引用 | 使用 `entry_id`，UI 显示 name |
 | 7c | vitality_max/cur 类型 | `int`（数值） |
 | 7d | mana/toughness/penetration 类型 | `int`（数值量化），penetration 为 `list[str]` |

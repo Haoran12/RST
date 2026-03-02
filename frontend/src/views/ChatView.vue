@@ -3,34 +3,40 @@
     <header class="chat-shell__topbar">
       <div class="chat-shell__controls">
         <div class="quick-select">
-          <span class="quick-label">Session</span>
+          <span class="quick-label">{{ t("topbar.session.label") }}</span>
           <n-select
             size="small"
             :value="selectedSession"
             :options="sessionOptions"
             :loading="sessionLoading"
-            placeholder="Select session"
+            :placeholder="t('topbar.session.select_placeholder')"
             @update:value="handleSessionSelect"
           />
-          <span
-            v-if="currentSession"
-            class="session-state-pill"
-            :class="{ 'is-closed': currentSession.is_closed }"
+          <button
+            type="button"
+            class="session-close-button"
+            :disabled="!currentSession || currentSession.is_closed || sessionLoading"
+            @click="handleCloseSession"
           >
-            {{ currentSession.is_closed ? "Closed" : "Open" }}
-          </span>
+            {{ t("topbar.session.action.close") }}
+          </button>
         </div>
         <div class="quick-select">
-          <span class="quick-label">Appearance</span>
+          <span class="quick-label">{{ t("topbar.appearance.label") }}</span>
+          <n-select v-model:value="theme" size="small" :options="themeOptions" />
+        </div>
+        <div class="quick-select">
+          <span class="quick-label">{{ t("topbar.language.label") }}</span>
           <n-select
-            v-model:value="theme"
             size="small"
-            :options="themeOptions"
+            :value="locale"
+            :options="languageOptions"
+            @update:value="handleLocaleSelect"
           />
         </div>
       </div>
       <div class="chat-shell__status">
-        <span class="status-label">Backend</span>
+        <span class="status-label">{{ t("topbar.status.backend") }}</span>
         <span :class="['status-pill', `is-${status}`]">{{ statusText }}</span>
         <span class="model-pill" :title="currentModelDisplay">{{ currentModelDisplay }}</span>
       </div>
@@ -58,7 +64,7 @@
                   class="attachment-remove"
                   @click="chatStore.removePendingAttachment(index)"
                 >
-                  Remove
+                  {{ t("input.attachments.remove") }}
                 </button>
               </div>
             </div>
@@ -80,7 +86,7 @@
                 :disabled="!canSend"
                 @click="handleSend"
               >
-                {{ isSending ? "Stop" : "Send" }}
+                {{ isSending ? t("input.send.stop") : t("input.send.send") }}
               </button>
             </div>
           </div>
@@ -96,41 +102,63 @@ import { storeToRefs } from "pinia";
 import { NSelect } from "naive-ui";
 
 import { fetchHealth } from "@/api/health";
+import { useI18n } from "@/composables/useI18n";
 import ContentArea from "@/components/ContentArea.vue";
 import InputMenu from "@/components/InputMenu.vue";
 import PanelShell from "@/components/panels/PanelShell.vue";
 import { useApiConfigStore } from "@/stores/api-config";
-import { useAppearanceStore } from "@/stores/appearance";
+import { useAppearanceStore, type ThemeMode } from "@/stores/appearance";
 import { useChatStore } from "@/stores/chat";
+import { useLanguageStore } from "@/stores/language";
+import { useLoreStore } from "@/stores/lore";
 import { useSessionStore } from "@/stores/session";
 import { message } from "@/utils/message";
 import { confirmLeaveSessionWhileBusy } from "@/utils/session-leave-guard";
 
 type HealthState = "checking" | "ok" | "error";
+type FloorToken = number | "all";
+type FloorTarget = {
+  kind: "single" | "range";
+  indexes: number[];
+};
 
 const sessionStore = useSessionStore();
 const apiConfigStore = useApiConfigStore();
 const chatStore = useChatStore();
 const appearanceStore = useAppearanceStore();
+const languageStore = useLanguageStore();
+const loreStore = useLoreStore();
+const { t } = useI18n();
 const { sessions, currentSession, loading: sessionLoading } = storeToRefs(sessionStore);
 const { configs: apiConfigs } = storeToRefs(apiConfigStore);
 const { theme } = storeToRefs(appearanceStore);
-const { pendingAttachments, isSending } = storeToRefs(chatStore);
+const { locale } = storeToRefs(languageStore);
+const { loading: loreLoading, scheduleStatus, syncStatus } = storeToRefs(loreStore);
+const { currentMessages, pendingAttachments, isSending } = storeToRefs(chatStore);
 
 const sessionOptions = computed(() =>
   sessions.value.map((session) => ({ label: session.name, value: session.name })),
 );
-const selectedSession = computed(() => currentSession.value?.name ?? null);
-const themeOptions = appearanceStore.themeOptions;
+const selectedSession = computed(() => {
+  if (!currentSession.value) {
+    return null;
+  }
+  return currentSession.value.is_closed ? null : currentSession.value.name;
+});
+const themeOptions = computed<Array<{ label: string; value: ThemeMode }>>(() => [
+  { label: t("topbar.appearance.theme.dark"), value: "dark" },
+  { label: t("topbar.appearance.theme.light"), value: "light" },
+]);
+const languageOptions = languageStore.languageOptions;
 const currentSessionClosed = computed(() => Boolean(currentSession.value?.is_closed));
 const currentModelDisplay = computed(() => {
   const configId = currentSession.value?.main_api_config_id;
   if (!configId) {
-    return "- : -";
+    return t("topbar.model.fallback");
   }
   const matched = apiConfigs.value.find((item) => item.id === configId);
   if (!matched) {
-    return "- : -";
+    return t("topbar.model.fallback");
   }
   const apiName = matched.name.trim();
   const model = matched.model.trim();
@@ -142,18 +170,24 @@ const currentModelDisplay = computed(() => {
 const status = ref<HealthState>("checking");
 const inputText = ref("");
 const inputRef = ref<HTMLTextAreaElement | null>(null);
+const GOTO_MESSAGE_EVENT = "rst-chat-goto-message";
 let healthProbeTimer: number | null = null;
 const HEALTH_PROBE_INTERVAL_MS = 15000;
+const statusTextKeyByState: Record<HealthState, string> = {
+  checking: "topbar.status.checking",
+  ok: "topbar.status.ok",
+  error: "topbar.status.error",
+};
 
-const statusText = computed(() => status.value);
+const statusText = computed(() => t(statusTextKeyByState[status.value]));
 const inputPlaceholder = computed(() => {
   if (!currentSession.value) {
-    return "Select a session before sending.";
+    return t("input.placeholder.select_session");
   }
   if (currentSession.value.is_closed) {
-    return "Current session is closed. Re-open it in Session panel.";
+    return t("input.placeholder.session_closed");
   }
-  return "Type your message... (Ctrl+Enter to send)";
+  return t("input.placeholder.default");
 });
 const canSend = computed(() => {
   if (!currentSession.value) {
@@ -164,6 +198,14 @@ const canSend = computed(() => {
   }
   return true;
 });
+const hasRunningRstService = computed(
+  () =>
+    currentSession.value?.mode === "RST" &&
+    (Boolean(scheduleStatus.value?.running) || Boolean(syncStatus.value?.running)),
+);
+const hasRunningRequests = computed(
+  () => chatStore.hasRunningWork || loreLoading.value || hasRunningRstService.value,
+);
 
 onMounted(async () => {
   sessionStore.loadSessions();
@@ -209,17 +251,43 @@ watch(inputText, () => {
 });
 
 async function handleSessionSelect(value: string) {
-  if (value === selectedSession.value) {
+  const isSameSelection = value === selectedSession.value;
+  if (isSameSelection && currentSession.value && !currentSession.value.is_closed) {
+    return;
+  }
+  if (!isSameSelection && !(await confirmLeaveIfBusy())) {
+    return;
+  }
+  await sessionStore.loadSession(value);
+  if (sessionStore.currentSession?.name !== value) {
+    return;
+  }
+  if (sessionStore.currentSession.is_closed) {
+    await sessionStore.saveSession(value, { is_closed: false });
+  }
+}
+
+async function handleCloseSession() {
+  if (!currentSession.value || currentSession.value.is_closed) {
     return;
   }
   if (!(await confirmLeaveIfBusy())) {
     return;
   }
-  sessionStore.loadSession(value);
+  await sessionStore.saveSession(currentSession.value.name, { is_closed: true });
+}
+
+function handleLocaleSelect(value: string | null) {
+  if (value === null || value === locale.value) {
+    return;
+  }
+  if (value === "en" || value === "zh-CN") {
+    languageStore.setLocale(value);
+  }
 }
 
 async function confirmLeaveIfBusy(): Promise<boolean> {
-  if (!chatStore.hasRunningWork) {
+  if (!hasRunningRequests.value) {
     return true;
   }
   const confirmed = await confirmLeaveSessionWhileBusy();
@@ -235,7 +303,7 @@ async function probeHealth() {
     // Keep top-right backend status in sync with real connectivity.
     const data = await fetchHealth();
     status.value = data.status === "ok" ? "ok" : "error";
-  } catch (_error) {
+  } catch {
     status.value = "error";
   }
 }
@@ -257,20 +325,245 @@ function adjustTextareaHeight() {
   inputRef.value.style.height = `${nextHeight}px`;
 }
 
-function handleSend() {
+function formatText(key: string, params: Record<string, string | number>): string {
+  let text = t(key);
+  Object.entries(params).forEach(([paramKey, paramValue]) => {
+    text = text.replaceAll(`{${paramKey}}`, String(paramValue));
+  });
+  return text;
+}
+
+function parseFloorToken(rawToken: string, total: number): FloorToken | null {
+  const token = rawToken.trim().toLowerCase();
+  if (token === "all") {
+    return "all";
+  }
+  if (token === "cur") {
+    return total > 0 ? total - 1 : null;
+  }
+  const match = token.match(/^(\d+)$/);
+  if (!match) {
+    return null;
+  }
+  const floor = Number(match[1]);
+  if (!Number.isInteger(floor) || floor < 1 || floor > total) {
+    return null;
+  }
+  return floor - 1;
+}
+
+function parseFloorTarget(rawArg: string, total: number): FloorTarget | null {
+  const compact = rawArg.trim().toLowerCase().replace(/\s*-\s*/g, "-");
+  if (!compact || /\s/.test(compact)) {
+    return null;
+  }
+  const allIndexes = Array.from({ length: total }, (_, index) => index);
+  if (!compact.includes("-")) {
+    const index = parseFloorToken(compact, total);
+    if (index === null) {
+      return null;
+    }
+    if (index === "all") {
+      return {
+        kind: "range",
+        indexes: allIndexes,
+      };
+    }
+    return {
+      kind: "single",
+      indexes: [index],
+    };
+  }
+  const segments = compact.split("-");
+  if (segments.length !== 2) {
+    return null;
+  }
+  const start = parseFloorToken(segments[0], total);
+  const end = parseFloorToken(segments[1], total);
+  if (start === null || end === null) {
+    return null;
+  }
+  if (start === "all" && end === "all") {
+    return {
+      kind: "range",
+      indexes: allIndexes,
+    };
+  }
+  if (start === "all") {
+    const endIndex = end as number;
+    const indexes: number[] = [];
+    for (let index = 0; index <= endIndex; index += 1) {
+      indexes.push(index);
+    }
+    return {
+      kind: "range",
+      indexes,
+    };
+  }
+  if (end === "all") {
+    const startIndex = start as number;
+    const indexes: number[] = [];
+    for (let index = startIndex; index <= total - 1; index += 1) {
+      indexes.push(index);
+    }
+    return {
+      kind: "range",
+      indexes,
+    };
+  }
+  const startIndex = start as number;
+  const endIndex = end as number;
+  const from = Math.min(startIndex, endIndex);
+  const to = Math.max(startIndex, endIndex);
+  const indexes: number[] = [];
+  for (let index = from; index <= to; index += 1) {
+    indexes.push(index);
+  }
+  return {
+    kind: "range",
+    indexes,
+  };
+}
+
+function parseCommand(input: string): { name: string; arg: string } | null {
+  const match = input.trim().match(/^\/\s*([a-zA-Z]+)\s*(.*)$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    name: match[1].toLowerCase(),
+    arg: match[2].trim(),
+  };
+}
+
+async function executeCommand(input: string): Promise<boolean> {
+  const command = parseCommand(input);
+  if (!command) {
+    message.error(t("input.command.errors.unknown"));
+    return false;
+  }
+
+  const normalized =
+    command.name === "goto" || command.name === "go"
+      ? "goto"
+      : command.name === "del" || command.name === "delete"
+        ? "del"
+        : command.name;
+  if (!["del", "goto", "hide", "show"].includes(normalized)) {
+    message.error(
+      formatText("input.command.errors.unknown_with_name", {
+        command: command.name,
+      }),
+    );
+    return false;
+  }
+  if (!command.arg) {
+    message.warning(t("input.command.errors.target_required"));
+    return false;
+  }
+
+  const total = currentMessages.value.length;
+  if (total < 1) {
+    message.warning(t("input.command.errors.no_messages"));
+    return false;
+  }
+
+  const target = parseFloorTarget(command.arg, total);
+  if (!target) {
+    message.error(t("input.command.errors.target_invalid"));
+    return false;
+  }
+
+  const targetMessages = target.indexes
+    .map((index) => currentMessages.value[index])
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  if (!targetMessages.length) {
+    message.error(t("input.command.errors.target_invalid"));
+    return false;
+  }
+  const targetIds = targetMessages.map((item) => item.id);
+
+  if (normalized === "goto") {
+    if (target.kind !== "single") {
+      message.warning(t("input.command.errors.goto_single"));
+      return false;
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(GOTO_MESSAGE_EVENT, {
+          detail: { index: target.indexes[0] },
+        }),
+      );
+    }
+    message.success(
+      formatText("input.command.done.goto", {
+        floor: target.indexes[0] + 1,
+      }),
+    );
+    return true;
+  }
+
+  if (normalized === "del") {
+    const done = await chatStore.deleteMessages(targetIds);
+    if (!done) {
+      return false;
+    }
+    message.success(
+      formatText("input.command.done.delete", {
+        count: targetIds.length,
+      }),
+    );
+    return true;
+  }
+
+  if (normalized === "hide") {
+    const done = await chatStore.setMessagesVisibility(targetIds, false);
+    if (!done) {
+      return false;
+    }
+    message.success(
+      formatText("input.command.done.hide", {
+        count: targetIds.length,
+      }),
+    );
+    return true;
+  }
+
+  const done = await chatStore.setMessagesVisibility(targetIds, true);
+  if (!done) {
+    return false;
+  }
+  message.success(
+    formatText("input.command.done.show", {
+      count: targetIds.length,
+    }),
+  );
+  return true;
+}
+
+async function handleSend() {
   if (isSending.value) {
     chatStore.cancelSending();
     return;
   }
   if (!currentSession.value) {
-    message.error("Select a session before sending.");
+    message.error(t("errors.select_session_before_send"));
     return;
   }
   if (currentSession.value.is_closed) {
-    message.error("Current session is closed.");
+    message.error(t("errors.current_session_closed"));
     return;
   }
   const content = inputText.value.trim();
+  if (content.startsWith("/")) {
+    const commandDone = await executeCommand(content);
+    if (commandDone) {
+      inputText.value = "";
+      chatStore.clearPendingAttachments();
+      nextTick(adjustTextareaHeight);
+    }
+    return;
+  }
   const attachments = pendingAttachments.value.map((item) => ({ ...item }));
   void chatStore.sendMessage(content, attachments);
 
@@ -282,7 +575,7 @@ function handleSend() {
 function handleKeyDown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
     event.preventDefault();
-    handleSend();
+    void handleSend();
   }
 }
 
@@ -331,21 +624,26 @@ function formatSize(bytes: number) {
   gap: 6px;
 }
 
-.session-state-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 10px;
-  border-radius: 999px;
+.session-close-button {
   border: 1px solid var(--rst-border-color);
-  color: var(--rst-success);
+  background: var(--rst-bg-secondary);
+  color: var(--rst-text-secondary);
+  border-radius: 8px;
+  padding: 4px 10px;
   font-size: 11px;
   line-height: 1.2;
-  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.session-state-pill.is-closed {
+.session-close-button:hover:not(:disabled) {
+  border-color: var(--rst-danger);
   color: var(--rst-danger);
+}
+
+.session-close-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .quick-label {
@@ -522,7 +820,9 @@ function formatSize(bytes: number) {
   padding: 10px 18px;
   font-size: 13px;
   cursor: pointer;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .send-button.is-stop {

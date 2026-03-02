@@ -28,7 +28,7 @@ export function useAutoSave(options: UseAutoSaveOptions) {
       idleTimer = window.setTimeout(() => {
         saveStatus.value = "idle";
       }, 1000);
-    } catch (error) {
+    } catch {
       saveStatus.value = "error";
     }
   }

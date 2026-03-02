@@ -7,19 +7,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
+import { useI18n } from "@/composables/useI18n";
+
 const props = defineProps<{
   status: "idle" | "saving" | "saved" | "error";
 }>();
+const { t } = useI18n();
 
 const label = computed(() => {
   if (props.status === "saving") {
-    return "保存中...";
+    return t("saveIndicator.saving");
   }
   if (props.status === "saved") {
-    return "已保存 ?";
+    return t("saveIndicator.saved");
   }
   if (props.status === "error") {
-    return "保存失败";
+    return t("saveIndicator.error");
   }
   return "";
 });
@@ -41,4 +44,3 @@ const statusClass = computed(() => `is-${props.status}`);
   color: var(--rst-danger, #ef4444);
 }
 </style>
-

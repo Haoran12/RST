@@ -92,13 +92,13 @@
 5. Lore 范畴固定为：world_base, society, place, faction, character, skills, others。
 6. 存储规则：所有 Lore 数据存储在 sessions/{session_name}/rst_data/ 下。
 7. character 条目必须拆分为单独文件（每个 character 一份文件）。
-8. 其他范畴每个范畴一个文件，文件内包含多个条目。
+8. 其他范畴共同存储在 sessions/{session_name}/rst_data/{world_id}/下，每个范畴一个文件,文件内包含多个条目。{world_id}即保留扩展为多世界的更宏大世界观的可能.
 9. Lore 条目字段必须包含：name, category, content, disabled, constant, tags。
 
 ### 3.5 Lore 调度器
 1. 调度器必须基于最近 scan_depth 条 visible 消息进行检索与判断。
 2. 调度器必须能基于 lore/或rst_data下各个条目的tags、name、category 等元数据检索相关条目。
-3. 可选支持向量检索以增强召回，但不作为必须条件。
+3. 可选支持向量检索以增强召回, 利用好Python的NLP优势。
 4. 调度器必须调用独立 LLM 对候选条目进行确认、整理与摘要。
 5. 注入粒度必须精细到文件内的单条目或小节，避免整文件注入。
 6. 输出结果必须为可直接用于 Prompt 的注入块。

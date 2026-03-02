@@ -423,7 +423,7 @@ async function handleOverlaySave(data: { fields: Record<string, unknown>; conten
     comment,
   };
 
-  let nextEntries = [...entries.value];
+  const nextEntries = [...entries.value];
   if (editingIsNew.value) {
     nextEntries.push(updatedEntry);
   } else if (editingIndex.value !== null) {
@@ -513,7 +513,7 @@ async function confirmCopy() {
     });
     message.success("已复制到目标 Preset");
     closeCopyModal();
-  } catch (_error) {
+  } catch {
     message.error("复制失败，请稍后重试");
   }
 }

@@ -1,14 +1,14 @@
 ﻿<template>
   <section class="panel" @click.stop>
     <header class="panel-header">
-      <div class="panel-title">Session</div>
+      <div class="panel-title">{{ t("sessionPanel.title") }}</div>
       <SaveIndicator :status="saveStatus" />
     </header>
 
     <ConfigSelector
       :options="sessionOptions"
       :selected-value="selectedName"
-      placeholder="选择会话..."
+      :placeholder="t('sessionPanel.selector.placeholder')"
       :loading="store.loading"
       @select="handleSelect"
       @create="startCreate"
@@ -19,64 +19,55 @@
 
     <div class="panel-body">
       <div v-if="createMode" class="card">
-        <div class="card-title">新建会话</div>
+        <div class="card-title">{{ t("sessionPanel.create.title") }}</div>
         <n-form size="small" label-placement="top">
-          <n-form-item label="名称">
-            <n-input v-model:value="createForm.name" placeholder="请输入会话名称" />
+          <n-form-item :label="t('sessionPanel.fields.name')">
+            <n-input
+              v-model:value="createForm.name"
+              :placeholder="t('sessionPanel.create.name_placeholder')"
+            />
           </n-form-item>
-          <n-form-item label="Mode">
+          <n-form-item :label="t('sessionPanel.fields.mode')">
             <n-select v-model:value="createForm.mode" :options="modeOptions" />
           </n-form-item>
-          <n-form-item label="Main API">
+          <n-form-item :label="t('sessionPanel.fields.main_api')">
             <n-select
               v-model:value="createForm.main_api_config_id"
               :options="apiOptions"
-              placeholder="选择 API 配置"
+              :placeholder="t('sessionPanel.create.main_api_placeholder')"
             />
           </n-form-item>
-          <n-form-item label="Preset">
+          <n-form-item :label="t('sessionPanel.fields.preset')">
             <n-select
               v-model:value="createForm.preset_id"
               :options="presetOptions"
-              placeholder="选择 Preset"
+              :placeholder="t('sessionPanel.create.preset_placeholder')"
             />
           </n-form-item>
           <div class="card-actions">
-            <n-button secondary @click="cancelCreate">取消</n-button>
-            <n-button type="primary" @click="submitCreate">创建</n-button>
+            <n-button secondary @click="cancelCreate">{{ t("common.cancel") }}</n-button>
+            <n-button type="primary" @click="submitCreate">{{ t("common.create") }}</n-button>
           </div>
         </n-form>
       </div>
 
       <div v-else-if="store.currentSession" class="form">
         <n-form size="small" label-placement="top">
-          <n-form-item label="Session">
-            <div class="session-toggle-row">
-              <n-switch
-                :value="!formState.is_closed"
-                :loading="store.loading"
-                @update:value="handleSessionOpenToggle"
-              />
-              <span class="session-toggle-label">
-                {{ formState.is_closed ? "Closed" : "Open" }}
-              </span>
-            </div>
-          </n-form-item>
-          <n-form-item label="Mode">
+          <n-form-item :label="t('sessionPanel.fields.mode')">
             <n-select
               v-model:value="formState.mode"
               :options="modeOptions"
               @update:value="handleImmediateSave"
             />
           </n-form-item>
-          <n-form-item label="Main API">
+          <n-form-item :label="t('sessionPanel.fields.main_api')">
             <n-select
               v-model:value="formState.main_api_config_id"
               :options="apiOptions"
               @update:value="handleImmediateSave"
             />
           </n-form-item>
-          <n-form-item label="Scheduler API">
+          <n-form-item :label="t('sessionPanel.fields.scheduler_api')">
             <n-select
               v-model:value="formState.scheduler_api_config_id"
               :options="apiOptions"
@@ -84,14 +75,14 @@
               @update:value="handleImmediateSave"
             />
           </n-form-item>
-          <n-form-item label="Preset">
+          <n-form-item :label="t('sessionPanel.fields.preset')">
             <n-select
               v-model:value="formState.preset_id"
               :options="presetOptions"
               @update:value="handleImmediateSave"
             />
           </n-form-item>
-          <n-form-item label="Scan Depth">
+          <n-form-item :label="t('sessionPanel.fields.scan_depth')">
             <div class="slider-row">
               <n-slider
                 v-model:value="formState.scan_depth"
@@ -112,7 +103,7 @@
               />
             </div>
           </n-form-item>
-          <n-form-item label="Mem Length">
+          <n-form-item :label="t('sessionPanel.fields.mem_length')">
             <div class="slider-row">
               <n-slider
                 v-model:value="formState.mem_length"
@@ -133,7 +124,7 @@
               />
             </div>
           </n-form-item>
-          <n-form-item label="Lore Sync Interval">
+          <n-form-item :label="t('sessionPanel.fields.lore_sync_interval')">
             <div class="slider-row">
               <n-slider
                 v-model:value="formState.lore_sync_interval"
@@ -153,8 +144,8 @@
               />
             </div>
           </n-form-item>
-          <div class="field-hint">-1 表示使用全部可见消息</div>
-          <n-form-item label="User Description">
+          <div class="field-hint">{{ t("sessionPanel.hints.minus_one_all") }}</div>
+          <n-form-item :label="t('sessionPanel.fields.user_description')">
             <n-input
               v-model:value="formState.user_description"
               type="textarea"
@@ -167,7 +158,7 @@
 
       <div v-else class="empty">
         <div class="empty-icon">??</div>
-        <div>请选择或新建一个会话</div>
+        <div>{{ t("sessionPanel.empty") }}</div>
       </div>
     </div>
   </section>
@@ -183,7 +174,6 @@ import {
   NInputNumber,
   NSelect,
   NSlider,
-  NSwitch,
   useMessage,
 } from "naive-ui";
 
@@ -192,6 +182,7 @@ import { usePresetStore } from "@/stores/preset";
 import { useSessionStore } from "@/stores/session";
 import { useChatStore } from "@/stores/chat";
 import { useAutoSave } from "@/composables/useAutoSave";
+import { useI18n } from "@/composables/useI18n";
 import { confirmLeaveSessionWhileBusy } from "@/utils/session-leave-guard";
 
 import ConfigSelector from "@/components/panels/ConfigSelector.vue";
@@ -202,13 +193,12 @@ const apiStore = useApiConfigStore();
 const presetStore = usePresetStore();
 const chatStore = useChatStore();
 const message = useMessage();
+const { t } = useI18n();
 
 const selectedName = ref<string | null>(null);
 const createMode = ref(false);
 const syncing = ref(false);
-const sliderDraggingField = ref<
-  "scan_depth" | "mem_length" | "lore_sync_interval" | null
->(null);
+const sliderDraggingField = ref<"scan_depth" | "mem_length" | "lore_sync_interval" | null>(null);
 
 const modeOptions = [
   { label: "RST", value: "RST" },
@@ -365,15 +355,15 @@ function startCreate() {
 
 async function submitCreate() {
   if (!createForm.name.trim()) {
-    message.error("请输入会话名称");
+    message.error(t("sessionPanel.errors.name_required"));
     return;
   }
   if (!createForm.main_api_config_id) {
-    message.error("请选择 Main API");
+    message.error(t("sessionPanel.errors.main_api_required"));
     return;
   }
   if (!createForm.preset_id) {
-    message.error("请选择 Preset");
+    message.error(t("sessionPanel.errors.preset_required"));
     return;
   }
   const result = await store.createSession({
@@ -427,18 +417,6 @@ function handleImmediateSave() {
   void flush();
 }
 
-async function handleSessionOpenToggle(nextOpen: boolean) {
-  const nextClosed = !nextOpen;
-  if (nextClosed === formState.is_closed) {
-    return;
-  }
-  if (nextClosed && !(await confirmLeaveIfBusy())) {
-    return;
-  }
-  formState.is_closed = nextClosed;
-  handleImmediateSave();
-}
-
 async function confirmLeaveIfBusy(): Promise<boolean> {
   const currentName = store.currentSession?.name ?? selectedName.value;
   if (!currentName) {
@@ -455,9 +433,7 @@ async function confirmLeaveIfBusy(): Promise<boolean> {
   return true;
 }
 
-function handleSliderUpdate(
-  field: "scan_depth" | "mem_length" | "lore_sync_interval",
-) {
+function handleSliderUpdate(field: "scan_depth" | "mem_length" | "lore_sync_interval") {
   sliderDraggingField.value = field;
 }
 
@@ -471,12 +447,7 @@ function handleSliderCommit(
   } else if (field === "mem_length") {
     formState.mem_length = coerceNumber(value, -1, 400, 5);
   } else {
-    formState.lore_sync_interval = coerceNumber(
-      value,
-      1,
-      syncIntervalUpperBound.value,
-      1,
-    );
+    formState.lore_sync_interval = coerceNumber(value, 1, syncIntervalUpperBound.value, 1);
   }
   if (!selectedName.value) {
     return;
@@ -485,9 +456,7 @@ function handleSliderCommit(
   void flush();
 }
 
-function handleNumericBlur(
-  field: "scan_depth" | "mem_length" | "lore_sync_interval",
-) {
+function handleNumericBlur(field: "scan_depth" | "mem_length" | "lore_sync_interval") {
   if (field === "scan_depth") {
     formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
   } else if (field === "mem_length") {
@@ -518,11 +487,11 @@ function coerceNumber(value: number | null, min: number, max: number, step: numb
 }
 
 function formatDepthTooltip(value: number) {
-  return value === -1 ? "All" : `${value}`;
+  return value === -1 ? t("common.all") : `${value}`;
 }
 
 function formatMemTooltip(value: number) {
-  return value === -1 ? "All" : `${value}`;
+  return value === -1 ? t("common.all") : `${value}`;
 }
 </script>
 
@@ -629,16 +598,4 @@ function formatMemTooltip(value: number) {
   color: var(--rst-text-secondary);
 }
 
-.session-toggle-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.session-toggle-label {
-  min-width: 48px;
-  font-size: 12px;
-  color: var(--rst-text-secondary);
-  text-transform: uppercase;
-}
 </style>

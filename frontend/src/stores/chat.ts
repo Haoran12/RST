@@ -203,17 +203,13 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
-  async function toggleMessageVisibility(messageId: string): Promise<void> {
+  async function setMessageVisibility(messageId: string, visible: boolean): Promise<void> {
     if (!activeSession.value) {
-      return;
-    }
-    const target = currentMessages.value.find((msg) => msg.id === messageId);
-    if (!target) {
       return;
     }
     try {
       const updated = await updateMessageApi(activeSession.value, messageId, {
-        visible: !target.visible,
+        visible,
       });
       const next = currentMessages.value.map((msg) =>
         msg.id === messageId ? updated : msg,
@@ -222,6 +218,14 @@ export const useChatStore = defineStore("chat", () => {
     } catch (error) {
       message.error(parseApiError(error));
     }
+  }
+
+  async function toggleMessageVisibility(messageId: string): Promise<void> {
+    const target = currentMessages.value.find((msg) => msg.id === messageId);
+    if (!target) {
+      return;
+    }
+    await setMessageVisibility(messageId, !target.visible);
   }
 
   async function deleteMessage(messageId: string): Promise<void> {
@@ -234,6 +238,53 @@ export const useChatStore = defineStore("chat", () => {
       setMessages(activeSession.value, next);
     } catch (error) {
       message.error(parseApiError(error));
+    }
+  }
+
+  async function deleteMessages(messageIds: string[]): Promise<boolean> {
+    if (!activeSession.value) {
+      return false;
+    }
+    const ids = Array.from(new Set(messageIds));
+    if (!ids.length) {
+      return false;
+    }
+    try {
+      await Promise.all(ids.map((id) => deleteMessageApi(activeSession.value!, id)));
+      const idSet = new Set(ids);
+      const next = currentMessages.value.filter((msg) => !idSet.has(msg.id));
+      setMessages(activeSession.value, next);
+      return true;
+    } catch (error) {
+      message.error(parseApiError(error));
+      return false;
+    }
+  }
+
+  async function setMessagesVisibility(
+    messageIds: string[],
+    visible: boolean,
+  ): Promise<boolean> {
+    if (!activeSession.value) {
+      return false;
+    }
+    const ids = Array.from(new Set(messageIds));
+    if (!ids.length) {
+      return false;
+    }
+    try {
+      const updates = await Promise.all(
+        ids.map((id) =>
+          updateMessageApi(activeSession.value!, id, { visible }),
+        ),
+      );
+      const updatedMap = new Map(updates.map((msg) => [msg.id, msg]));
+      const next = currentMessages.value.map((msg) => updatedMap.get(msg.id) ?? msg);
+      setMessages(activeSession.value, next);
+      return true;
+    } catch (error) {
+      message.error(parseApiError(error));
+      return false;
     }
   }
 
@@ -276,12 +327,28 @@ export const useChatStore = defineStore("chat", () => {
     selectedIds.value = [];
   }
 
-  function toggleSelection(messageId: string): void {
-    if (selectedIds.value.includes(messageId)) {
-      selectedIds.value = selectedIds.value.filter((id) => id !== messageId);
-    } else {
-      selectedIds.value = [...selectedIds.value, messageId];
+  function toggleSelection(messageId: string, checked?: boolean): void {
+    const index = currentMessages.value.findIndex((msg) => msg.id === messageId);
+    if (index === -1) {
+      return;
     }
+
+    const isChecked = checked ?? !selectedIds.value.includes(messageId);
+    if (!isChecked) {
+      selectedIds.value = selectedIds.value.filter((id) => id !== messageId);
+      return;
+    }
+
+    let affectedIds = [messageId];
+    if (batchAction.value === "hide") {
+      affectedIds = currentMessages.value.slice(0, index + 1).map((msg) => msg.id);
+    } else if (batchAction.value === "delete") {
+      affectedIds = currentMessages.value.slice(index).map((msg) => msg.id);
+    }
+
+    const merged = new Set(selectedIds.value);
+    affectedIds.forEach((id) => merged.add(id));
+    selectedIds.value = Array.from(merged);
   }
 
   async function confirmBatchDelete(): Promise<void> {
@@ -293,13 +360,9 @@ export const useChatStore = defineStore("chat", () => {
       return;
     }
     const ids = [...selectedIds.value];
-    try {
-      await Promise.all(ids.map((id) => deleteMessageApi(activeSession.value!, id)));
-      const next = currentMessages.value.filter((msg) => !ids.includes(msg.id));
-      setMessages(activeSession.value, next);
+    const done = await deleteMessages(ids);
+    if (done) {
       exitBatchMode();
-    } catch (error) {
-      message.error(parseApiError(error));
     }
   }
 
@@ -312,18 +375,9 @@ export const useChatStore = defineStore("chat", () => {
       return;
     }
     const ids = [...selectedIds.value];
-    try {
-      const updates = await Promise.all(
-        ids.map((id) =>
-          updateMessageApi(activeSession.value!, id, { visible: false }),
-        ),
-      );
-      const updatedMap = new Map(updates.map((msg) => [msg.id, msg]));
-      const next = currentMessages.value.map((msg) => updatedMap.get(msg.id) ?? msg);
-      setMessages(activeSession.value, next);
+    const done = await setMessagesVisibility(ids, false);
+    if (done) {
       exitBatchMode();
-    } catch (error) {
-      message.error(parseApiError(error));
     }
   }
 
@@ -346,8 +400,11 @@ export const useChatStore = defineStore("chat", () => {
     cancelInFlightOperations,
     clearSessionRuntime,
     updateMessage,
+    setMessageVisibility,
     toggleMessageVisibility,
     deleteMessage,
+    deleteMessages,
+    setMessagesVisibility,
     removeAttachment,
     addPendingAttachment,
     removePendingAttachment,

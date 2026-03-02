@@ -12,6 +12,7 @@ from app.models.lore import (
     CharacterForm,
     CharacterListResponse,
     CharacterMemory,
+    CharacterReorder,
     CharacterUpdate,
     ConversionReport,
     ConsolidateResult,
@@ -243,6 +244,22 @@ def list_characters_route(session_name: str):
         return CharacterListResponse(characters=characters, total=len(characters))
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put(
+    "/sessions/{session_name}/lores/characters/reorder",
+    response_model=CharacterListResponse,
+)
+def reorder_characters_route(session_name: str, payload: CharacterReorder):
+    try:
+        characters = lore_service.reorder_characters(session_name, payload)
+        return CharacterListResponse(characters=characters, total=len(characters))
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CharacterNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except LoreValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(

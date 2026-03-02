@@ -4,17 +4,17 @@
       <n-input
         v-model:value="renameInput"
         size="small"
-        placeholder="输入新名称"
+        :placeholder="t('configSelector.rename.placeholder')"
         :disabled="props.disabled"
         @keydown.enter.prevent="confirmRename"
         @keydown.esc.prevent="cancelRename"
       />
       <div class="rename-actions">
         <n-button size="small" type="primary" :disabled="props.disabled" @click="confirmRename">
-          OK
+          {{ t("configSelector.rename.confirm") }}
         </n-button>
         <n-button size="small" secondary :disabled="props.disabled" @click="cancelRename">
-          Cancel
+          {{ t("configSelector.rename.cancel") }}
         </n-button>
       </div>
     </div>
@@ -41,7 +41,7 @@
         </n-button>
         <n-popconfirm
           :show-icon="false"
-          positive-text="确认删除"
+          :positive-text="t('configSelector.delete.confirm_button')"
           :positive-button-props="{ type: 'error' }"
           @positive-click="emit('delete')"
         >
@@ -54,7 +54,7 @@
               🗑️
             </n-button>
           </template>
-          确认删除当前配置？
+          {{ t("configSelector.delete.prompt") }}
         </n-popconfirm>
       </div>
     </div>
@@ -65,6 +65,8 @@
 import { computed, ref, watch } from "vue";
 import { NButton, NInput, NPopconfirm, NSelect } from "naive-ui";
 import type { SelectOption } from "naive-ui";
+
+import { useI18n } from "@/composables/useI18n";
 
 type ConfigSelectorOption = Omit<SelectOption, "label" | "value"> & {
   label: string;
@@ -88,6 +90,7 @@ const emit = defineEmits<{
 
 const isRenaming = ref(false);
 const renameInput = ref("");
+const { t } = useI18n();
 
 const selectedLabel = computed<string>(() => {
   const selected = props.options.find((option) => option.value === props.selectedValue);

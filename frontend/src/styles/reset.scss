@@ -15,7 +15,7 @@ body,
 
 body {
   font-family: var(--rst-font-family);
-  font-size: var(--rst-font-size-base);
+  font-size: calc(var(--rst-font-size-base) * var(--rst-font-size-scale));
   background: var(--rst-bg-primary);
   color: var(--rst-text-primary);
 }

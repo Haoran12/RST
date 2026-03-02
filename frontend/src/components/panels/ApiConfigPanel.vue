@@ -52,7 +52,7 @@
             />
           </n-form-item>
           <n-form-item label="Base URL">
-            <n-input v-model:value="formState.base_url" @blur="flush" />
+            <n-input v-model:value="formState.base_url" @blur="handleBaseUrlBlur" />
           </n-form-item>
           <n-form-item label="API Key">
             <n-input
@@ -77,8 +77,8 @@
                 :min="0"
                 :max="2"
                 :step="0.05"
-                @update:value="handleSliderUpdate('temperature')"
-                @change="handleSliderCommit('temperature', $event)"
+                @dragstart="handleSliderDragStart('temperature')"
+                @dragend="handleSliderDragEnd('temperature')"
               />
               <n-input-number
                 v-model:value="formState.temperature"
@@ -86,7 +86,7 @@
                 :max="2"
                 :step="0.05"
                 :precision="2"
-                @blur="flush"
+                @blur="handleNumericBlur('temperature')"
               />
             </div>
           </n-form-item>
@@ -95,18 +95,18 @@
               <n-slider
                 v-model:value="formState.max_tokens"
                 :min="1"
-                :max="1000000"
+                :max="100000"
                 :step="1"
-                @update:value="handleSliderUpdate('max_tokens')"
-                @change="handleSliderCommit('max_tokens', $event)"
+                @dragstart="handleSliderDragStart('max_tokens')"
+                @dragend="handleSliderDragEnd('max_tokens')"
               />
               <n-input-number
                 v-model:value="formState.max_tokens"
                 :min="1"
-                :max="1000000"
+                :max="100000"
                 :step="1"
                 :precision="0"
-                @blur="flush"
+                @blur="handleNumericBlur('max_tokens')"
               />
             </div>
           </n-form-item>
@@ -163,7 +163,7 @@ const providerOptions = [
   { label: "Gemini", value: "gemini" },
   { label: "Deepseek", value: "deepseek" },
   { label: "Anthropic", value: "anthropic" },
-  { label: "OpenAI Compat", value: "openai_compat" },
+  { label: "OpenAI 兼容", value: "openai_compat" },
 ];
 
 const formState = reactive({
@@ -204,19 +204,26 @@ const { saveStatus, markDirty, flush, cancel } = useAutoSave({
     if (!formState.name.trim()) {
       return;
     }
+    const normalizedTemperature = coerceNumber(formState.temperature, 0, 2, 0.05);
+    const normalizedMaxTokens = coerceNumber(formState.max_tokens, 1, 100000, 1);
+    formState.temperature = normalizedTemperature;
+    formState.max_tokens = normalizedMaxTokens;
     const payload = {
       name: formState.name.trim(),
       provider: formState.provider,
       base_url: formState.base_url.trim(),
       model: formState.model.trim(),
-      temperature: formState.temperature,
-      max_tokens: formState.max_tokens,
+      temperature: normalizedTemperature,
+      max_tokens: normalizedMaxTokens,
       stream: formState.stream,
     };
     if (apiKeyInput.value.trim()) {
       Object.assign(payload, { api_key: apiKeyInput.value.trim() });
     }
-    await store.saveConfig(selectedId.value, payload);
+    const result = await store.saveConfig(selectedId.value, payload);
+    if (!result) {
+      throw new Error("Failed to save API config");
+    }
     apiKeyInput.value = "";
   },
   delay: 300,
@@ -373,19 +380,29 @@ function handleImmediateSave() {
   void flush();
 }
 
-function handleSliderUpdate(field: "temperature" | "max_tokens") {
+function handleSliderDragStart(field: "temperature" | "max_tokens") {
   sliderDraggingField.value = field;
 }
 
-function handleSliderCommit(
-  field: "temperature" | "max_tokens",
-  value: number,
-) {
+function handleSliderDragEnd(field: "temperature" | "max_tokens") {
   sliderDraggingField.value = null;
+  handleNumericBlur(field);
+}
+
+function handleBaseUrlBlur() {
+  if (!selectedId.value) {
+    return;
+  }
+  formState.base_url = formState.base_url.trim();
+  markDirty();
+  void flush();
+}
+
+function handleNumericBlur(field: "temperature" | "max_tokens") {
   if (field === "temperature") {
-    formState.temperature = coerceNumber(value, 0, 2, 0.05);
+    formState.temperature = coerceNumber(formState.temperature, 0, 2, 0.05);
   } else {
-    formState.max_tokens = coerceNumber(value, 1, 1000000, 1);
+    formState.max_tokens = coerceNumber(formState.max_tokens, 1, 100000, 1);
   }
   if (!selectedId.value) {
     return;
@@ -406,8 +423,8 @@ function handleApiKeyBlur() {
   void flush();
 }
 
-function coerceNumber(value: number, min: number, max: number, step: number): number {
-  if (Number.isNaN(value)) {
+function coerceNumber(value: number | null, min: number, max: number, step: number): number {
+  if (value === null || Number.isNaN(value)) {
     return min;
   }
   const clamped = Math.min(max, Math.max(min, value));
@@ -519,4 +536,3 @@ function coerceNumber(value: number, min: number, max: number, step: number): nu
   border-radius: 999px;
 }
 </style>
-

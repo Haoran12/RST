@@ -52,7 +52,9 @@ class LoreUpdater:
         chunks: list[str] = []
         for entry in store.load_all_entries():
             if isinstance(entry, CharacterData):
-                chunks.append(f"[character] {entry.name}: role={entry.role}, objective={entry.objective}")
+                chunks.append(
+                    f"[character] {entry.name}: strength={entry.strength}, role={entry.role}, objective={entry.objective}"
+                )
             else:
                 content = entry.content.strip().replace("\n", " ")
                 if len(content) > 80:
@@ -149,6 +151,7 @@ class LoreUpdater:
             character_id=generate_id(),
             name=name.strip() or "未命名角色",
             race="未知",
+            strength=10,
             birth="",
             homeland="",
             aliases=[],

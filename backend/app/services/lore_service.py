@@ -11,6 +11,7 @@ from app.models.lore import (
     CharacterForm,
     CharacterListResponse,
     CharacterMemory,
+    CharacterReorder,
     CharacterUpdate,
     ConsolidateResult,
     FormCreate,
@@ -199,9 +200,46 @@ class LoreService:
         store = self._store(session_name)
         return store.list_characters()
 
+    def reorder_characters(self, session_name: str, payload: CharacterReorder) -> list[CharacterData]:
+        if len(payload.character_ids) != len(set(payload.character_ids)):
+            raise LoreValidationError("character_ids must not contain duplicates")
+
+        store = self._store(session_name)
+        characters = store.list_characters()
+        current_ids = [item.character_id for item in characters]
+        requested_ids = payload.character_ids
+
+        if len(current_ids) != len(requested_ids) or set(current_ids) != set(requested_ids):
+            raise LoreValidationError("character_ids must include all characters exactly once")
+
+        character_files: dict[str, CharacterFile] = {}
+        for character_id in requested_ids:
+            char_file = store.load_character(character_id)
+            if char_file is None:
+                raise CharacterNotFoundError(f"Character '{character_id}' not found")
+            character_files[character_id] = char_file
+
+        now = datetime.utcnow()
+        reordered: list[CharacterData] = []
+        for index, character_id in enumerate(requested_ids):
+            char_file = character_files[character_id]
+            updated = char_file.data.model_copy(
+                update={
+                    "sort_order": index,
+                    "updated_at": now,
+                }
+            )
+            store.save_character(CharacterFile(data=updated, version=char_file.version))
+            reordered.append(updated)
+
+        self._rebuild_index(store)
+        return reordered
+
     def create_character(self, session_name: str, payload: CharacterCreate) -> CharacterData:
         store = self._store(session_name)
         now = datetime.utcnow()
+        existing = store.list_characters()
+        next_sort_order = max((item.sort_order for item in existing), default=-1) + 1
         default_form = CharacterForm(
             form_id=generate_id(),
             form_name="默认形态",
@@ -211,6 +249,7 @@ class LoreService:
             character_id=generate_id(),
             name=payload.name,
             race=payload.race,
+            strength=payload.strength,
             birth=payload.birth,
             homeland=payload.homeland,
             aliases=payload.aliases,
@@ -223,6 +262,7 @@ class LoreService:
             forms=[default_form],
             active_form_id=default_form.form_id,
             tags=self._normalize_tags(payload.tags),
+            sort_order=next_sort_order,
             disabled=payload.disabled,
             constant=payload.constant,
             created_at=now,
