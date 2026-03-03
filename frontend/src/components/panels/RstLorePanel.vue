@@ -823,6 +823,12 @@ const triggerModeOptions = computed(() => [
   { label: t("rstPanel.mode.rst"), value: "rst" },
   { label: t("rstPanel.mode.const"), value: "const" },
 ]);
+const genderOptions = [
+  { label: "male", value: "male" },
+  { label: "female", value: "female" },
+  { label: "hermaphrodite", value: "hermaphrodite" },
+  { label: "asexual", value: "asexual" },
+];
 
 const activeEntryId = ref<string | null>(null);
 const editingEntryId = ref<string | null>(null);
@@ -1587,8 +1593,9 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
     {
       key: "gender",
       label: t("rstPanel.overlay.character.field.gender"),
-      type: "text",
+      type: "select",
       value: character.gender,
+      options: genderOptions,
       placeholder: t("rstPanel.overlay.character.placeholder.gender"),
     },
     {
@@ -1669,16 +1676,20 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
     {
       key: "weak",
       label: t("rstPanel.overlay.character.field.weak"),
-      type: "textarea",
-      value: character.weak.join(", "),
+      type: "select",
+      value: [...character.weak],
+      options: skillEntryOptions.value,
+      multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.weak"),
       wide: true,
     },
     {
       key: "resist",
       label: t("rstPanel.overlay.character.field.resist"),
-      type: "textarea",
-      value: character.resist.join(", "),
+      type: "select",
+      value: [...character.resist],
+      options: skillEntryOptions.value,
+      multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.resist"),
       wide: true,
     },
@@ -1707,8 +1718,10 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
     {
       key: "penetration",
       label: t("rstPanel.overlay.character.field.penetration"),
-      type: "textarea",
-      value: character.penetration.join(", "),
+      type: "select",
+      value: [...character.penetration],
+      options: skillEntryOptions.value,
+      multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.penetration"),
       wide: true,
       description: t("rstPanel.overlay.character.description.penetration"),
@@ -2029,11 +2042,11 @@ async function handleCharacterOverlaySave(data: {
     vitality_max: parseNonNegativeInt(data.fields.vitality_max, 100),
     mana_potency: parseNonNegativeInt(data.fields.mana_potency, 100),
     toughness: parseNonNegativeInt(data.fields.toughness, 10),
-    weak: parseDelimitedText(String(data.fields.weak ?? "")),
-    resist: parseDelimitedText(String(data.fields.resist ?? "")),
+    weak: parseIdList(data.fields.weak),
+    resist: parseIdList(data.fields.resist),
     element: parseIdList(data.fields.element),
     skills: parseIdList(data.fields.skills),
-    penetration: parseDelimitedText(String(data.fields.penetration ?? "")),
+    penetration: parseIdList(data.fields.penetration),
     clothing: String(data.fields.clothing ?? "").trim(),
     body: String(data.fields.body ?? "").trim(),
     mind: String(data.fields.mind ?? "").trim(),
