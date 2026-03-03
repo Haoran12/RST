@@ -155,6 +155,7 @@ class CharacterData(BaseModel):
 
     name: str = Field(min_length=1, max_length=128)
     race: str = Field(min_length=1, max_length=64)
+    gender: str = ""
     strength: int = Field(default=10, ge=0)
     birth: str = ""
     homeland: str = ""
@@ -277,6 +278,7 @@ class LoreEntryListResponse(BaseModel):
 class CharacterCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     race: str = Field(min_length=1, max_length=64)
+    gender: str = ""
     strength: int = Field(default=10, ge=0)
     birth: str = ""
     homeland: str = ""
@@ -294,6 +296,7 @@ class CharacterCreate(BaseModel):
 class CharacterUpdate(BaseModel):
     name: str | None = None
     race: str | None = None
+    gender: str | None = None
     strength: int | None = Field(default=None, ge=0)
     birth: str | None = None
     homeland: str | None = None

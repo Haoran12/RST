@@ -100,6 +100,7 @@ async def test_import_lore_converts_entries_and_characters(
                     "# YAML character setup\n"
                     "name: changli\n"
                     "race: human\n"
+                    "gender: female\n"
                     "identities: [governor]\n"
                     "relationships:\n"
                     "  - jinsi: ally\n"
@@ -146,6 +147,7 @@ async def test_import_lore_converts_entries_and_characters(
     assert characters_response.json()["total"] == 1
     character = characters_response.json()["characters"][0]
     assert character["strength"] == 10
+    assert character["gender"] == "female"
 
     relationship_targets = [item["target"] for item in character["relationship"]]
     assert "jinsi" in relationship_targets

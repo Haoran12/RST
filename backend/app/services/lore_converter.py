@@ -2,7 +2,7 @@
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import yaml
@@ -51,6 +51,9 @@ class LoreConverter:
     _llm_batch_max_items = 12
     _llm_batch_max_chars = 48000
     _llm_single_fallback_budget_default = 2
+
+    def _utc_iso(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
 
     def __init__(
         self,
@@ -342,6 +345,7 @@ class LoreConverter:
 
         name = src.name.strip() or "Unnamed character"
         race = "Unknown"
+        gender = ""
         strength = 10
         birth = ""
         homeland = ""
@@ -369,6 +373,7 @@ class LoreConverter:
             (
                 name,
                 race,
+                gender,
                 strength,
                 birth,
                 homeland,
@@ -414,6 +419,7 @@ class LoreConverter:
             character_id=generate_id(),
             name=name,
             race=race,
+            gender=gender,
             strength=strength,
             birth=birth,
             homeland=homeland,
@@ -569,7 +575,7 @@ class LoreConverter:
         api_config,
         prompt: str,
     ) -> str:
-        request_time = datetime.utcnow().isoformat()
+        request_time = self._utc_iso()
         started_at = datetime.utcnow()
         provider_name = api_config.provider.value
         source_ids = [src.id for src in batch]
@@ -599,7 +605,7 @@ class LoreConverter:
                 stream=False,
             )
         except ProviderError as exc:
-            response_time = datetime.utcnow().isoformat()
+            response_time = self._utc_iso()
             duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
             log_service.add_log(
                 LogEntry(
@@ -622,7 +628,7 @@ class LoreConverter:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            response_time = datetime.utcnow().isoformat()
+            response_time = self._utc_iso()
             duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
             log_service.add_log(
                 LogEntry(
@@ -641,7 +647,7 @@ class LoreConverter:
             )
             raise
 
-        response_time = datetime.utcnow().isoformat()
+        response_time = self._utc_iso()
         duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
         log_service.add_log(
             LogEntry(
@@ -796,7 +802,7 @@ class LoreConverter:
             return None
 
     async def _call_llm_for_character_yaml(self, src: SourceEntry, api_config, prompt: str) -> str:
-        request_time = datetime.utcnow().isoformat()
+        request_time = self._utc_iso()
         started_at = datetime.utcnow()
         provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
@@ -825,7 +831,7 @@ class LoreConverter:
                 stream=False,
             )
         except ProviderError as exc:
-            response_time = datetime.utcnow().isoformat()
+            response_time = self._utc_iso()
             duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
             log_service.add_log(
                 LogEntry(
@@ -848,7 +854,7 @@ class LoreConverter:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            response_time = datetime.utcnow().isoformat()
+            response_time = self._utc_iso()
             duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
             log_service.add_log(
                 LogEntry(
@@ -867,7 +873,7 @@ class LoreConverter:
             )
             raise
 
-        response_time = datetime.utcnow().isoformat()
+        response_time = self._utc_iso()
         duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
         log_service.add_log(
             LogEntry(
@@ -930,9 +936,10 @@ class LoreConverter:
         parsed: dict[str, Any],
         used_keys: set[str],
         source_name: str,
-    ) -> tuple[str, str, int, str, str, list[str], str, str, str, str, list[Relationship], list[str]]:
+    ) -> tuple[str, str, str, int, str, str, list[str], str, str, str, str, list[Relationship], list[str]]:
         name = source_name.strip() or self._as_text(self._take_value(parsed, used_keys, "name")) or "unnamed_character"
         race = self._as_text(self._take_value(parsed, used_keys, "species", "race")) or "unknown"
+        gender = self._as_text(self._take_value(parsed, used_keys, "gender", "sex"))
         strength = self._to_non_negative_int(
             self._take_value(parsed, used_keys, "strength", "power", "combat_power"),
             default=10,
@@ -965,6 +972,7 @@ class LoreConverter:
         return (
             name,
             race,
+            gender,
             strength,
             birth,
             homeland,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from time import perf_counter
 from typing import Any
 
@@ -32,6 +32,10 @@ from app.storage.message_store import MessageStore
 
 class ChatConfigError(RuntimeError):
     pass
+
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _to_int(value: Any) -> int | None:
@@ -77,6 +81,7 @@ def _render_character_for_st_mode(character: CharacterData) -> str:
     lines = [
         f"# Character: {character.name}",
         f"race: {character.race}",
+        f"gender: {character.gender}",
         f"strength: {character.strength}",
         f"role: {character.role}",
         f"faction: {character.faction}",
@@ -294,7 +299,7 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
         user_input=user_input,
     )
 
-    request_time = datetime.utcnow().isoformat()
+    request_time = _utc_iso()
     provider_name = api_config.provider.value
     started_at = perf_counter()
     rst_runtime_service.update_session_state(
@@ -317,7 +322,7 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
             stream=api_config.stream,
         )
     except ProviderError as exc:
-        response_time = datetime.utcnow().isoformat()
+        response_time = _utc_iso()
         duration_ms = int((perf_counter() - started_at) * 1000)
         raw_request = _build_log_request(
             provider=provider_name,
@@ -380,7 +385,7 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
     store.append(assistant_message)
     touch_session(session_name)
 
-    response_time = datetime.utcnow().isoformat()
+    response_time = _utc_iso()
     duration_ms = int((perf_counter() - started_at) * 1000)
     prompt_tokens, completion_tokens, total_tokens = _extract_usage(raw_response)
     stop_reason = _extract_stop_reason(raw_response)

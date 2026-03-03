@@ -249,6 +249,7 @@ class LoreService:
             character_id=generate_id(),
             name=payload.name,
             race=payload.race,
+            gender=payload.gender,
             strength=payload.strength,
             birth=payload.birth,
             homeland=payload.homeland,

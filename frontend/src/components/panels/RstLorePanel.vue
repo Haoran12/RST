@@ -199,6 +199,7 @@
                   </div>
                   <div class="entry-main">
                     <span class="entry-name">{{ element.name }}</span>
+                    <span class="character-form-meta">{{ characterFormMeta(element) }}</span>
                   </div>
                   <div class="entry-mode">{{ characterModeLabel(element) }}</div>
                   <div class="entry-toggle" @click.stop>
@@ -333,7 +334,69 @@
       :content-label="t('rstPanel.overlay.character.content_label')"
       @save="handleCharacterOverlaySave"
       @discard="closeCharacterOverlay"
-    />
+    >
+      <template #body-prefix>
+        <div v-if="showCharacterFormToolbar" class="character-form-toolbar">
+          <div class="character-form-toolbar-summary">
+            {{
+              formatText("rstPanel.overlay.character.form.summary", {
+                count: characterFormOptions.length,
+                active: activeFormDisplayName,
+              })
+            }}
+          </div>
+          <div class="character-form-toolbar-actions">
+            <n-select
+              v-model:value="selectedCharacterFormId"
+              size="small"
+              :options="characterFormOptions"
+              :placeholder="t('rstPanel.overlay.character.form.select_placeholder')"
+            />
+            <n-popconfirm
+              :show-icon="false"
+              :positive-text="t('common.confirm')"
+              @positive-click="switchCharacterForm"
+            >
+              <template #trigger>
+                <n-button
+                  size="small"
+                  secondary
+                  :disabled="!canSwitchCharacterForm"
+                >
+                  {{ t("rstPanel.overlay.character.form.switch") }}
+                </n-button>
+              </template>
+              {{ t("rstPanel.overlay.character.form.switch_confirm") }}
+            </n-popconfirm>
+            <n-button
+              size="small"
+              tertiary
+              @click="createCharacterForm"
+            >
+              {{ t("rstPanel.overlay.character.form.add") }}
+            </n-button>
+            <n-popconfirm
+              :show-icon="false"
+              :positive-text="t('common.confirm')"
+              :positive-button-props="{ type: 'error' }"
+              @positive-click="deleteCharacterForm"
+            >
+              <template #trigger>
+                <n-button
+                  size="small"
+                  tertiary
+                  type="error"
+                  :disabled="!canDeleteCharacterForm"
+                >
+                  {{ t("rstPanel.overlay.character.form.delete") }}
+                </n-button>
+              </template>
+              {{ t("rstPanel.overlay.character.form.delete_confirm") }}
+            </n-popconfirm>
+          </div>
+        </div>
+      </template>
+    </ContentOverlay>
 
     <n-modal
       v-model:show="schedulerHitsOverlayVisible"
@@ -689,6 +752,7 @@ interface OverlayField {
   value: unknown;
   readonly?: boolean;
   options?: Array<{ label: string; value: string | number }>;
+  multiple?: boolean;
   placeholder?: string;
   description?: string;
   min?: number;
@@ -778,10 +842,12 @@ const characterOverlayTitle = ref("");
 const characterOverlayFields = ref<OverlayField[]>([]);
 const characterOverlaySections = ref<OverlaySection[]>([]);
 const characterOverlayContent = ref("");
+const selectedCharacterFormId = ref<string | null>(null);
 const characterRows = ref<CharacterData[]>([]);
 const selectedCharacterIds = ref<string[]>([]);
 const characterCopyModalVisible = ref(false);
 const characterCopyTarget = ref<string | null>(null);
+const skillEntryOptions = ref<Array<{ label: string; value: string }>>([]);
 
 const templateForm = reactive({
   confirm_prompt: "",
@@ -828,6 +894,42 @@ const hasCharacterSelection = computed(() => selectedCharacterIds.value.length >
 const selectedCharacters = computed(() => {
   const wanted = new Set(selectedCharacterIds.value);
   return characterRows.value.filter((character) => wanted.has(character.character_id));
+});
+const editingCharacter = computed(() =>
+  editingCharacterId.value
+    ? loreStore.characters.find((item) => item.character_id === editingCharacterId.value) ?? null
+    : null,
+);
+const characterFormOptions = computed<Array<{ label: string; value: string }>>(() => {
+  const forms = editingCharacter.value?.forms ?? [];
+  return forms.map((form) => ({
+    label: form.is_default
+      ? `${form.form_name} (${t("rstPanel.overlay.character.form.default_suffix")})`
+      : form.form_name,
+    value: form.form_id,
+  }));
+});
+const activeFormDisplayName = computed(() => {
+  const character = editingCharacter.value;
+  if (!character) {
+    return t("rstPanel.overlay.character.form.none");
+  }
+  const activeForm = resolveCharacterActiveForm(character);
+  return activeForm?.form_name || t("rstPanel.overlay.character.form.none");
+});
+const showCharacterFormToolbar = computed(
+  () => Boolean(editingCharacter.value && characterFormOptions.value.length > 0),
+);
+const canSwitchCharacterForm = computed(() => {
+  const character = editingCharacter.value;
+  if (!character || !selectedCharacterFormId.value) {
+    return false;
+  }
+  return selectedCharacterFormId.value !== character.active_form_id;
+});
+const canDeleteCharacterForm = computed(() => {
+  const character = editingCharacter.value;
+  return Boolean(character && character.forms.length > 1 && selectedCharacterFormId.value);
 });
 const characterCopyConfirmDisabled = computed(
   () => !hasCharacterSelection.value || !characterCopyTarget.value || targetSessionOptions.value.length === 0,
@@ -937,6 +1039,9 @@ watch(
   () => loreStore.entries,
   (entries) => {
     entryRows.value = entries.map((entry) => ({ ...entry, tags: [...entry.tags] }));
+    if (entryCategory.value === "skills") {
+      skillEntryOptions.value = toSkillEntryOptions(entryRows.value);
+    }
     const validIds = new Set(entryRows.value.map((entry) => entry.id));
     selectedEntryIds.value = selectedEntryIds.value.filter((entryId) => validIds.has(entryId));
     if (activeEntryId.value && !validIds.has(activeEntryId.value)) {
@@ -966,6 +1071,23 @@ watch(
 );
 
 watch(
+  () => editingCharacter.value,
+  (character) => {
+    if (!character) {
+      selectedCharacterFormId.value = null;
+      return;
+    }
+    const exists = selectedCharacterFormId.value
+      ? character.forms.some((form) => form.form_id === selectedCharacterFormId.value)
+      : false;
+    if (!exists) {
+      selectedCharacterFormId.value = resolveCharacterActiveForm(character)?.form_id ?? null;
+    }
+  },
+  { deep: true },
+);
+
+watch(
   () => loreStore.schedulerTemplate,
   (value) => {
     if (!value) {
@@ -989,12 +1111,14 @@ async function bootstrapCurrentSession() {
     entryFilter.value = entryCategory.value;
     resetCharacterListState();
     characterRows.value = [];
+    skillEntryOptions.value = [];
     return;
   }
   await Promise.all([
     loreStore.loadEntries(currentSession.value.name, entryCategory.value),
     loreStore.loadCharacters(currentSession.value.name),
     loreStore.refreshSchedulerState(currentSession.value.name),
+    loadSkillEntryOptions(currentSession.value.name),
   ]);
   entryFilter.value = entryCategory.value;
   resetEntryListState();
@@ -1025,6 +1149,15 @@ function parseDelimitedText(text: string): string[] {
     .split(/[\n,，]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseIdList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  }
+  return parseDelimitedText(String(value ?? ""));
 }
 
 function formatRelationships(relationship: Relationship[]): string {
@@ -1077,6 +1210,25 @@ function parseNonNegativeInt(value: unknown, fallback: number): number {
 
 function parseStrength(value: unknown): number {
   return parseNonNegativeInt(value, 10);
+}
+
+function toSkillEntryOptions(entries: LoreEntry[]): Array<{ label: string; value: string }> {
+  return entries.map((entry) => {
+    const name = entry.name.trim() || entry.id;
+    return {
+      label: `${name} (${entry.id})`,
+      value: entry.id,
+    };
+  });
+}
+
+async function loadSkillEntryOptions(sessionName: string): Promise<void> {
+  try {
+    const response = await listEntries(sessionName, "skills");
+    skillEntryOptions.value = toSkillEntryOptions(response.entries);
+  } catch {
+    skillEntryOptions.value = [];
+  }
 }
 
 function resolveCharacterActiveForm(character: {
@@ -1243,6 +1395,9 @@ async function handleEntryOverlaySave(data: { fields: Record<string, unknown>; c
   if (!result) {
     return;
   }
+  if (entryCategory.value === "skills" || result.category === "skills") {
+    await loadSkillEntryOptions(currentSession.value.name);
+  }
   activeEntryId.value = result.category === entryCategory.value ? result.id : null;
   closeEntryOverlay();
 }
@@ -1277,6 +1432,9 @@ async function handleBulkDeleteEntries() {
   const ids = [...selectedEntryIds.value];
   for (const id of ids) {
     await loreStore.deleteEntry(currentSession.value.name, id);
+  }
+  if (entryCategory.value === "skills") {
+    await loadSkillEntryOptions(currentSession.value.name);
   }
   selectedEntryIds.value = [];
   if (activeEntryId.value && ids.includes(activeEntryId.value)) {
@@ -1352,6 +1510,7 @@ function resetCharacterOverlay() {
   characterOverlayFields.value = [];
   characterOverlaySections.value = [];
   characterOverlayContent.value = "";
+  selectedCharacterFormId.value = null;
 }
 
 function resetCharacterListState() {
@@ -1364,9 +1523,18 @@ function characterModeLabel(character: CharacterData): string {
   return character.constant ? t("rstPanel.mode.const_short") : t("rstPanel.mode.rst_short");
 }
 
+function characterFormMeta(character: CharacterData): string {
+  const activeForm = resolveCharacterActiveForm(character);
+  return formatText("rstPanel.characters.form_meta", {
+    active: activeForm?.form_name || t("rstPanel.overlay.character.form.none"),
+    count: character.forms.length,
+  });
+}
+
 interface CharacterOverlayValues {
   name: string;
   race: string;
+  gender: string;
   strength: number;
   form_name: string;
   is_default: boolean;
@@ -1415,6 +1583,13 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
       type: "text",
       value: character.race,
       placeholder: t("rstPanel.overlay.character.placeholder.race"),
+    },
+    {
+      key: "gender",
+      label: t("rstPanel.overlay.character.field.gender"),
+      type: "text",
+      value: character.gender,
+      placeholder: t("rstPanel.overlay.character.placeholder.gender"),
     },
     {
       key: "strength",
@@ -1510,8 +1685,10 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
     {
       key: "element",
       label: t("rstPanel.overlay.character.field.element"),
-      type: "textarea",
-      value: character.element.join(", "),
+      type: "select",
+      value: [...character.element],
+      options: skillEntryOptions.value,
+      multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.element"),
       wide: true,
       description: t("rstPanel.overlay.character.description.element"),
@@ -1519,8 +1696,10 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
     {
       key: "skills",
       label: t("rstPanel.overlay.character.field.skills"),
-      type: "textarea",
-      value: character.skills.join(", "),
+      type: "select",
+      value: [...character.skills],
+      options: skillEntryOptions.value,
+      multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.skills"),
       wide: true,
       description: t("rstPanel.overlay.character.description.skills"),
@@ -1648,6 +1827,7 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
       fields: [
         fieldByKey.get("name")!,
         fieldByKey.get("race")!,
+        fieldByKey.get("gender")!,
         fieldByKey.get("birth")!,
         fieldByKey.get("homeland")!,
       ],
@@ -1707,10 +1887,12 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
 function openNewCharacterOverlay() {
   editingCharacterId.value = null;
   activeCharacterId.value = null;
+  selectedCharacterFormId.value = null;
   characterOverlayTitle.value = t("rstPanel.overlay.character.create_title");
   const config = buildCharacterOverlayConfig({
     name: "",
     race: "",
+    gender: "",
     strength: 10,
     form_name: "默认形态",
     is_default: true,
@@ -1746,7 +1928,7 @@ function openNewCharacterOverlay() {
   characterOverlayVisible.value = true;
 }
 
-function openCharacterOverlay(characterId: string) {
+function openCharacterOverlay(characterId: string, preferredFormId?: string) {
   const target = loreStore.characters.find((item) => item.character_id === characterId);
   if (!target) {
     return;
@@ -1756,10 +1938,14 @@ function openCharacterOverlay(characterId: string) {
   characterOverlayTitle.value = formatText("rstPanel.overlay.character.edit_title", {
     name: target.name,
   });
-  const activeForm = resolveCharacterActiveForm(target);
+  const activeForm = preferredFormId
+    ? (target.forms.find((form) => form.form_id === preferredFormId) ?? resolveCharacterActiveForm(target))
+    : resolveCharacterActiveForm(target);
+  selectedCharacterFormId.value = activeForm?.form_id ?? null;
   const config = buildCharacterOverlayConfig({
     name: target.name,
     race: target.race,
+    gender: target.gender ?? "",
     strength: target.strength,
     form_name: activeForm?.form_name ?? "默认形态",
     is_default: activeForm?.is_default ?? true,
@@ -1802,6 +1988,7 @@ function closeCharacterOverlay() {
   characterOverlayFields.value = [];
   characterOverlaySections.value = [];
   characterOverlayContent.value = "";
+  selectedCharacterFormId.value = null;
 }
 
 async function handleCharacterOverlaySave(data: {
@@ -1820,6 +2007,7 @@ async function handleCharacterOverlaySave(data: {
   const payload = {
     name,
     race,
+    gender: String(data.fields.gender ?? "").trim(),
     strength: parseStrength(data.fields.strength),
     birth: String(data.fields.birth ?? "").trim(),
     homeland: String(data.fields.homeland ?? "").trim(),
@@ -1843,8 +2031,8 @@ async function handleCharacterOverlaySave(data: {
     toughness: parseNonNegativeInt(data.fields.toughness, 10),
     weak: parseDelimitedText(String(data.fields.weak ?? "")),
     resist: parseDelimitedText(String(data.fields.resist ?? "")),
-    element: parseDelimitedText(String(data.fields.element ?? "")),
-    skills: parseDelimitedText(String(data.fields.skills ?? "")),
+    element: parseIdList(data.fields.element),
+    skills: parseIdList(data.fields.skills),
     penetration: parseDelimitedText(String(data.fields.penetration ?? "")),
     clothing: String(data.fields.clothing ?? "").trim(),
     body: String(data.fields.body ?? "").trim(),
@@ -1871,6 +2059,76 @@ async function handleCharacterOverlaySave(data: {
   }
   activeCharacterId.value = result.character_id;
   closeCharacterOverlay();
+}
+
+function buildNewFormName(character: CharacterData): string {
+  const prefix = t("rstPanel.overlay.character.form.name_prefix");
+  const existingNames = new Set(
+    character.forms.map((form) => form.form_name.trim().toLowerCase()).filter(Boolean),
+  );
+  for (let index = 2; index <= 999; index += 1) {
+    const candidate = `${prefix} ${index}`;
+    if (!existingNames.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+  }
+  return `${prefix} ${Date.now()}`;
+}
+
+async function switchCharacterForm() {
+  if (!currentSession.value?.name || !editingCharacter.value || !selectedCharacterFormId.value) {
+    return;
+  }
+  if (selectedCharacterFormId.value === editingCharacter.value.active_form_id) {
+    return;
+  }
+  const switched = await loreStore.setCharacterActiveForm(
+    currentSession.value.name,
+    editingCharacter.value.character_id,
+    selectedCharacterFormId.value,
+  );
+  if (!switched) {
+    return;
+  }
+  openCharacterOverlay(switched.character_id, selectedCharacterFormId.value);
+}
+
+async function createCharacterForm() {
+  if (!currentSession.value?.name || !editingCharacter.value) {
+    return;
+  }
+  const character = editingCharacter.value;
+  const created = await loreStore.addCharacterForm(currentSession.value.name, character.character_id, {
+    form_name: buildNewFormName(character),
+    is_default: false,
+  });
+  if (!created) {
+    return;
+  }
+  const switched = await loreStore.setCharacterActiveForm(
+    currentSession.value.name,
+    character.character_id,
+    created.form_id,
+  );
+  if (!switched) {
+    return;
+  }
+  openCharacterOverlay(switched.character_id, created.form_id);
+}
+
+async function deleteCharacterForm() {
+  if (!currentSession.value?.name || !editingCharacter.value || !selectedCharacterFormId.value) {
+    return;
+  }
+  const deleted = await loreStore.deleteCharacterForm(
+    currentSession.value.name,
+    editingCharacter.value.character_id,
+    selectedCharacterFormId.value,
+  );
+  if (!deleted) {
+    return;
+  }
+  openCharacterOverlay(editingCharacter.value.character_id);
 }
 
 async function handleCharacterToggle(characterId: string, enabled: boolean) {
@@ -1947,6 +2205,7 @@ async function confirmCharacterCopy() {
     const created = await loreStore.createCharacter(characterCopyTarget.value, {
       name: character.name,
       race: character.race,
+      gender: character.gender,
       strength: character.strength,
       birth: character.birth,
       homeland: character.homeland,
@@ -2148,6 +2407,7 @@ async function refreshLorePanelData(sessionName: string) {
   await Promise.all([
     loreStore.loadEntries(sessionName, entryCategory.value),
     loreStore.loadCharacters(sessionName),
+    loadSkillEntryOptions(sessionName),
   ]);
 }
 
@@ -2482,6 +2742,41 @@ function actionLabel(action: string): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.character-form-meta {
+  font-size: 11px;
+  color: var(--rst-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.character-form-toolbar {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--rst-bg-topbar);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.character-form-toolbar-summary {
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.character-form-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.character-form-toolbar-actions :deep(.n-select) {
+  width: 220px;
+  max-width: 100%;
 }
 
 .entry-toggle {
@@ -2999,6 +3294,10 @@ function actionLabel(action: string): string {
   .scheduler-actions-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .character-form-toolbar-actions :deep(.n-select) {
+    width: 100%;
   }
 }
 </style>

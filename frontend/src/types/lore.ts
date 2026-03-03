@@ -81,6 +81,7 @@ export interface CharacterData {
   character_id: string;
   name: string;
   race: string;
+  gender: string;
   strength: number;
   birth: string;
   homeland: string;
@@ -163,6 +164,7 @@ export interface CharacterReorder {
 export interface CharacterCreate {
   name: string;
   race: string;
+  gender?: string;
   strength?: number;
   birth?: string;
   homeland?: string;
@@ -180,6 +182,7 @@ export interface CharacterCreate {
 export interface CharacterUpdate {
   name?: string;
   race?: string;
+  gender?: string;
   strength?: number;
   birth?: string;
   homeland?: string;

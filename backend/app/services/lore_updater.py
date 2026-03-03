@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from time import perf_counter
 from typing import Any
 
@@ -44,6 +44,9 @@ class LoreUpdater:
         get_session_storage(session_name)
         return LoreStore(get_session_dir(session_name))
 
+    def _utc_iso(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
+
     def _select_messages(self, messages: list[Message], scan_depth: int) -> list[Message]:
         visible = [msg for msg in messages if msg.visible]
         if scan_depth < 0:
@@ -80,7 +83,7 @@ class LoreUpdater:
         prompt: str,
         stage: str,
     ) -> str:
-        request_time = datetime.utcnow().isoformat()
+        request_time = self._utc_iso()
         started_at = perf_counter()
         provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
@@ -107,7 +110,7 @@ class LoreUpdater:
                 stream=False,
             )
         except ProviderError as exc:
-            response_time = datetime.utcnow().isoformat()
+            response_time = self._utc_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
             log_service.add_log(
                 LogEntry(
@@ -130,7 +133,7 @@ class LoreUpdater:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            response_time = datetime.utcnow().isoformat()
+            response_time = self._utc_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
             log_service.add_log(
                 LogEntry(
@@ -149,7 +152,7 @@ class LoreUpdater:
             )
             raise
 
-        response_time = datetime.utcnow().isoformat()
+        response_time = self._utc_iso()
         duration_ms = int((perf_counter() - started_at) * 1000)
         log_service.add_log(
             LogEntry(
@@ -249,6 +252,7 @@ class LoreUpdater:
             character_id=generate_id(),
             name=name.strip() or "未命名角色",
             race="未知",
+            gender="",
             strength=10,
             birth="",
             homeland="",

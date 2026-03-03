@@ -165,19 +165,21 @@ async def test_character_and_memory_crud(async_client, sample_api_config) -> Non
 
     created_character = await async_client.post(
         "/sessions/LoreCharSession/lores/characters",
-        json={"name": "艾琳娜", "race": "人类", "role": "游侠"},
+        json={"name": "艾琳娜", "race": "人类", "gender": "女", "role": "游侠"},
     )
     assert created_character.status_code == 201
     created_payload = created_character.json()
     character_id = created_payload["character_id"]
     assert created_payload["strength"] == 10
+    assert created_payload["gender"] == "女"
 
     updated_character = await async_client.put(
         f"/sessions/LoreCharSession/lores/characters/{character_id}",
-        json={"strength": 16},
+        json={"strength": 16, "gender": "女性"},
     )
     assert updated_character.status_code == 200
     assert updated_character.json()["strength"] == 16
+    assert updated_character.json()["gender"] == "女性"
 
     created_memory = await async_client.post(
         f"/sessions/LoreCharSession/lores/characters/{character_id}/memories",

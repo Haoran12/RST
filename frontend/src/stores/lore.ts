@@ -3,10 +3,12 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
 import {
+  addForm,
   createCharacter,
   createEntry,
   deleteCharacter,
   deleteEntry,
+  deleteForm,
   getSchedulerTemplate,
   getScheduleStatus,
   getSyncStatus,
@@ -15,6 +17,7 @@ import {
   listEntries,
   reorderCharacters,
   reorderEntries,
+  setActiveForm,
   triggerSchedule,
   triggerSync,
   updateCharacter,
@@ -32,6 +35,7 @@ import type {
   CharacterReorder,
   CharacterUpdate,
   ConversionReport,
+  FormCreate,
   FormUpdate,
   LoreCategory,
   LoreEntry,
@@ -264,6 +268,100 @@ export const useLoreStore = defineStore("lore", () => {
     }
   }
 
+  async function addCharacterFormAction(
+    sessionName: string,
+    characterId: string,
+    payload: FormCreate,
+  ): Promise<CharacterForm | null> {
+    loading.value = true;
+    try {
+      const createdForm = await addForm(sessionName, characterId, payload);
+      characters.value = characters.value.map((character) => {
+        if (character.character_id !== characterId) {
+          return character;
+        }
+        const forms = payload.is_default
+          ? [
+              ...character.forms.map((form) => ({ ...form, is_default: false })),
+              createdForm,
+            ]
+          : [...character.forms, createdForm];
+        return {
+          ...character,
+          forms,
+          active_form_id:
+            payload.is_default || !character.active_form_id
+              ? createdForm.form_id
+              : character.active_form_id,
+        };
+      });
+      return createdForm;
+    } catch (error) {
+      message.error(parseApiError(error));
+      return null;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function setCharacterActiveFormAction(
+    sessionName: string,
+    characterId: string,
+    formId: string,
+  ): Promise<CharacterData | null> {
+    loading.value = true;
+    try {
+      const updated = await setActiveForm(sessionName, characterId, formId);
+      characters.value = characters.value.map((character) =>
+        character.character_id === characterId ? updated : character,
+      );
+      return updated;
+    } catch (error) {
+      message.error(parseApiError(error));
+      return null;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function deleteCharacterFormAction(
+    sessionName: string,
+    characterId: string,
+    formId: string,
+  ): Promise<boolean> {
+    loading.value = true;
+    try {
+      await deleteForm(sessionName, characterId, formId);
+      characters.value = characters.value.map((character) => {
+        if (character.character_id !== characterId) {
+          return character;
+        }
+        const forms = character.forms.filter((form) => form.form_id !== formId);
+        if (forms.length === 0) {
+          return character;
+        }
+        if (!forms.some((form) => form.is_default)) {
+          forms[0] = { ...forms[0], is_default: true };
+        }
+        const nextActiveFormId =
+          character.active_form_id === formId
+            ? (forms.find((form) => form.is_default)?.form_id ?? forms[0].form_id)
+            : character.active_form_id;
+        return {
+          ...character,
+          forms,
+          active_form_id: nextActiveFormId,
+        };
+      });
+      return true;
+    } catch (error) {
+      message.error(parseApiError(error));
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function deleteCharacterAction(
     sessionName: string,
     characterId: string,
@@ -370,7 +468,10 @@ export const useLoreStore = defineStore("lore", () => {
     loadCharacters,
     createCharacter: createCharacterAction,
     updateCharacter: updateCharacterAction,
+    addCharacterForm: addCharacterFormAction,
+    setCharacterActiveForm: setCharacterActiveFormAction,
     updateCharacterForm: updateCharacterFormAction,
+    deleteCharacterForm: deleteCharacterFormAction,
     deleteCharacter: deleteCharacterAction,
     reorderCharacters: reorderCharactersAction,
     importLore: importLoreAction,

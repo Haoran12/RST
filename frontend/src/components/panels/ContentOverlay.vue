@@ -10,6 +10,8 @@
       </header>
 
       <div class="overlay-body">
+        <slot name="body-prefix" />
+
         <div
           v-if="
             (renderedSections.length > 0 || bottomFields.length > 0) &&
@@ -103,10 +105,14 @@
                   />
                   <n-select
                     v-else-if="field.type === 'select'"
-                    v-model:value="fieldValues[field.key] as string | number"
+                    v-model:value="fieldValues[field.key] as string | number | Array<string | number>"
                     size="small"
                     :options="field.options ?? []"
                     :disabled="field.readonly"
+                    :multiple="Boolean(field.multiple)"
+                    :filterable="Boolean(field.multiple)"
+                    :clearable="true"
+                    :max-tag-count="field.multiple ? 'responsive' : undefined"
                   />
                   <n-switch
                     v-else
@@ -186,10 +192,14 @@
                 />
                 <n-select
                   v-else-if="field.type === 'select'"
-                  v-model:value="fieldValues[field.key] as string | number"
+                  v-model:value="fieldValues[field.key] as string | number | Array<string | number>"
                   size="small"
                   :options="field.options ?? []"
                   :disabled="field.readonly"
+                  :multiple="Boolean(field.multiple)"
+                  :filterable="Boolean(field.multiple)"
+                  :clearable="true"
+                  :max-tag-count="field.multiple ? 'responsive' : undefined"
                 />
                 <n-switch
                   v-else
@@ -275,6 +285,7 @@ interface OverlayField {
   value: unknown;
   readonly?: boolean;
   options?: SelectOption[];
+  multiple?: boolean;
   placeholder?: string;
   description?: string;
   min?: number;

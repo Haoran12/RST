@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from time import perf_counter
 
 from app.models import generate_id
@@ -30,6 +30,9 @@ class LoreScheduler:
 
     def __init__(self) -> None:
         self._engines: dict[str, LoreNlpEngine] = {}
+
+    def _utc_iso(self) -> str:
+        return datetime.now(timezone.utc).isoformat()
 
     def _store(self, session_name: str) -> LoreStore:
         get_session_storage(session_name)
@@ -160,6 +163,7 @@ class LoreScheduler:
                 profile = [
                     f"[CHARACTER] {char_file.data.name}",
                     f"race: {char_file.data.race}",
+                    f"gender: {char_file.data.gender}",
                     f"role: {char_file.data.role}",
                     f"objective: {char_file.data.objective}",
                 ]
@@ -194,7 +198,7 @@ class LoreScheduler:
         api_config: ApiConfig,
         prompt: str,
     ) -> str:
-        request_time = datetime.utcnow().isoformat()
+        request_time = self._utc_iso()
         started_at = perf_counter()
         provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
@@ -221,7 +225,7 @@ class LoreScheduler:
                 stream=False,
             )
         except ProviderError as exc:
-            response_time = datetime.utcnow().isoformat()
+            response_time = self._utc_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
             log_service.add_log(
                 LogEntry(
@@ -244,7 +248,7 @@ class LoreScheduler:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            response_time = datetime.utcnow().isoformat()
+            response_time = self._utc_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
             log_service.add_log(
                 LogEntry(
@@ -263,7 +267,7 @@ class LoreScheduler:
             )
             raise
 
-        response_time = datetime.utcnow().isoformat()
+        response_time = self._utc_iso()
         duration_ms = int((perf_counter() - started_at) * 1000)
         log_service.add_log(
             LogEntry(
