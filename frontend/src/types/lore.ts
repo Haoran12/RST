@@ -63,6 +63,7 @@ export interface CharacterForm {
   physique: string;
   features: string;
   vitality_max: number;
+  strength: number;
   mana_potency: number;
   toughness: number;
   weak: string[];
@@ -82,7 +83,6 @@ export interface CharacterData {
   name: string;
   race: string;
   gender: string;
-  strength: number;
   birth: string;
   homeland: string;
   aliases: string[];
@@ -165,7 +165,6 @@ export interface CharacterCreate {
   name: string;
   race: string;
   gender?: string;
-  strength?: number;
   birth?: string;
   homeland?: string;
   aliases?: string[];
@@ -183,7 +182,6 @@ export interface CharacterUpdate {
   name?: string;
   race?: string;
   gender?: string;
-  strength?: number;
   birth?: string;
   homeland?: string;
   aliases?: string[];
@@ -203,6 +201,7 @@ export interface FormCreate {
   physique?: string;
   features?: string;
   vitality_max?: number;
+  strength?: number;
   mana_potency?: number;
   toughness?: number;
   weak?: string[];
@@ -218,6 +217,7 @@ export interface FormUpdate {
   physique?: string;
   features?: string;
   vitality_max?: number;
+  strength?: number;
   mana_potency?: number;
   toughness?: number;
   weak?: string[];

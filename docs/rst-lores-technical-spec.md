@@ -145,6 +145,7 @@ class CharacterData(BaseModel):
 
     # --- 基础固定字段 ---
     name: str                        # 人物名
+    gender: str                      # 性别(限定选项)
     race: str                        # 种族（人/灵/妖/邪祟）
     birth: date                      # 出生年月日
     homeland: str = ""               # 故乡

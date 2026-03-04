@@ -13,6 +13,13 @@ from app.models.session import ChatAttachment, Message
 from app.providers.base import ProviderError
 from app.providers.registry import get_provider
 from app.services.api_config_service import ApiConfigNotFoundError, get_api_config_storage
+from app.services.lore_date import (
+    FantasyDate,
+    compute_age_at,
+    extract_scene_date,
+    is_birthday_today,
+    parse_fantasy_date,
+)
 from app.services.lore_scheduler import lore_scheduler
 from app.services.lore_updater import lore_updater
 from app.services.preset_service import PresetNotFoundError, get_preset_storage
@@ -73,7 +80,10 @@ def _load_history(store: MessageStore, mem_length: int) -> list[Message]:
     return store.load_recent(mem_length)
 
 
-def _render_character_for_st_mode(character: CharacterData) -> str:
+def _render_character_for_st_mode(
+    character: CharacterData,
+    scene_date: FantasyDate | None,
+) -> str:
     active_form = next(
         (form for form in character.forms if form.form_id == character.active_form_id),
         character.forms[0] if character.forms else None,
@@ -82,12 +92,19 @@ def _render_character_for_st_mode(character: CharacterData) -> str:
         f"# Character: {character.name}",
         f"race: {character.race}",
         f"gender: {character.gender}",
-        f"strength: {character.strength}",
+        f"birth: {character.birth}",
         f"role: {character.role}",
         f"faction: {character.faction}",
         f"objective: {character.objective}",
         f"personality: {character.personality}",
     ]
+    birth_date = parse_fantasy_date(character.birth)
+    if birth_date is not None and scene_date is not None:
+        lines.append(f"age: {compute_age_at(birth_date, scene_date)}")
+        lines.append(
+            "birthday_today: "
+            f"{'yes' if is_birthday_today(birth_date, scene_date) else 'no'}"
+        )
     if active_form is not None:
         lines.extend(
             [
@@ -105,6 +122,8 @@ def st_mode_inject(entries: list[LoreEntry | CharacterData], messages: list[Mess
     """
     visible_messages = [msg for msg in messages if msg.visible]
     context = "\n".join(msg.content for msg in visible_messages).lower()
+    scene_text = "\n".join(msg.content for msg in visible_messages)
+    scene_date = extract_scene_date(scene_text)
     if not context and not entries:
         return ""
 
@@ -141,7 +160,7 @@ def st_mode_inject(entries: list[LoreEntry | CharacterData], messages: list[Mess
             matched = any(keyword.strip().lower() in context for keyword in keywords if keyword.strip())
         if matched and entry.character_id not in seen:
             seen.add(entry.character_id)
-            selected_blocks.append(_render_character_for_st_mode(entry))
+            selected_blocks.append(_render_character_for_st_mode(entry, scene_date))
 
     return "\n\n".join(block for block in selected_blocks if block.strip())
 

@@ -56,6 +56,9 @@ import RstLorePanel from "@/components/panels/RstLorePanel.vue";
 import SessionPanel from "@/components/panels/SessionPanel.vue";
 import { useI18n } from "@/composables/useI18n";
 
+const REQUEST_OPEN_CHARACTER_OVERLAY_EVENT = "rst-request-open-character-overlay";
+const OPEN_CHARACTER_OVERLAY_EVENT = "rst-open-character-overlay";
+
 type PanelType =
   | "session"
   | "api"
@@ -127,14 +130,42 @@ function handleChatAreaClick() {
   activePanel.value = null;
 }
 
+function handleRequestOpenCharacterOverlay(event: Event) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const customEvent = event as CustomEvent<Record<string, unknown> | undefined>;
+  const characterId = String(customEvent.detail?.characterId ?? "").trim();
+  if (!characterId) {
+    return;
+  }
+  activePanel.value = "rst-lore";
+  // Re-dispatch after panel switch so RstLorePanel can consume the event.
+  window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent(OPEN_CHARACTER_OVERLAY_EVENT, {
+        detail: customEvent.detail ?? { characterId },
+      }),
+    );
+  }, 0);
+}
+
 onMounted(() => {
   window.addEventListener("keydown", handleKeydown);
   window.addEventListener("rst-chat-area-click", handleChatAreaClick as EventListener);
+  window.addEventListener(
+    REQUEST_OPEN_CHARACTER_OVERLAY_EVENT,
+    handleRequestOpenCharacterOverlay as EventListener,
+  );
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", handleKeydown);
   window.removeEventListener("rst-chat-area-click", handleChatAreaClick as EventListener);
+  window.removeEventListener(
+    REQUEST_OPEN_CHARACTER_OVERLAY_EVENT,
+    handleRequestOpenCharacterOverlay as EventListener,
+  );
 });
 </script>
 

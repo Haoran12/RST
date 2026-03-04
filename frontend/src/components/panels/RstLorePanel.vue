@@ -710,7 +710,7 @@
   </section>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import {
   NButton,
@@ -796,6 +796,13 @@ interface SyncOverlayItem {
   memory_event: string | null;
 }
 
+interface OpenCharacterOverlayRequest {
+  characterId: string;
+  preferredFormId?: string | null;
+}
+
+const OPEN_CHARACTER_OVERLAY_EVENT = "rst-open-character-overlay";
+
 const sessionStore = useSessionStore();
 const loreStore = useLoreStore();
 const { t } = useI18n();
@@ -854,6 +861,7 @@ const selectedCharacterIds = ref<string[]>([]);
 const characterCopyModalVisible = ref(false);
 const characterCopyTarget = ref<string | null>(null);
 const skillEntryOptions = ref<Array<{ label: string; value: string }>>([]);
+const pendingCharacterOverlayRequest = ref<OpenCharacterOverlayRequest | null>(null);
 
 const templateForm = reactive({
   confirm_prompt: "",
@@ -1026,17 +1034,72 @@ const syncOverlayItems = computed<SyncOverlayItem[]>(() => {
   return fallbackItems;
 });
 
+function parseOpenCharacterOverlayRequest(event: Event): OpenCharacterOverlayRequest | null {
+  const customEvent = event as CustomEvent<Record<string, unknown> | undefined>;
+  const characterId = String(customEvent.detail?.characterId ?? "").trim();
+  if (!characterId) {
+    return null;
+  }
+  const preferredFormRaw = customEvent.detail?.preferredFormId;
+  const preferredFormId =
+    typeof preferredFormRaw === "string" && preferredFormRaw.trim().length > 0
+      ? preferredFormRaw.trim()
+      : null;
+  return {
+    characterId,
+    preferredFormId,
+  };
+}
+
+function tryOpenCharacterOverlayFromRequest(request: OpenCharacterOverlayRequest): boolean {
+  const exists = loreStore.characters.some(
+    (character) => character.character_id === request.characterId,
+  );
+  if (!exists) {
+    return false;
+  }
+  activeTab.value = "characters";
+  openCharacterOverlay(request.characterId, request.preferredFormId ?? undefined);
+  return true;
+}
+
+function handleOpenCharacterOverlayEvent(event: Event) {
+  const request = parseOpenCharacterOverlayRequest(event);
+  if (!request) {
+    return;
+  }
+  if (tryOpenCharacterOverlayFromRequest(request)) {
+    pendingCharacterOverlayRequest.value = null;
+    return;
+  }
+  pendingCharacterOverlayRequest.value = request;
+}
+
 onMounted(async () => {
+  if (typeof window !== "undefined") {
+    window.addEventListener(OPEN_CHARACTER_OVERLAY_EVENT, handleOpenCharacterOverlayEvent as EventListener);
+  }
   if (sessions.value.length === 0) {
     await sessionStore.loadSessions();
   }
   await bootstrapCurrentSession();
 });
 
+onBeforeUnmount(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.removeEventListener(
+    OPEN_CHARACTER_OVERLAY_EVENT,
+    handleOpenCharacterOverlayEvent as EventListener,
+  );
+});
+
 watch(
   () => currentSession.value?.name,
   async () => {
     importRecoveryToken.value += 1;
+    pendingCharacterOverlayRequest.value = null;
     await bootstrapCurrentSession();
   },
 );
@@ -1071,6 +1134,12 @@ watch(
     }
     if (editingCharacterId.value && !validIds.has(editingCharacterId.value)) {
       closeCharacterOverlay();
+    }
+    if (
+      pendingCharacterOverlayRequest.value &&
+      tryOpenCharacterOverlayFromRequest(pendingCharacterOverlayRequest.value)
+    ) {
+      pendingCharacterOverlayRequest.value = null;
     }
   },
   { immediate: true, deep: true },
@@ -1215,7 +1284,7 @@ function parseNonNegativeInt(value: unknown, fallback: number): number {
 }
 
 function parseStrength(value: unknown): number {
-  return parseNonNegativeInt(value, 10);
+  return parseNonNegativeInt(value, 100);
 }
 
 function toSkillEntryOptions(entries: LoreEntry[]): Array<{ label: string; value: string }> {
@@ -1906,14 +1975,14 @@ function openNewCharacterOverlay() {
     name: "",
     race: "",
     gender: "",
-    strength: 10,
+    strength: 100,
     form_name: "默认形态",
     is_default: true,
     physique: "",
     features: "",
     vitality_max: 100,
     mana_potency: 100,
-    toughness: 10,
+    toughness: 100,
     weak: [],
     resist: [],
     element: [],
@@ -1959,14 +2028,14 @@ function openCharacterOverlay(characterId: string, preferredFormId?: string) {
     name: target.name,
     race: target.race,
     gender: target.gender ?? "",
-    strength: target.strength,
+    strength: activeForm?.strength ?? 100,
     form_name: activeForm?.form_name ?? "默认形态",
     is_default: activeForm?.is_default ?? true,
     physique: activeForm?.physique ?? "",
     features: activeForm?.features ?? "",
     vitality_max: activeForm?.vitality_max ?? 100,
     mana_potency: activeForm?.mana_potency ?? 100,
-    toughness: activeForm?.toughness ?? 10,
+    toughness: activeForm?.toughness ?? 100,
     weak: [...(activeForm?.weak ?? [])],
     resist: [...(activeForm?.resist ?? [])],
     element: [...(activeForm?.element ?? [])],
@@ -2021,7 +2090,6 @@ async function handleCharacterOverlaySave(data: {
     name,
     race,
     gender: String(data.fields.gender ?? "").trim(),
-    strength: parseStrength(data.fields.strength),
     birth: String(data.fields.birth ?? "").trim(),
     homeland: String(data.fields.homeland ?? "").trim(),
     aliases: parseDelimitedText(String(data.fields.aliases ?? "")),
@@ -2040,8 +2108,9 @@ async function handleCharacterOverlaySave(data: {
     physique: String(data.fields.physique ?? "").trim(),
     features: String(data.fields.features ?? "").trim(),
     vitality_max: parseNonNegativeInt(data.fields.vitality_max, 100),
+    strength: parseStrength(data.fields.strength),
     mana_potency: parseNonNegativeInt(data.fields.mana_potency, 100),
-    toughness: parseNonNegativeInt(data.fields.toughness, 10),
+    toughness: parseNonNegativeInt(data.fields.toughness, 100),
     weak: parseIdList(data.fields.weak),
     resist: parseIdList(data.fields.resist),
     element: parseIdList(data.fields.element),
@@ -2219,7 +2288,6 @@ async function confirmCharacterCopy() {
       name: character.name,
       race: character.race,
       gender: character.gender,
-      strength: character.strength,
       birth: character.birth,
       homeland: character.homeland,
       aliases: [...character.aliases],
@@ -3314,4 +3382,3 @@ function actionLabel(action: string): string {
   }
 }
 </style>
-

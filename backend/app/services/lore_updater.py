@@ -60,8 +60,13 @@ class LoreUpdater:
         chunks: list[str] = []
         for entry in store.load_all_entries():
             if isinstance(entry, CharacterData):
+                active_form = next(
+                    (f for f in entry.forms if f.form_id == entry.active_form_id),
+                    entry.forms[0] if entry.forms else None,
+                )
+                strength_val = active_form.strength if active_form else 100
                 chunks.append(
-                    f"[character] {entry.name}: strength={entry.strength}, role={entry.role}, objective={entry.objective}"
+                    f"[character] {entry.name}: strength={strength_val}, role={entry.role}, objective={entry.objective}"
                 )
             else:
                 content = entry.content.strip().replace("\n", " ")
@@ -253,7 +258,6 @@ class LoreUpdater:
             name=name.strip() or "未命名角色",
             race="未知",
             gender="",
-            strength=10,
             birth="",
             homeland="",
             aliases=[],

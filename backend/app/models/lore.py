@@ -135,8 +135,9 @@ class CharacterForm(BaseModel):
     physique: str = ""
     features: str = ""
     vitality_max: int = Field(default=100, ge=0)
+    strength: int = Field(default=100, ge=0)
     mana_potency: int = Field(default=100, ge=0)
-    toughness: int = Field(default=10, ge=0)
+    toughness: int = Field(default=100, ge=0)
     weak: list[str] = Field(default_factory=list)
     resist: list[str] = Field(default_factory=list)
     element: list[str] = Field(default_factory=list)
@@ -156,7 +157,6 @@ class CharacterData(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     race: str = Field(min_length=1, max_length=64)
     gender: str = ""
-    strength: int = Field(default=10, ge=0)
     birth: str = ""
     homeland: str = ""
 
@@ -279,7 +279,6 @@ class CharacterCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     race: str = Field(min_length=1, max_length=64)
     gender: str = ""
-    strength: int = Field(default=10, ge=0)
     birth: str = ""
     homeland: str = ""
     aliases: list[str] = Field(default_factory=list)
@@ -297,7 +296,6 @@ class CharacterUpdate(BaseModel):
     name: str | None = None
     race: str | None = None
     gender: str | None = None
-    strength: int | None = Field(default=None, ge=0)
     birth: str | None = None
     homeland: str | None = None
     aliases: list[str] | None = None
@@ -326,8 +324,9 @@ class FormCreate(BaseModel):
     physique: str = ""
     features: str = ""
     vitality_max: int = Field(default=100, ge=0)
+    strength: int = Field(default=100, ge=0)
     mana_potency: int = Field(default=100, ge=0)
-    toughness: int = Field(default=10, ge=0)
+    toughness: int = Field(default=100, ge=0)
     weak: list[str] = Field(default_factory=list)
     resist: list[str] = Field(default_factory=list)
     element: list[str] = Field(default_factory=list)
@@ -341,6 +340,7 @@ class FormUpdate(BaseModel):
     physique: str | None = None
     features: str | None = None
     vitality_max: int | None = Field(default=None, ge=0)
+    strength: int | None = Field(default=None, ge=0)
     mana_potency: int | None = Field(default=None, ge=0)
     toughness: int | None = Field(default=None, ge=0)
     weak: list[str] | None = None

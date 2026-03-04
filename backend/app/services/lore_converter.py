@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -32,6 +33,17 @@ from app.storage.encryption import EncryptionError, decrypt_api_key
 from app.storage.lore_store import LoreStore
 
 
+def _env_positive_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 class LoreConverter:
     """Convert legacy static Lore JSON into RST lore files."""
 
@@ -48,8 +60,11 @@ class LoreConverter:
     }
 
     _name_block_pattern = re.compile(r"(?im)^\s*name\s*:\s*.+$")
-    _llm_batch_max_items = 12
+    # Aim to minimize API request count (RPM pressure) by packing more characters per LLM call.
+    # Effective batch size is still bounded by prompt size and a max_tokens-based estimate.
+    _llm_batch_max_items = 48
     _llm_batch_max_chars = 48000
+    _llm_batch_tokens_per_item_estimate = 80
     _llm_single_fallback_budget_default = 2
 
     def _utc_iso(self) -> str:
@@ -80,6 +95,18 @@ class LoreConverter:
         self._llm_batch_prepared = False
         self._llm_batch_cache: dict[str, dict[str, Any]] = {}
         self._llm_single_fallback_budget = self._llm_single_fallback_budget_default
+        self._llm_batch_max_items = _env_positive_int(
+            "RST_LORE_IMPORT_LLM_BATCH_MAX_ITEMS",
+            self._llm_batch_max_items,
+        )
+        self._llm_batch_max_chars = _env_positive_int(
+            "RST_LORE_IMPORT_LLM_BATCH_MAX_CHARS",
+            self._llm_batch_max_chars,
+        )
+        self._llm_batch_tokens_per_item_estimate = _env_positive_int(
+            "RST_LORE_IMPORT_LLM_BATCH_TOKENS_PER_ITEM",
+            self._llm_batch_tokens_per_item_estimate,
+        )
         if self.llm_fallback and not self.llm_api_config_id:
             self._llm_ready = False
             self._llm_unavailable_reason = "LLM fallback requested but no API config id is available."
@@ -346,7 +373,7 @@ class LoreConverter:
         name = src.name.strip() or "Unnamed character"
         race = "Unknown"
         gender = ""
-        strength = 10
+        strength = 100
         birth = ""
         homeland = ""
         aliases: list[str] = []
@@ -415,12 +442,14 @@ class LoreConverter:
                 )
             action_notes.append(f"Parsed relationships: {len(relationship)}")
 
+        # Put strength onto the form instead of CharacterData
+        form.strength = strength
+
         character = CharacterData(
             character_id=generate_id(),
             name=name,
             race=race,
             gender=gender,
-            strength=strength,
             birth=birth,
             homeland=homeland,
             aliases=aliases,
@@ -484,8 +513,22 @@ class LoreConverter:
                 self._llm_unavailable_reported = True
             return
 
+        # Bound by (1) prompt-size char budget, and (2) a rough output max_tokens estimate.
+        # The prompt instructs a compact schema, so we can safely pack more items and reduce
+        # the total request count (mitigates RPM limit errors).
+        max_items = self._llm_batch_max_items
+        if self._llm_batch_tokens_per_item_estimate > 0:
+            max_items = min(
+                max_items,
+                max(1, api_config.max_tokens // self._llm_batch_tokens_per_item_estimate),
+            )
+
         pending_by_id = {src.id: src for src in candidates}
-        for batch in self._iter_llm_character_batches(candidates):
+        for batch in self._iter_llm_character_batches(
+            candidates,
+            max_items=max_items,
+            max_chars=self._llm_batch_max_chars,
+        ):
             prompt = self._render_llm_batch_character_prompt(batch)
             batch_ids = {src.id for src in batch}
 
@@ -511,15 +554,21 @@ class LoreConverter:
                     "LLM batch fallback did not return a valid structured object for this character.",
                 )
 
-    def _iter_llm_character_batches(self, candidates: list[SourceEntry]) -> list[list[SourceEntry]]:
+    def _iter_llm_character_batches(
+        self,
+        candidates: list[SourceEntry],
+        *,
+        max_items: int,
+        max_chars: int,
+    ) -> list[list[SourceEntry]]:
         batches: list[list[SourceEntry]] = []
         current: list[SourceEntry] = []
         current_chars = 0
 
         for src in candidates:
             approx = len(src.id) + len(src.name) + len(src.content) + 128
-            exceeds_size = current and (current_chars + approx > self._llm_batch_max_chars)
-            exceeds_count = current and (len(current) >= self._llm_batch_max_items)
+            exceeds_size = current and (current_chars + approx > max_chars)
+            exceeds_count = current and (len(current) >= max_items)
             if exceeds_size or exceeds_count:
                 batches.append(current)
                 current = []
@@ -548,23 +597,26 @@ class LoreConverter:
 
         joined = "\n\n---\n\n".join(sections)
         return (
-            "Convert each character lore section into structured JSON.\n"
-            "Output JSON only, no markdown and no extra text.\n"
-            "Required output schema:\n"
+            "Convert each character lore section into compact structured JSON.\n"
+            "Output JSON only. Do not output markdown or extra text.\n"
+            "Required schema:\n"
             "{\n"
             '  "items": [\n'
             '    { "source_id": "SOURCE_ID", "parsed": { ...structured fields... } }\n'
             "  ]\n"
             "}\n"
-            "Use source_id exactly as provided. Keep semantics faithful to source text.\n"
-            "Prefer parser-compatible keys when present:\n"
-            "name, species, race, strength, power, combat_power, age, birth, gender, homeland, origin, identities, aliases, "
-            "nicknames, faction, organization, objective, goal, personality, temperament, "
-            "social_deportment, habitual_mannerisms, relationships, relationship, appearance, "
-            "physique, overall_impression, facial_features, hair_style, features, clothing, "
-            "clothing_style, abilities, growth_experience, experience, key_events, "
-            "family_background, hobbies, vocal_characteristics, common_phrases, speech_style, "
-            "communication, accessories.\n"
+            "Rules:\n"
+            "- Use source_id exactly as provided.\n"
+            "- parsed must be a JSON object (not a string). Omit unknown fields.\n"
+            "- Keep the output compact to reduce token usage (avoid RPM-triggering multi-call batches).\n"
+            "- Do NOT include raw content or long narrative blocks; the original content is preserved elsewhere.\n"
+            "- Prefer these keys when present (only include if you can extract confidently):\n"
+            "  race/species, gender, birth/age, homeland/origin, aliases/nicknames,\n"
+            "  identities/identity, faction/organization, objective/goal,\n"
+            "  strength/power/combat_power, spirit_level/mana/mana_potency,\n"
+            "  relationships/relationship.\n"
+            "- Limit each string value to <= 120 characters (summarize if longer).\n"
+            "- Limit arrays to <= 10 items.\n"
             "Character sections:\n"
             f"{joined}"
         )
@@ -931,39 +983,107 @@ class LoreConverter:
             return None
         return parsed if isinstance(parsed, dict) else None
 
+    # ── Semantic key mapping tables ──────────────────────────────────────
+    # Each RST target field maps to a tuple of candidate source keys that
+    # will be tried in order (first match wins).  Keys are normalised to
+    # lower-case with underscores before lookup, so source YAML like
+    # "Growth_Experience", "灵力水平", or "speech style" all match.
+
+    _SEMANTIC_NAME_KEYS = ("name",)
+    _SEMANTIC_RACE_KEYS = ("species", "race", "种族")
+    _SEMANTIC_GENDER_KEYS = ("gender", "sex", "性别")
+    _SEMANTIC_BIRTH_KEYS = ("age", "birth", "年龄", "出生", "诞生")
+    _SEMANTIC_HOMELAND_KEYS = ("homeland", "origin", "故乡", "出身地")
+    _SEMANTIC_ALIASES_KEYS = ("aliases", "nicknames", "别名", "昵称", "别称")
+    _SEMANTIC_IDENTITY_KEYS = ("identities", "identity", "身份")
+    _SEMANTIC_FACTION_KEYS = ("faction", "organization", "organisation", "势力", "组织", "阵营")
+    _SEMANTIC_OBJECTIVE_KEYS = ("objective", "goal", "目标", "动机", "motivation")
+
+    _SEMANTIC_PERSONALITY_KEYS = (
+        "personality", "temperament", "social_deportment", "habitual_mannerisms",
+        "性格", "气质", "社交举止", "习惯动作",
+        "core", "surface", "inner",
+    )
+    _SEMANTIC_RELATIONSHIP_KEYS = ("relationships", "relationship", "关系")
+
+    # Form-level semantic keys
+    _SEMANTIC_MANA_KEYS = (
+        "mana_potency", "mana", "灵力水平", "灵力", "cultivation_base",
+        "spirit_level", "修为",
+    )
+    _SEMANTIC_STRENGTH_KEYS = ("strength", "power", "combat_power", "力量", "物理力量")
+
+    # Keys whose content should be merged into the personality/background block
+    _SEMANTIC_BACKGROUND_KEYS = (
+        "growth_experience", "experience", "family_background", "key_events",
+        "经历", "背景", "成长经历", "家庭背景", "关键事件",
+    )
+    _SEMANTIC_SPEECH_KEYS = (
+        "speech_style", "vocal_characteristics", "common_phrases", "communication",
+        "说话方式", "口头禅", "语言风格", "台词",
+    )
+    _SEMANTIC_HOBBY_KEYS = ("hobbies", "hobby", "爱好", "兴趣")
+    _SEMANTIC_ABILITY_KEYS = (
+        "abilities", "ability", "skills", "learned_skills", "innate_power",
+        "inherit_power", "gifted_power", "refined_skills", "esoteric_items",
+        "能力", "技能", "法术", "武功", "overall_summary",
+    )
+
     def _extract_character_fields(
         self,
         parsed: dict[str, Any],
         used_keys: set[str],
         source_name: str,
     ) -> tuple[str, str, str, int, str, str, list[str], str, str, str, str, list[Relationship], list[str]]:
-        name = source_name.strip() or self._as_text(self._take_value(parsed, used_keys, "name")) or "unnamed_character"
-        race = self._as_text(self._take_value(parsed, used_keys, "species", "race")) or "unknown"
-        gender = self._as_text(self._take_value(parsed, used_keys, "gender", "sex"))
+        name = source_name.strip() or self._as_text(self._take_value(parsed, used_keys, *self._SEMANTIC_NAME_KEYS)) or "unnamed_character"
+        race = self._as_text(self._take_value(parsed, used_keys, *self._SEMANTIC_RACE_KEYS)) or "unknown"
+        gender = self._as_text(self._take_value(parsed, used_keys, *self._SEMANTIC_GENDER_KEYS))
+        # strength now goes to form, but we still extract it here for backward compat return
         strength = self._to_non_negative_int(
-            self._take_value(parsed, used_keys, "strength", "power", "combat_power"),
-            default=10,
+            self._take_value(parsed, used_keys, *self._SEMANTIC_STRENGTH_KEYS),
+            default=100,
         )
-        birth = self._as_text(self._take_value(parsed, used_keys, "age", "birth"))
-        homeland = self._as_text(self._take_value(parsed, used_keys, "homeland", "origin"))
+        birth = self._as_text(self._take_value(parsed, used_keys, *self._SEMANTIC_BIRTH_KEYS))
+        homeland = self._as_text(self._take_value(parsed, used_keys, *self._SEMANTIC_HOMELAND_KEYS))
 
-        aliases_raw = self._take_value(parsed, used_keys, "aliases", "nicknames")
+        aliases_raw = self._take_value(parsed, used_keys, *self._SEMANTIC_ALIASES_KEYS)
         aliases = self._to_string_list(aliases_raw)
 
-        identities = self._take_value(parsed, used_keys, "identities")
+        identities = self._take_value(parsed, used_keys, *self._SEMANTIC_IDENTITY_KEYS)
         role = self._join_text(identities)
 
-        faction = self._as_text(self._take_value(parsed, used_keys, "faction", "organization"))
-        objective = self._as_text(self._take_value(parsed, used_keys, "objective", "goal"))
+        faction = self._as_text(self._take_value(parsed, used_keys, *self._SEMANTIC_FACTION_KEYS))
+        objective = self._as_text(self._take_value(parsed, used_keys, *self._SEMANTIC_OBJECTIVE_KEYS))
 
         personality_parts: list[str] = []
-        for key in ("personality", "temperament", "social_deportment", "habitual_mannerisms"):
+        for key in self._SEMANTIC_PERSONALITY_KEYS:
             value = self._take_value(parsed, used_keys, key)
             text = self._flatten_yaml_value(value) if value is not None else ""
             if text:
                 personality_parts.append(text)
 
-        relation_raw = self._take_value(parsed, used_keys, "relationships", "relationship")
+        # Merge background / experience blocks into personality
+        for key in self._SEMANTIC_BACKGROUND_KEYS:
+            value = self._take_value(parsed, used_keys, key)
+            text = self._flatten_yaml_value(value) if value is not None else ""
+            if text:
+                personality_parts.append(f"[{key}] {text}")
+
+        # Merge speech / vocal style
+        for key in self._SEMANTIC_SPEECH_KEYS:
+            value = self._take_value(parsed, used_keys, key)
+            text = self._flatten_yaml_value(value) if value is not None else ""
+            if text:
+                personality_parts.append(f"[{key}] {text}")
+
+        # Merge hobbies
+        for key in self._SEMANTIC_HOBBY_KEYS:
+            value = self._take_value(parsed, used_keys, key)
+            text = self._flatten_yaml_value(value) if value is not None else ""
+            if text:
+                personality_parts.append(f"[hobbies] {text}")
+
+        relation_raw = self._take_value(parsed, used_keys, *self._SEMANTIC_RELATIONSHIP_KEYS)
         relationships, relation_parse_failed = self._parse_relationships(relation_raw)
         if relation_parse_failed:
             personality_parts.append("Unparsed relationship source: " + "; ".join(relation_parse_failed))
@@ -985,6 +1105,17 @@ class LoreConverter:
             relation_parse_failed,
         )
 
+    _SEMANTIC_APPEARANCE_KEYS = (
+        "overall_impression", "physique", "facial_features", "hair_style",
+        "appearance", "外貌", "容貌", "体型", "面部特征", "发型",
+        "human_physique", "loong_physique", "human_facial_features",
+        "phys", "body_shape", "face_shape", "skin_tone", "eyes", "nose", "lips",
+    )
+    _SEMANTIC_FEATURES_KEYS = ("features", "特征", "特点")
+    _SEMANTIC_CLOTHING_KEYS = (
+        "clothing", "clothing_style", "服装", "衣着", "穿着", "accessories", "饰品",
+    )
+
     def _build_default_form(self, parsed: dict[str, Any], used_keys: set[str]) -> CharacterForm:
         form = CharacterForm(
             form_id=generate_id(),
@@ -993,17 +1124,59 @@ class LoreConverter:
         )
         form.physique = self._merge_appearance(parsed, used_keys)
 
-        features = self._flatten_yaml_value(self._take_value(parsed, used_keys, "features"))
-        if features:
-            form.features = features
+        features_parts: list[str] = []
+        for key in self._SEMANTIC_FEATURES_KEYS:
+            value = self._take_value(parsed, used_keys, key)
+            text = self._flatten_yaml_value(value) if value is not None else ""
+            if text:
+                features_parts.append(text)
 
-        clothing = self._flatten_yaml_value(
-            self._take_value(parsed, used_keys, "clothing", "clothing_style")
-        )
-        if clothing:
-            form.clothing = clothing
+        # Merge abilities into features
+        for key in self._SEMANTIC_ABILITY_KEYS:
+            value = self._take_value(parsed, used_keys, key)
+            text = self._flatten_yaml_value(value) if value is not None else ""
+            if text:
+                features_parts.append(f"[{key}] {text}")
+
+        if features_parts:
+            form.features = "\n".join(features_parts)
+
+        clothing_parts: list[str] = []
+        for key in self._SEMANTIC_CLOTHING_KEYS:
+            value = self._take_value(parsed, used_keys, key)
+            text = self._flatten_yaml_value(value) if value is not None else ""
+            if text:
+                clothing_parts.append(text)
+        if clothing_parts:
+            form.clothing = "\n".join(clothing_parts)
+
+        # Extract mana_potency from semantic keys
+        mana_raw = self._take_value(parsed, used_keys, *self._SEMANTIC_MANA_KEYS)
+        if mana_raw is not None:
+            mana_value = self._parse_mana_value(mana_raw)
+            if mana_value > 0:
+                form.mana_potency = mana_value
 
         return form
+
+    def _parse_mana_value(self, raw: Any) -> int:
+        """Parse mana/灵力水平 values like '10k', '14k', 300, '灵力水平: 12k'."""
+        if raw is None:
+            return 0
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            return max(0, int(raw))
+        text = self._flatten_yaml_value(raw).strip().lower()
+        if not text:
+            return 0
+        # Try to find a numeric pattern like "14k", "10000", "300k+"
+        import re as _re
+        match = _re.search(r'(\d+(?:\.\d+)?)\s*k', text)
+        if match:
+            return max(0, int(float(match.group(1)) * 1000))
+        match = _re.search(r'(\d+)', text)
+        if match:
+            return max(0, int(match.group(1)))
+        return 0
 
     def _parse_relationships(self, raw: Any) -> tuple[list[Relationship], list[str]]:
         if raw is None:
@@ -1078,18 +1251,11 @@ class LoreConverter:
 
     def _merge_appearance(self, parsed: dict[str, Any], used_keys: set[str]) -> str:
         merged: list[str] = []
-        fields = [
-            ("overall_impression", "overall_impression"),
-            ("physique", "physique"),
-            ("facial_features", "facial_features"),
-            ("hair_style", "hair_style"),
-            ("appearance", "appearance"),
-        ]
-        for key, label in fields:
+        for key in self._SEMANTIC_APPEARANCE_KEYS:
             value = self._take_value(parsed, used_keys, key)
             text = self._flatten_yaml_value(value) if value is not None else ""
             if text:
-                merged.append(f"[{label}] {text}")
+                merged.append(f"[{key}] {text}")
         return "\n".join(merged)
 
     def _collect_remaining(

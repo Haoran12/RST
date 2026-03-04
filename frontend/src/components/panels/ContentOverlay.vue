@@ -1,5 +1,10 @@
 <template>
-  <div v-if="visible" class="overlay" @click="handleOverlayClick">
+  <div
+    v-if="visible"
+    class="overlay"
+    @pointerdown="handleOverlayPointerDown"
+    @click="handleOverlayClick"
+  >
     <div class="overlay-card" @click.stop>
       <header class="overlay-header">
         <div class="overlay-title">{{ title }}</div>
@@ -344,6 +349,7 @@ const fieldValues = reactive<Record<string, unknown>>({});
 const contentInput = ref("");
 const showUnsaved = ref(false);
 const initialSnapshot = ref("");
+const canCloseFromOverlayClick = ref(false);
 const sectionFilterQuery = ref("");
 const collapsedSections = reactive<Record<string, boolean>>({});
 const { t } = useI18n();
@@ -599,7 +605,23 @@ function sectionGridStyle(section: OverlaySection): Record<string, string> {
   };
 }
 
-function handleOverlayClick() {
+function handleOverlayPointerDown(event: PointerEvent) {
+  if (event.button !== 0) {
+    canCloseFromOverlayClick.value = false;
+    return;
+  }
+  canCloseFromOverlayClick.value = event.target === event.currentTarget;
+}
+
+function handleOverlayClick(event: MouseEvent) {
+  if (event.target !== event.currentTarget) {
+    canCloseFromOverlayClick.value = false;
+    return;
+  }
+  if (!canCloseFromOverlayClick.value) {
+    return;
+  }
+  canCloseFromOverlayClick.value = false;
   if (showUnsaved.value) {
     return;
   }

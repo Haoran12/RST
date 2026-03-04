@@ -16,6 +16,13 @@ from app.models.session import Message
 from app.providers.base import ProviderError
 from app.providers.registry import get_provider
 from app.services.api_config_service import get_api_config_storage
+from app.services.lore_date import (
+    compute_age_at,
+    extract_scene_date,
+    format_fantasy_date,
+    is_birthday_today,
+    parse_fantasy_date,
+)
 from app.services.log_service import log_service
 from app.services.lore_nlp import LoreNlpEngine
 from app.services.rst_runtime_service import rst_runtime_service
@@ -118,13 +125,20 @@ class LoreScheduler:
                 merged.append(entry_id)
         return merged
 
-    def _build_candidate_text(self, store: LoreStore, candidate_ids: list[str]) -> str:
+    def _build_candidate_text(
+        self,
+        store: LoreStore,
+        candidate_ids: list[str],
+        scene_context: str,
+    ) -> str:
         if not candidate_ids:
             return ""
 
         index = store.load_index()
         index_map = {item.entry_id: item for item in index.items}
         blocks: list[str] = []
+        scene_date = extract_scene_date(scene_context)
+        scene_date_text = format_fantasy_date(scene_date) if scene_date is not None else ""
 
         for entry_id in candidate_ids:
             item = index_map.get(entry_id)
@@ -164,9 +178,18 @@ class LoreScheduler:
                     f"[CHARACTER] {char_file.data.name}",
                     f"race: {char_file.data.race}",
                     f"gender: {char_file.data.gender}",
+                    f"birth: {char_file.data.birth}",
                     f"role: {char_file.data.role}",
                     f"objective: {char_file.data.objective}",
                 ]
+                birth_date = parse_fantasy_date(char_file.data.birth)
+                if birth_date is not None and scene_date is not None:
+                    profile.append(f"scene_date: {scene_date_text}")
+                    profile.append(f"age: {compute_age_at(birth_date, scene_date)}")
+                    profile.append(
+                        "birthday_today: "
+                        f"{'yes' if is_birthday_today(birth_date, scene_date) else 'no'}"
+                    )
                 if active_form is not None:
                     profile.append(f"activity: {active_form.activity}")
                     profile.append(f"body: {active_form.body}")
@@ -335,7 +358,7 @@ class LoreScheduler:
         store = self._store(session_name)
         template = store.load_scheduler_template()
         context = self._conversation_text(context_messages)
-        candidate_text = self._build_candidate_text(store, candidate_ids)
+        candidate_text = self._build_candidate_text(store, candidate_ids, context)
         if not candidate_text.strip():
             rst_runtime_service.update_session_state(
                 session_name,

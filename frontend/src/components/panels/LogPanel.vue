@@ -175,7 +175,9 @@ function formatTime(isoString: string) {
   if (!isoString) {
     return "-";
   }
-  const parsed = new Date(isoString);
+  const hasTimezone = /[zZ]$|[+-]\d{2}:\d{2}$/.test(isoString);
+  const normalized = hasTimezone ? isoString : `${isoString}Z`;
+  const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) {
     return isoString;
   }
@@ -186,7 +188,8 @@ function formatDuration(duration: number | null | undefined) {
   if (duration === null || duration === undefined) {
     return "-";
   }
-  return `${duration} ms`;
+  const seconds = duration / 1000;
+  return `${seconds.toFixed(1)} s`;
 }
 
 function formatMaybeNumber(value: number | null | undefined) {

@@ -146,7 +146,6 @@ async def test_import_lore_converts_entries_and_characters(
     assert characters_response.status_code == 200
     assert characters_response.json()["total"] == 1
     character = characters_response.json()["characters"][0]
-    assert character["strength"] == 10
     assert character["gender"] == "female"
 
     relationship_targets = [item["target"] for item in character["relationship"]]
@@ -300,7 +299,6 @@ async def test_import_lore_llm_fallback_can_parse_invalid_yaml(
     character = characters_response.json()["characters"][0]
     assert character["name"] == "lin_mu"
     assert character["race"] == "human"
-    assert character["strength"] == 10
     assert character["relationship"][0]["target"] == "wu_zhong"
 
 
@@ -395,6 +393,56 @@ async def test_import_lore_llm_fallback_batches_multiple_characters(
     assert by_name["lin_mu"]["race"] == "human"
     assert by_name["qing_he"]["race"] == "elf"
     assert by_name["qing_he"]["relationship"][0]["target"] == "lin_mu"
+
+
+@pytest.mark.asyncio
+async def test_import_lore_llm_fallback_packs_many_characters_into_single_batch(
+    async_client,
+    sample_api_config,
+    monkeypatch,
+) -> None:
+    # LLM batch fallback should pack as many characters as possible into a single request
+    # (bounded by char/tokens budgets) to reduce RPM pressure.
+    source_ids = [f"legacy-char-pack-{index}" for index in range(1, 26)]
+    stub_provider = _ImportLlmStubProvider(
+        json.dumps(
+            {"items": [{"source_id": source_id, "parsed": {"race": "human"}} for source_id in source_ids]},
+            ensure_ascii=False,
+        )
+    )
+    monkeypatch.setattr("app.services.lore_converter.get_provider", lambda _: stub_provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client, "ImportLoreLlmPackedPreset")
+    await _create_session(async_client, "ImportLoreLlmPacked", config_id, preset_id, config_id)
+
+    entries = []
+    for index, source_id in enumerate(source_ids, start=1):
+        entries.append(
+            {
+                "id": source_id,
+                "name": f"char_{index}",
+                "category": "characters",
+                "disable": False,
+                "content": (
+                    "# profile\n"
+                    f"name: char_{index}\n"
+                    "abilities:\n"
+                    "  spirit_level: 4k\n"
+                    "  masters basic sword and fire skills\n"
+                ),
+                "constant": False,
+                "key": ["character"],
+            }
+        )
+
+    response = await async_client.post(
+        "/sessions/ImportLoreLlmPacked/lores/import",
+        params={"llm_fallback": True},
+        files=_upload_payload({"entries": entries}),
+    )
+    assert response.status_code == 200
+    assert stub_provider.calls == 1
 
 
 @pytest.mark.asyncio

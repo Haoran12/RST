@@ -1,9 +1,15 @@
 ﻿from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 
+from app.models import generate_id
+from app.models.session import Message
 from app.providers.base import BaseProvider, ProviderChatResult
 from app.services.rst_runtime_service import rst_runtime_service
+from app.services.session_service import get_session_dir
+from app.storage.message_store import MessageStore
 
 
 class _SchedulerStubProvider(BaseProvider):
@@ -21,6 +27,34 @@ class _SchedulerStubProvider(BaseProvider):
         max_tokens: int,
         stream: bool = False,
     ) -> ProviderChatResult:
+        return ProviderChatResult(
+            text="injected lore block",
+            request={"messages": messages, "model": model},
+            response={"choices": [{"finish_reason": "stop"}]},
+        )
+
+
+class _CaptureSchedulerProvider(BaseProvider):
+    def __init__(self) -> None:
+        self.calls: list[list[dict]] = []
+
+    async def list_models(self, base_url: str, api_key: str) -> list[str]:
+        return []
+
+    async def chat(
+        self,
+        base_url: str,
+        api_key: str,
+        *,
+        messages: list[dict],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        stream: bool = False,
+    ) -> ProviderChatResult:
+        self.calls.append(
+            [{"role": message["role"], "content": message["content"]} for message in messages]
+        )
         return ProviderChatResult(
             text="injected lore block",
             request={"messages": messages, "model": model},
@@ -170,15 +204,13 @@ async def test_character_and_memory_crud(async_client, sample_api_config) -> Non
     assert created_character.status_code == 201
     created_payload = created_character.json()
     character_id = created_payload["character_id"]
-    assert created_payload["strength"] == 10
     assert created_payload["gender"] == "女"
 
     updated_character = await async_client.put(
         f"/sessions/LoreCharSession/lores/characters/{character_id}",
-        json={"strength": 16, "gender": "女性"},
+        json={"gender": "女性"},
     )
     assert updated_character.status_code == 200
-    assert updated_character.json()["strength"] == 16
     assert updated_character.json()["gender"] == "女性"
 
     created_memory = await async_client.post(
@@ -277,6 +309,52 @@ async def test_schedule_route_returns_injection_block(
 
 
 @pytest.mark.asyncio
+async def test_schedule_prompt_includes_birth_age_and_birthday(
+    async_client,
+    sample_api_config,
+    monkeypatch,
+) -> None:
+    capture_provider = _CaptureSchedulerProvider()
+    monkeypatch.setattr("app.services.lore_scheduler.get_provider", lambda _: capture_provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "LoreScheduleBirthSession"
+    await _create_session(async_client, session_name, config_id, preset_id, config_id)
+
+    created_character = await async_client.post(
+        f"/sessions/{session_name}/lores/characters",
+        json={
+            "name": "艾琳娜",
+            "race": "精灵",
+            "birth": "神历1200年15月20日",
+            "constant": True,
+        },
+    )
+    assert created_character.status_code == 201
+
+    store = MessageStore(get_session_dir(session_name))
+    store.append(
+        Message(
+            id=generate_id(),
+            role="user",
+            content="scene: 当前日期 神历1218年15月20日",
+            timestamp=datetime.utcnow(),
+            visible=True,
+        )
+    )
+
+    scheduled = await async_client.post(f"/sessions/{session_name}/lores/schedule")
+    assert scheduled.status_code == 200
+    assert capture_provider.calls
+
+    prompt_text = capture_provider.calls[-1][0]["content"]
+    assert "birth: 神历1200年15月20日" in prompt_text
+    assert "age: 18" in prompt_text
+    assert "birthday_today: yes" in prompt_text
+
+
+@pytest.mark.asyncio
 async def test_sync_status_includes_last_result_details(async_client, sample_api_config) -> None:
     config_id = await _create_api_config(async_client, sample_api_config)
     preset_id = await _create_preset(async_client)
@@ -307,7 +385,7 @@ async def test_sync_status_includes_last_result_details(async_client, sample_api
                     "content_append": None,
                     "tags_added": [],
                     "field_changes": [
-                        {"field": "strength", "before": "10", "after": "12"},
+                        {"field": "active_form.strength", "before": "10", "after": "12"},
                     ],
                     "memory_event": None,
                 }
@@ -324,4 +402,4 @@ async def test_sync_status_includes_last_result_details(async_client, sample_api
     assert payload["last_result"] is not None
     assert payload["last_result"]["updated_entries"] == ["char-1"]
     assert payload["last_result"]["created_entries"] == ["entry-1"]
-    assert payload["last_result"]["changes"][0]["field_changes"][0]["field"] == "strength"
+    assert payload["last_result"]["changes"][0]["field_changes"][0]["field"] == "active_form.strength"

@@ -97,6 +97,7 @@
       <button
         type="button"
         class="batch-button"
+        :class="{ danger: batchAction === 'delete' }"
         @click="handleBatchConfirm"
       >
         {{ batchAction === "delete" ? t("contentArea.batch.confirm_delete") : t("contentArea.batch.confirm_hide") }}
@@ -111,7 +112,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { message } from "@/utils/message";
+import { dialog, message } from "@/utils/message";
 
 import { useI18n } from "@/composables/useI18n";
 import MarkdownMessage from "@/components/MarkdownMessage.vue";
@@ -221,20 +222,47 @@ const handleSelectionChange = (event: Event, messageId: string) => {
   chatStore.toggleSelection(messageId, target?.checked ?? false);
 };
 
-const handleDelete = (id: string) => {
-  if (confirm("Delete this message?")) {
-    chatStore.deleteMessage(id);
+function confirmDangerAction(content: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (value: boolean) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(value);
+    };
+
+    dialog.warning({
+      title: t("common.confirm"),
+      content,
+      positiveText: t("contentArea.batch.confirm_delete"),
+      negativeText: t("common.cancel"),
+      positiveButtonProps: { type: "error" },
+      maskClosable: false,
+      onPositiveClick: () => settle(true),
+      onNegativeClick: () => settle(false),
+      onClose: () => settle(false),
+    });
+  });
+}
+
+const handleDelete = async (id: string) => {
+  const confirmed = await confirmDangerAction("Delete this message?");
+  if (confirmed) {
+    await chatStore.deleteMessage(id);
   }
 };
 
-const handleBatchConfirm = () => {
+const handleBatchConfirm = async () => {
   if (batchAction.value === "delete") {
-    if (confirm(t("contentArea.batch.delete_prompt"))) {
-      chatStore.confirmBatchDelete();
+    const confirmed = await confirmDangerAction(t("contentArea.batch.delete_prompt"));
+    if (confirmed) {
+      await chatStore.confirmBatchDelete();
     }
     return;
   }
-  chatStore.confirmBatchHide();
+  await chatStore.confirmBatchHide();
 };
 
 const formatTime = (timestamp: string) => {
@@ -255,8 +283,9 @@ const formatSize = (bytes: number) => {
   return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
 };
 
-const removeAttachment = (messageId: string, attachmentName: string) => {
-  if (!confirm(`Remove attachment "${attachmentName}"?`)) {
+const removeAttachment = async (messageId: string, attachmentName: string) => {
+  const confirmed = await confirmDangerAction(`Remove attachment "${attachmentName}"?`);
+  if (!confirmed) {
     return;
   }
   chatStore.removeAttachment(messageId, attachmentName);
@@ -411,7 +440,7 @@ const removeAttachment = (messageId: string, attachmentName: string) => {
 
 .edit-textarea {
   width: 100%;
-  min-height: 160px;
+  min-height: 200px;
   border-radius: 8px;
   border: 1px solid var(--rst-border-color);
   background: var(--rst-bg-secondary);
@@ -489,6 +518,11 @@ const removeAttachment = (messageId: string, attachmentName: string) => {
   font-size: 12px;
   padding: 4px 12px;
   cursor: pointer;
+}
+
+.batch-button.danger {
+  border-color: var(--rst-danger);
+  background: var(--rst-danger);
 }
 
 .batch-button.secondary {

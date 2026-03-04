@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import pytest
 
 from app.providers.base import BaseProvider, ProviderChatResult
@@ -201,6 +202,8 @@ async def test_logs_include_usage_and_stop_reason(async_client, sample_api_confi
     assert latest["total_tokens"] == 15
     assert latest["stop_reason"] == "stop"
     assert "provider_request" in latest["raw_request"]
+    assert datetime.fromisoformat(latest["request_time"]).tzinfo is not None
+    assert datetime.fromisoformat(latest["response_time"]).tzinfo is not None
 
 
 @pytest.mark.asyncio

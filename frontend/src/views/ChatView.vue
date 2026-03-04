@@ -47,6 +47,7 @@
       <div class="chat-shell__workspace">
         <div class="chat-shell__content">
           <ContentArea />
+          <StatusPanel class="chat-shell__status-panel" />
         </div>
 
         <div class="chat-shell__input">
@@ -105,6 +106,7 @@ import { fetchHealth } from "@/api/health";
 import { useI18n } from "@/composables/useI18n";
 import ContentArea from "@/components/ContentArea.vue";
 import InputMenu from "@/components/InputMenu.vue";
+import StatusPanel from "@/components/StatusPanel.vue";
 import PanelShell from "@/components/panels/PanelShell.vue";
 import { useApiConfigStore } from "@/stores/api-config";
 import { useAppearanceStore, type ThemeMode } from "@/stores/appearance";
@@ -732,6 +734,15 @@ function formatSize(bytes: number) {
   flex: 1;
   min-height: 0;
   display: flex;
+  position: relative;
+}
+
+.chat-shell__status-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
 }
 
 .chat-shell__input {
@@ -848,6 +859,12 @@ function formatSize(bytes: number) {
 
   .chat-shell__input {
     padding: 10px 12px;
+  }
+
+  .chat-shell__status-panel {
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
   }
 
   .input-row {
