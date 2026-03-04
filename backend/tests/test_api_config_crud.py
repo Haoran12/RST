@@ -131,6 +131,32 @@ async def test_base_url_defaults(async_client, sample_api_config) -> None:
     assert payload["base_url"] == DEFAULT_BASE_URLS[ProviderType.OPENAI]
 
 
+@pytest.mark.asyncio
+async def test_temperature_is_normalized_when_stored(
+    async_client, sample_api_config, tmp_data_dir: Path
+) -> None:
+    create_response = await async_client.post(
+        "/api-configs",
+        json={**sample_api_config, "temperature": 0.30000000000000004},
+    )
+    assert create_response.status_code == 201
+    created_payload = create_response.json()
+    assert created_payload["temperature"] == 0.3
+
+    config_id = created_payload["id"]
+    update_response = await async_client.put(
+        f"/api-configs/{config_id}",
+        json={"temperature": 0.35000000000000003},
+    )
+    assert update_response.status_code == 200
+    updated_payload = update_response.json()
+    assert updated_payload["temperature"] == 0.35
+
+    stored = read_json(tmp_data_dir / "api_configs" / f"{config_id}.json")
+    assert isinstance(stored, dict)
+    assert stored["temperature"] == 0.35
+
+
 class _StubProvider(BaseProvider):
     async def list_models(self, base_url: str, api_key: str) -> list[str]:
         return ["m1", "m2"]

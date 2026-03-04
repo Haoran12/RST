@@ -15,7 +15,7 @@ SCENE_FIELD_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 SCENE_BLOCK_RE = re.compile(r"<scene>\s*.*?\s*</scene>", re.IGNORECASE | re.DOTALL)
-SCENE_CHARACTER_SPLIT_RE = re.compile(r"[，,]")
+SCENE_CHARACTER_SPLIT_RE = re.compile(r"[，,、;；]")
 
 
 def _normalize_text(value: str) -> str:
@@ -30,9 +30,9 @@ class SceneService:
         if not matches:
             return None
 
-        # Scene tag is required at the beginning of assistant output.
-        # When multiple tags exist, prefer the first one.
-        raw = matches[0].group(1).strip()
+        # Scene tag is expected near the end of assistant output.
+        # When multiple tags exist, prefer the last one as the latest state.
+        raw = matches[-1].group(1).strip()
         scene = SceneState(raw_tag=raw)
         for field_match in SCENE_FIELD_RE.finditer(raw):
             key = field_match.group(1).strip().lower()

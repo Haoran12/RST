@@ -123,13 +123,13 @@
         </div>
 
         <div class="detail-section">
-          <div class="detail-title">Raw Request</div>
-          <pre class="detail-code">{{ formatJson(selectedLog.raw_request) }}</pre>
+          <div class="detail-title">Sent Request (Actual)</div>
+          <pre class="detail-code">{{ formatJson(actualProviderRequest(selectedLog.raw_request)) }}</pre>
         </div>
 
         <div class="detail-section">
-          <div class="detail-title">Raw Response</div>
-          <pre class="detail-code">{{ formatJson(selectedLog.raw_response) }}</pre>
+          <div class="detail-title">Received Response (Actual)</div>
+          <pre class="detail-code">{{ formatJson(actualProviderResponse(selectedLog.raw_response)) }}</pre>
         </div>
       </div>
       <template #footer>
@@ -251,6 +251,26 @@ function sourceLabel(source: string | undefined) {
     return "Scheduler LLM";
   }
   return "Main Session LLM";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function actualProviderRequest(rawRequest: unknown): unknown {
+  if (!isRecord(rawRequest)) {
+    return rawRequest;
+  }
+  const providerRequest = rawRequest.provider_request;
+  return providerRequest ?? rawRequest;
+}
+
+function actualProviderResponse(rawResponse: unknown): unknown {
+  if (!isRecord(rawResponse)) {
+    return rawResponse;
+  }
+  const providerResponse = rawResponse.provider_response;
+  return providerResponse ?? rawResponse;
 }
 
 function formatJson(payload: unknown) {

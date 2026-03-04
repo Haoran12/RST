@@ -240,6 +240,8 @@ const PLACE_TAG_KEYS = [
 ];
 const REQUEST_OPEN_CHARACTER_OVERLAY_EVENT = "rst-request-open-character-overlay";
 const LORE_DATA_CHANGED_EVENT = "rst-lore-data-changed";
+const SCENE_NAME_NOTE_RE = /\([^)]*\)|（[^）]*）|\[[^\]]*]|【[^】]*】/g;
+const SCENE_NAME_SEPARATOR_RE = /[\s\u3000,，、;；:：·・"'`“”‘’]/g;
 
 const sessionStore = useSessionStore();
 const { t } = useI18n();
@@ -356,10 +358,10 @@ const presentCharacters = computed(() => {
   }
 
   if (isRstMode.value && sceneState.value?.characters.length) {
-    const sceneNames = new Set(
-      sceneState.value.characters.map((name) => name.trim().toLowerCase()).filter(Boolean),
-    );
-    const matched = enabled.filter((item) => sceneNames.has(item.name.trim().toLowerCase()));
+    const normalizedSceneNames = sceneState.value.characters
+      .map((name) => normalizeSceneCharacterName(name))
+      .filter(Boolean);
+    const matched = enabled.filter((item) => isCharacterInScene(item, normalizedSceneNames));
     if (matched.length > 0) {
       return matched;
     }
@@ -775,6 +777,50 @@ function containsText(source: string, target: string): boolean {
     return false;
   }
   return source.toLowerCase().includes(target.trim().toLowerCase());
+}
+
+function normalizeSceneCharacterName(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(SCENE_NAME_NOTE_RE, "")
+    .replace(SCENE_NAME_SEPARATOR_RE, "");
+}
+
+function characterSceneCandidates(character: CharacterData): string[] {
+  return [character.name, ...character.aliases, character.role]
+    .map((value) => normalizeSceneCharacterName(value))
+    .filter(Boolean);
+}
+
+function isSceneNameMatch(sceneName: string, candidate: string): boolean {
+  if (!sceneName || !candidate) {
+    return false;
+  }
+  if (sceneName === candidate) {
+    return true;
+  }
+  if (Math.min(sceneName.length, candidate.length) < 2) {
+    return false;
+  }
+  return sceneName.includes(candidate) || candidate.includes(sceneName);
+}
+
+function isCharacterInScene(character: CharacterData, normalizedSceneNames: string[]): boolean {
+  if (normalizedSceneNames.length === 0) {
+    return false;
+  }
+  const candidates = characterSceneCandidates(character);
+  if (candidates.length === 0) {
+    return false;
+  }
+  return normalizedSceneNames.some((sceneName) =>
+    candidates.some((candidate) => isSceneNameMatch(sceneName, candidate)),
+  );
 }
 
 function valueOrFallback(value: string): string {

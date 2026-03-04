@@ -431,7 +431,19 @@ function coerceNumber(value: number | null, min: number, max: number, step: numb
   if (step <= 0) {
     return clamped;
   }
-  return Math.round(clamped / step) * step;
+  const precision = decimalPlaces(step);
+  const snapped = Math.round(clamped / step) * step;
+  return Number(snapped.toFixed(precision));
+}
+
+function decimalPlaces(value: number): number {
+  const text = value.toString();
+  if (text.includes("e-")) {
+    const exponent = Number(text.split("e-")[1]);
+    return Number.isNaN(exponent) ? 0 : exponent;
+  }
+  const dot = text.indexOf(".");
+  return dot === -1 ? 0 : text.length - dot - 1;
 }
 </script>
 

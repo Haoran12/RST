@@ -27,7 +27,7 @@ def _user(message_id: str, content: str) -> Message:
     )
 
 
-def test_parse_scene_tag_prefers_first_tag_and_supports_cn_colon() -> None:
+def test_parse_scene_tag_prefers_last_tag_and_supports_cn_colon() -> None:
     service = SceneService()
     text = (
         "正文 A\n"
@@ -40,16 +40,16 @@ def test_parse_scene_tag_prefers_first_tag_and_supports_cn_colon() -> None:
         "<scene>\n"
         "time：灵纪1042年3月18日 午后\n"
         "location：泽源·潮汐城·港口\n"
-        "characters：柳璃，小溪, 老船长\n"
+        "characters：柳璃、小溪；老船长, 阿四\n"
         "</scene>"
     )
 
     parsed = service.parse_scene_tag(text)
     assert parsed is not None
-    assert parsed.current_time == "灵纪1042年3月15日 黄昏"
-    assert parsed.current_location == "今庭·云隐山"
-    assert parsed.characters == ["苍角", "小溪"]
-    assert "location: 今庭·云隐山" in parsed.raw_tag
+    assert parsed.current_time == "灵纪1042年3月18日 午后"
+    assert parsed.current_location == "泽源·潮汐城·港口"
+    assert parsed.characters == ["柳璃", "小溪", "老船长", "阿四"]
+    assert "location：泽源·潮汐城·港口" in parsed.raw_tag
 
     assert service.parse_scene_tag("没有场景标签") is None
 

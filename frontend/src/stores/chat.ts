@@ -14,12 +14,27 @@ import {
 import type { ChatAttachment, ChatMessage, MessageRole } from "@/types/chat";
 
 export type BatchAction = "delete" | "hide" | null;
+const LORE_DATA_CHANGED_EVENT = "rst-lore-data-changed";
 
 function generateId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
   return `msg_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function emitLoreDataChanged(sessionName: string): void {
+  if (typeof window === "undefined" || !sessionName) {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent(LORE_DATA_CHANGED_EVENT, {
+      detail: {
+        sessionName,
+        source: "chat-store",
+      },
+    }),
+  );
 }
 
 export const useChatStore = defineStore("chat", () => {
@@ -173,6 +188,7 @@ export const useChatStore = defineStore("chat", () => {
       if (!hasAssistant) {
         setMessages(sessionName, [...current, assistantMessage]);
       }
+      emitLoreDataChanged(sessionName);
     } catch (error) {
       if (axios.isAxiosError(error) && error.code === "ERR_CANCELED") {
         message.info("Request stopped.");
