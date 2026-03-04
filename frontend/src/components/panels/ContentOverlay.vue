@@ -254,6 +254,7 @@
     :title="t('contentOverlay.unsaved.title')"
     size="small"
     :mask-closable="false"
+    :style="{ width: '420px', maxWidth: 'calc(100vw - 32px)' }"
   >
     <div class="unsaved-body">
       {{ t("contentOverlay.unsaved.body") }}

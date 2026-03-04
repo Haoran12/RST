@@ -12,7 +12,7 @@
           type="button"
           class="refresh-button"
           :disabled="logStore.loading"
-          @click="logStore.loadLogs"
+          @click="handleRefresh"
         >
           Refresh
         </button>
@@ -20,11 +20,13 @@
     </header>
 
     <div class="panel-body">
-      <div v-if="logStore.loading" class="placeholder">Loading logs...</div>
-      <div v-else-if="logStore.error" class="placeholder error">
+      <div v-if="logStore.loading && logStore.logs.length === 0" class="placeholder">
+        Loading logs...
+      </div>
+      <div v-else-if="logStore.error && logStore.logs.length === 0" class="placeholder error">
         {{ logStore.error }}
       </div>
-      <div v-else-if="filteredLogs.length === 0" class="placeholder">
+      <div v-else-if="filteredLogs.length === 0 && !logStore.loading" class="placeholder">
         No logs recorded yet.
       </div>
       <div v-else class="log-list">
@@ -140,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { NButton, NModal } from "naive-ui";
 
 import { useLogStore } from "@/stores/log";
@@ -150,6 +152,8 @@ const logStore = useLogStore();
 const selectedLog = ref<LogEntry | null>(null);
 const detailVisible = ref(false);
 const sourceFilter = ref<"all" | "main" | "scheduler">("all");
+const AUTO_REFRESH_INTERVAL_MS = 2000;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const filteredLogs = computed(() => {
   if (sourceFilter.value === "all") {
@@ -159,8 +163,24 @@ const filteredLogs = computed(() => {
 });
 
 onMounted(() => {
-  logStore.loadLogs();
+  void logStore.loadLogs();
+  refreshTimer = setInterval(() => {
+    if (!logStore.loading) {
+      void logStore.loadLogs({ silent: true });
+    }
+  }, AUTO_REFRESH_INTERVAL_MS);
 });
+
+onBeforeUnmount(() => {
+  if (refreshTimer !== null) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+});
+
+function handleRefresh() {
+  void logStore.loadLogs();
+}
 
 async function openLogDetail(log: LogEntry) {
   detailVisible.value = true;

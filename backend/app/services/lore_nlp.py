@@ -27,6 +27,16 @@ class LoreNlpEngine:
         self._bm25: BM25Okapi | None = None
         self._corpus_ids: list[str] = []
         self._entries: dict[str, LoreIndexEntry] = {}
+        self._name_to_ids: dict[str, list[str]] = {}
+        self._tag_to_ids: dict[str, list[str]] = {}
+
+    def _normalize_lookup_key(self, value: str) -> str:
+        return value.strip().lower()
+
+    def _append_index_value(self, index: dict[str, list[str]], key: str, entry_id: str) -> None:
+        bucket = index.setdefault(key, [])
+        if entry_id not in bucket:
+            bucket.append(entry_id)
 
     def _tokenize(self, text: str) -> list[str]:
         text = text.strip()
@@ -55,10 +65,20 @@ class LoreNlpEngine:
         custom_words: set[str] = set()
         corpus: list[list[str]] = []
         self._corpus_ids = []
+        self._name_to_ids = {}
+        self._tag_to_ids = {}
 
         for entry in entries:
             custom_words.add(entry.name)
             custom_words.update(entry.tags)
+            name_key = self._normalize_lookup_key(entry.name)
+            if name_key:
+                self._append_index_value(self._name_to_ids, name_key, entry.entry_id)
+            for tag in entry.tags:
+                tag_key = self._normalize_lookup_key(tag)
+                if not tag_key:
+                    continue
+                self._append_index_value(self._tag_to_ids, tag_key, entry.entry_id)
 
         self._ensure_custom_words(custom_words)
         self._tokenizer_ready = True
@@ -74,6 +94,36 @@ class LoreNlpEngine:
             self._bm25 = BM25Okapi(corpus)
         else:
             self._bm25 = None
+
+    def lookup_by_name(self, name: str) -> list[str]:
+        key = self._normalize_lookup_key(name)
+        if not key:
+            return []
+        return list(self._name_to_ids.get(key, []))
+
+    def lookup_by_tag(self, tag: str) -> list[str]:
+        key = self._normalize_lookup_key(tag)
+        if not key:
+            return []
+        return list(self._tag_to_ids.get(key, []))
+
+    def lookup_by_name_or_tag(self, value: str) -> list[str]:
+        key = self._normalize_lookup_key(value)
+        if not key:
+            return []
+        results: list[str] = []
+        seen: set[str] = set()
+        for entry_id in self._name_to_ids.get(key, []):
+            if entry_id in seen:
+                continue
+            seen.add(entry_id)
+            results.append(entry_id)
+        for entry_id in self._tag_to_ids.get(key, []):
+            if entry_id in seen:
+                continue
+            seen.add(entry_id)
+            results.append(entry_id)
+        return results
 
     def retrieve(self, query_text: str, top_k: int = 20) -> list[str]:
         if not self._entries:

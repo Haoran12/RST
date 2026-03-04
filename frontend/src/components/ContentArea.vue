@@ -69,7 +69,11 @@
                 </button>
               </div>
             </div>
-            <MarkdownMessage v-else :content="msg.content" class="message-text" />
+            <MarkdownMessage
+              v-else
+              :content="formatMessageContent(msg.content)"
+              class="message-text"
+            />
 
             <div v-if="msg.attachments?.length" class="attachment-list">
               <div v-for="file in msg.attachments" :key="file.name" class="attachment-chip">
@@ -289,6 +293,15 @@ const removeAttachment = async (messageId: string, attachmentName: string) => {
     return;
   }
   chatStore.removeAttachment(messageId, attachmentName);
+};
+
+const formatMessageContent = (content: string) => {
+  if (!content) {
+    return "";
+  }
+  // Hide <...> tags by default by removing them from display content,
+  // but keep <scene> tags as they have special rendering in MarkdownMessage.
+  return content.replace(/<(?!scene|\/scene)[^>]+>/g, "").trim();
 };
 </script>
 

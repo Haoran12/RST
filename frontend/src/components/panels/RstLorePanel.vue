@@ -83,48 +83,49 @@
                   :title="t('rstPanel.actions.copy')"
                   @click="openCopyModal"
                 >
-                  ⧉
+                  &#x29C9;
                 </n-button>
               </div>
             </div>
-
-            <Draggable
-              v-if="entryRows.length > 0"
-              v-model="entryRows"
-              item-key="id"
-              handle=".drag-handle"
-              class="entry-list"
-              @end="handleEntryReorder"
-            >
-              <template #item="{ element }">
-                <div
-                  class="entry-row"
-                  :class="{ active: element.id === activeEntryId }"
-                  @click="openEntryOverlay(element.id)"
-                >
-                  <div class="drag-handle" @click.stop>⋮⋮</div>
-                  <div class="entry-checkbox" @click.stop>
-                    <n-checkbox
-                      size="small"
-                      :checked="selectedEntryIds.includes(element.id)"
-                      @update:checked="(checked) => toggleEntrySelected(element.id, checked)"
-                    />
+            <div class="entries-scroll-area">
+              <Draggable
+                v-if="entryRows.length > 0"
+                v-model="entryRows"
+                item-key="id"
+                handle=".drag-handle"
+                class="entry-list"
+                @end="handleEntryReorder"
+              >
+                <template #item="{ element }">
+                  <div
+                    class="entry-row"
+                    :class="{ active: element.id === activeEntryId }"
+                    @click="openEntryOverlay(element.id)"
+                  >
+                    <div class="drag-handle" @click.stop>&#8942;&#8942;</div>
+                    <div class="entry-checkbox" @click.stop>
+                      <n-checkbox
+                        size="small"
+                        :checked="selectedEntryIds.includes(element.id)"
+                        @update:checked="(checked) => toggleEntrySelected(element.id, checked)"
+                      />
+                    </div>
+                    <div class="entry-main">
+                      <span class="entry-name">{{ element.name }}</span>
+                    </div>
+                    <div class="entry-mode">{{ entryTriggerLabel(element) }}</div>
+                    <div class="entry-toggle" @click.stop>
+                      <n-switch
+                        :value="!element.disabled"
+                        @update:value="(enabled) => handleEntryToggle(element.id, enabled)"
+                      />
+                    </div>
                   </div>
-                  <div class="entry-main">
-                    <span class="entry-name">{{ element.name }}</span>
-                  </div>
-                  <div class="entry-mode">{{ entryTriggerLabel(element) }}</div>
-                  <div class="entry-toggle" @click.stop>
-                    <n-switch
-                      :value="!element.disabled"
-                      @update:value="(enabled) => handleEntryToggle(element.id, enabled)"
-                    />
-                  </div>
-                </div>
-              </template>
-            </Draggable>
+                </template>
+              </Draggable>
 
             <div v-else class="entry-list-empty">{{ t("rstPanel.entries.empty") }}</div>
+            </div>
           </div>
         </n-tab-pane>
 
@@ -170,49 +171,50 @@
                   :title="t('rstPanel.actions.copy')"
                   @click="openCharacterCopyModal"
                 >
-                  ⧉
+                  &#x29C9;
                 </n-button>
               </div>
             </div>
-
-            <Draggable
-              v-if="characterRows.length > 0"
-              v-model="characterRows"
-              item-key="character_id"
-              handle=".drag-handle"
-              class="entry-list"
-              @end="handleCharacterReorder"
-            >
-              <template #item="{ element }">
-                <div
-                  class="character-row"
-                  :class="{ active: element.character_id === activeCharacterId }"
-                  @click="openCharacterOverlay(element.character_id)"
-                >
-                  <div class="drag-handle" @click.stop>⋮⋮</div>
-                  <div class="entry-checkbox" @click.stop>
-                    <n-checkbox
-                      size="small"
-                      :checked="selectedCharacterIds.includes(element.character_id)"
-                      @update:checked="(checked) => toggleCharacterSelected(element.character_id, checked)"
-                    />
+            <div class="entries-scroll-area">
+              <Draggable
+                v-if="characterRows.length > 0"
+                v-model="characterRows"
+                item-key="character_id"
+                handle=".drag-handle"
+                class="entry-list"
+                @end="handleCharacterReorder"
+              >
+                <template #item="{ element }">
+                  <div
+                    class="character-row"
+                    :class="{ active: element.character_id === activeCharacterId }"
+                    @click="openCharacterOverlay(element.character_id)"
+                  >
+                    <div class="drag-handle" @click.stop>&#8942;&#8942;</div>
+                    <div class="entry-checkbox" @click.stop>
+                      <n-checkbox
+                        size="small"
+                        :checked="selectedCharacterIds.includes(element.character_id)"
+                        @update:checked="(checked) => toggleCharacterSelected(element.character_id, checked)"
+                      />
+                    </div>
+                    <div class="entry-main">
+                      <span class="entry-name">{{ element.name }}</span>
+                      <span class="character-form-meta">{{ characterFormMeta(element) }}</span>
+                    </div>
+                    <div class="entry-mode">{{ characterModeLabel(element) }}</div>
+                    <div class="entry-toggle" @click.stop>
+                      <n-switch
+                        :value="!element.disabled"
+                        @update:value="(enabled) => handleCharacterToggle(element.character_id, enabled)"
+                      />
+                    </div>
                   </div>
-                  <div class="entry-main">
-                    <span class="entry-name">{{ element.name }}</span>
-                    <span class="character-form-meta">{{ characterFormMeta(element) }}</span>
-                  </div>
-                  <div class="entry-mode">{{ characterModeLabel(element) }}</div>
-                  <div class="entry-toggle" @click.stop>
-                    <n-switch
-                      :value="!element.disabled"
-                      @update:value="(enabled) => handleCharacterToggle(element.character_id, enabled)"
-                    />
-                  </div>
-                </div>
-              </template>
-            </Draggable>
+                </template>
+              </Draggable>
 
             <div v-else class="entry-list-empty">{{ t("rstPanel.characters.empty") }}</div>
+            </div>
           </div>
         </n-tab-pane>
 
@@ -292,7 +294,7 @@
                       class="scheduler-prompt-arrow"
                       :class="{ collapsed: collapsedSchedulerPrompts[prompt.key] }"
                     >
-                      ⌄
+                      &#x2304;
                     </span>
                   </button>
                   <div v-show="!collapsedSchedulerPrompts[prompt.key]" class="scheduler-prompt-input">
@@ -465,7 +467,7 @@
               <n-tag size="small" :bordered="false">{{ syncActionLabel(item.action) }}</n-tag>
             </div>
             <div class="sync-change-meta">
-              {{ syncCategoryLabel(item.category) }} · {{ item.entry_id }}
+              {{ syncCategoryLabel(item.category) }} &middot; {{ item.entry_id }}
             </div>
             <div v-if="item.summary" class="sync-change-section">
               <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.summary") }}</div>
@@ -1182,6 +1184,17 @@ watch(
 );
 
 watch(
+  () => selectedCharacterFormId.value,
+  (formId, previousFormId) => {
+    if (formId === previousFormId || !characterOverlayVisible.value || !editingCharacter.value) {
+      return;
+    }
+    const selectedForm = resolveCharacterOverlayForm(editingCharacter.value, formId);
+    applyCharacterOverlayForForm(editingCharacter.value, selectedForm);
+  },
+);
+
+watch(
   () => loreStore.schedulerTemplate,
   (value) => {
     if (!value) {
@@ -1310,9 +1323,9 @@ function parseStrength(value: unknown): number {
 
 function toSkillEntryOptions(entries: LoreEntry[]): Array<{ label: string; value: string }> {
   return entries.map((entry) => {
-    const name = entry.name.trim() || entry.id;
+    const name = entry.name.trim() || t("rstPanel.report.unnamed_entry");
     return {
-      label: `${name} (${entry.id})`,
+      label: name,
       value: entry.id,
     };
   });
@@ -2003,6 +2016,58 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
   return { fields, sections };
 }
 
+function resolveCharacterOverlayForm(
+  character: CharacterData,
+  preferredFormId?: string | null,
+): CharacterForm | null {
+  if (preferredFormId) {
+    const matched = character.forms.find((form) => form.form_id === preferredFormId);
+    if (matched) {
+      return matched;
+    }
+  }
+  return resolveCharacterActiveForm(character);
+}
+
+function applyCharacterOverlayForForm(character: CharacterData, form: CharacterForm | null) {
+  const config = buildCharacterOverlayConfig({
+    name: character.name,
+    race: character.race,
+    gender: character.gender ?? "",
+    strength: form?.strength ?? 100,
+    form_name: form?.form_name ?? t("rstPanel.overlay.character.form.none"),
+    is_default: form?.is_default ?? true,
+    physique: form?.physique ?? "",
+    features: form?.features ?? "",
+    vitality_max: form?.vitality_max ?? 100,
+    mana_potency: form?.mana_potency ?? 100,
+    toughness: form?.toughness ?? 100,
+    weak: [...(form?.weak ?? [])],
+    resist: [...(form?.resist ?? [])],
+    element: [...(form?.element ?? [])],
+    skills: [...(form?.skills ?? [])],
+    penetration: [...(form?.penetration ?? [])],
+    clothing: form?.clothing ?? "",
+    body: form?.body ?? "",
+    mind: form?.mind ?? "",
+    vitality_cur: form?.vitality_cur ?? 50,
+    activity: form?.activity ?? "",
+    birth: character.birth,
+    homeland: character.homeland,
+    aliases: character.aliases,
+    role: character.role,
+    faction: character.faction,
+    objective: character.objective,
+    relationship: character.relationship,
+    tags: character.tags,
+    constant: character.constant,
+    disabled: character.disabled,
+  });
+  characterOverlayFields.value = config.fields;
+  characterOverlaySections.value = config.sections;
+  characterOverlayContent.value = character.personality;
+}
+
 function openNewCharacterOverlay() {
   editingCharacterId.value = null;
   activeCharacterId.value = null;
@@ -2013,7 +2078,7 @@ function openNewCharacterOverlay() {
     race: "",
     gender: "",
     strength: 100,
-    form_name: "默认形态",
+    form_name: t("rstPanel.overlay.character.form.default_suffix"),
     is_default: true,
     physique: "",
     features: "",
@@ -2057,46 +2122,9 @@ function openCharacterOverlay(characterId: string, preferredFormId?: string) {
   characterOverlayTitle.value = formatText("rstPanel.overlay.character.edit_title", {
     name: target.name,
   });
-  const activeForm = preferredFormId
-    ? (target.forms.find((form) => form.form_id === preferredFormId) ?? resolveCharacterActiveForm(target))
-    : resolveCharacterActiveForm(target);
-  selectedCharacterFormId.value = activeForm?.form_id ?? null;
-  const config = buildCharacterOverlayConfig({
-    name: target.name,
-    race: target.race,
-    gender: target.gender ?? "",
-    strength: activeForm?.strength ?? 100,
-    form_name: activeForm?.form_name ?? "默认形态",
-    is_default: activeForm?.is_default ?? true,
-    physique: activeForm?.physique ?? "",
-    features: activeForm?.features ?? "",
-    vitality_max: activeForm?.vitality_max ?? 100,
-    mana_potency: activeForm?.mana_potency ?? 100,
-    toughness: activeForm?.toughness ?? 100,
-    weak: [...(activeForm?.weak ?? [])],
-    resist: [...(activeForm?.resist ?? [])],
-    element: [...(activeForm?.element ?? [])],
-    skills: [...(activeForm?.skills ?? [])],
-    penetration: [...(activeForm?.penetration ?? [])],
-    clothing: activeForm?.clothing ?? "",
-    body: activeForm?.body ?? "",
-    mind: activeForm?.mind ?? "",
-    vitality_cur: activeForm?.vitality_cur ?? 50,
-    activity: activeForm?.activity ?? "",
-    birth: target.birth,
-    homeland: target.homeland,
-    aliases: target.aliases,
-    role: target.role,
-    faction: target.faction,
-    objective: target.objective,
-    relationship: target.relationship,
-    tags: target.tags,
-    constant: target.constant,
-    disabled: target.disabled,
-  });
-  characterOverlayFields.value = config.fields;
-  characterOverlaySections.value = config.sections;
-  characterOverlayContent.value = target.personality;
+  const selectedForm = resolveCharacterOverlayForm(target, preferredFormId);
+  selectedCharacterFormId.value = selectedForm?.form_id ?? null;
+  applyCharacterOverlayForForm(target, selectedForm);
   characterOverlayVisible.value = true;
 }
 
@@ -2167,12 +2195,16 @@ async function handleCharacterOverlaySave(data: {
   if (!result) {
     return;
   }
-  const activeForm = resolveCharacterActiveForm(result);
-  if (activeForm) {
+  const targetFormId =
+    selectedCharacterFormId.value &&
+    result.forms.some((form) => form.form_id === selectedCharacterFormId.value)
+      ? selectedCharacterFormId.value
+      : resolveCharacterActiveForm(result)?.form_id;
+  if (targetFormId) {
     await loreStore.updateCharacterForm(
       currentSession.value.name,
       result.character_id,
-      activeForm.form_id,
+      targetFormId,
       formPayload,
     );
   }
@@ -2756,6 +2788,9 @@ function actionLabel(action: string): string {
 .panel-body :deep(.n-tabs-pane-wrapper) {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .panel-body :deep(.n-tab-pane) {
@@ -2763,6 +2798,7 @@ function actionLabel(action: string): string {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .toolbar {
@@ -2832,9 +2868,13 @@ function actionLabel(action: string): string {
   display: block;
 }
 
-.entry-list {
+.entries-scroll-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.entry-list {
   min-height: 0;
 }
 
@@ -2948,8 +2988,7 @@ function actionLabel(action: string): string {
 }
 
 .entry-list-empty {
-  flex: 1;
-  min-height: 0;
+  min-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3458,3 +3497,4 @@ function actionLabel(action: string): string {
   }
 }
 </style>
+

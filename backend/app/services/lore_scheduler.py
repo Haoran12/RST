@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from time import perf_counter
+from typing import Callable
 
 from app.models import generate_id
 from app.models.api_config import ApiConfig
@@ -30,6 +31,9 @@ from app.services.session_service import get_session_dir, get_session_storage
 from app.storage.encryption import decrypt_api_key
 from app.storage.lore_store import LoreStore
 from app.storage.message_store import MessageStore
+
+
+MAX_CANDIDATES_AFTER_EXPANSION = 50
 
 
 class LoreScheduler:
@@ -124,6 +128,136 @@ class LoreScheduler:
                 seen.add(entry_id)
                 merged.append(entry_id)
         return merged
+
+    def _build_alias_index(self, store: LoreStore) -> dict[str, list[str]]:
+        alias_to_ids: dict[str, list[str]] = {}
+
+        def _append_alias(key: str, character_id: str) -> None:
+            bucket = alias_to_ids.setdefault(key, [])
+            if character_id not in bucket:
+                bucket.append(character_id)
+
+        for character in store.list_characters():
+            for alias in [character.name, *character.aliases]:
+                key = alias.strip().lower()
+                if not key:
+                    continue
+                _append_alias(key, character.character_id)
+
+        return alias_to_ids
+
+    def _expand_character(
+        self,
+        store: LoreStore,
+        engine: LoreNlpEngine,
+        character_id: str,
+        alias_to_ids: dict[str, list[str]],
+        add_fn: Callable[[str], None],
+    ) -> None:
+        char_file = store.load_character(character_id)
+        if char_file is None:
+            return
+        char = char_file.data
+
+        if char.race:
+            for entry_id in engine.lookup_by_name_or_tag(char.race):
+                add_fn(entry_id)
+
+        if char.faction:
+            for entry_id in engine.lookup_by_name_or_tag(char.faction):
+                add_fn(entry_id)
+
+        if char.homeland:
+            for entry_id in engine.lookup_by_name_or_tag(char.homeland):
+                add_fn(entry_id)
+
+        for rel in char.relationship:
+            if not rel.target:
+                continue
+            for entry_id in engine.lookup_by_name(rel.target):
+                add_fn(entry_id)
+            rel_key = rel.target.strip().lower()
+            if not rel_key:
+                continue
+            for entry_id in alias_to_ids.get(rel_key, []):
+                add_fn(entry_id)
+
+        active_form = next(
+            (form for form in char.forms if form.form_id == char.active_form_id),
+            char.forms[0] if char.forms else None,
+        )
+        if active_form is None:
+            return
+
+        for skill_id in active_form.skills:
+            add_fn(skill_id)
+        for element_id in active_form.element:
+            add_fn(element_id)
+
+    def _expand_entry(
+        self,
+        engine: LoreNlpEngine,
+        item: LoreIndexEntry,
+        add_fn: Callable[[str], None],
+    ) -> None:
+        for tag in item.tags:
+            for entry_id in engine.lookup_by_name(tag):
+                add_fn(entry_id)
+
+    def _expand_related_ids(
+        self,
+        store: LoreStore,
+        engine: LoreNlpEngine,
+        first_round_ids: list[str],
+        items_by_id: dict[str, LoreIndexEntry],
+    ) -> list[str]:
+        first_round_set = set(first_round_ids)
+        expanded: list[str] = []
+        seen: set[str] = set()
+        alias_to_ids = self._build_alias_index(store)
+
+        def _add(entry_id: str) -> None:
+            if entry_id in first_round_set or entry_id in seen:
+                return
+            item = items_by_id.get(entry_id)
+            if item is None or item.disabled:
+                return
+            seen.add(entry_id)
+            expanded.append(entry_id)
+
+        for entry_id in first_round_ids:
+            item = items_by_id.get(entry_id)
+            if item is None:
+                continue
+            if item.category == LoreCategory.CHARACTER:
+                self._expand_character(store, engine, entry_id, alias_to_ids, _add)
+                continue
+            self._expand_entry(engine, item, _add)
+
+        return expanded
+
+    def _cap_candidates_after_expansion(
+        self,
+        constant_ids: list[str],
+        candidate_ids: list[str],
+    ) -> list[str]:
+        if len(candidate_ids) <= MAX_CANDIDATES_AFTER_EXPANSION:
+            return candidate_ids
+
+        constant_set = set(constant_ids)
+        kept_constants = [entry_id for entry_id in candidate_ids if entry_id in constant_set]
+        if len(kept_constants) >= MAX_CANDIDATES_AFTER_EXPANSION:
+            return kept_constants
+
+        capped = list(kept_constants)
+        cap_size = MAX_CANDIDATES_AFTER_EXPANSION - len(kept_constants)
+        for entry_id in candidate_ids:
+            if entry_id in constant_set:
+                continue
+            capped.append(entry_id)
+            if len(capped) >= len(kept_constants) + cap_size:
+                break
+        return capped
 
     def _build_candidate_text(
         self,
@@ -336,10 +470,13 @@ class LoreScheduler:
         constant_ids = [item.entry_id for item in enabled_items if item.constant]
         engine = self._engine(session_name, enabled_items)
         nlp_ids = engine.retrieve(context, top_k=20)
+        first_round_ids = self._merge_ids(constant_ids, nlp_ids)
+        expanded_ids = self._expand_related_ids(store, engine, first_round_ids, items_by_id)
 
         present_character_ids = self._present_character_ids(store, context)
-        merged = self._merge_ids(constant_ids, nlp_ids)
-        filtered = self._filter_memory_candidates(store, items_by_id, merged, present_character_ids)
+        merged = self._merge_ids(constant_ids, nlp_ids, expanded_ids)
+        capped = self._cap_candidates_after_expansion(constant_ids, merged)
+        filtered = self._filter_memory_candidates(store, items_by_id, capped, present_character_ids)
 
         rst_runtime_service.update_session_state(
             session_name,
@@ -405,13 +542,20 @@ class LoreScheduler:
         constant_ids = [item.entry_id for item in enabled_items if item.constant]
         engine = self._engine(session_name, enabled_items)
         user_ids = engine.retrieve(user_input, top_k=20) if user_input.strip() else []
+        user_expanded_ids = self._expand_related_ids(
+            store,
+            engine,
+            self._merge_ids(constant_ids, cached, user_ids),
+            items_by_id,
+        )
 
         selected_messages = self._select_messages(messages, scan_depth)
         context = self._conversation_text(selected_messages)
         present_character_ids = self._present_character_ids(store, context)
 
-        merged = self._merge_ids(constant_ids, cached, user_ids)
-        filtered = self._filter_memory_candidates(store, items_by_id, merged, present_character_ids)
+        merged = self._merge_ids(constant_ids, cached, user_ids, user_expanded_ids)
+        capped = self._cap_candidates_after_expansion(constant_ids, merged)
+        filtered = self._filter_memory_candidates(store, items_by_id, capped, present_character_ids)
         try:
             injection = await self._run_schedule_with_candidates(
                 session_name,

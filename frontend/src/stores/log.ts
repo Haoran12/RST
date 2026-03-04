@@ -11,15 +11,20 @@ export const useLogStore = defineStore("log", () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
 
-  async function loadLogs(): Promise<void> {
+  async function loadLogs(options: { silent?: boolean } = {}): Promise<void> {
+    const { silent = false } = options;
     try {
-      loading.value = true;
+      if (!silent) {
+        loading.value = true;
+      }
       error.value = null;
       logs.value = await fetchLogs();
     } catch (err) {
       const parsed = parseApiError(err);
       error.value = parsed;
-      message.error(parsed);
+      if (!silent) {
+        message.error(parsed);
+      }
     } finally {
       loading.value = false;
     }
