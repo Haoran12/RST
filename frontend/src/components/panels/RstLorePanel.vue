@@ -802,6 +802,7 @@ interface OpenCharacterOverlayRequest {
 }
 
 const OPEN_CHARACTER_OVERLAY_EVENT = "rst-open-character-overlay";
+const LORE_DATA_CHANGED_EVENT = "rst-lore-data-changed";
 
 const sessionStore = useSessionStore();
 const loreStore = useLoreStore();
@@ -1075,9 +1076,26 @@ function handleOpenCharacterOverlayEvent(event: Event) {
   pendingCharacterOverlayRequest.value = request;
 }
 
+function handleExternalLoreDataChanged(event: Event) {
+  if (!currentSession.value?.name) {
+    return;
+  }
+  const customEvent = event as CustomEvent<Record<string, unknown> | undefined>;
+  const source = String(customEvent.detail?.source ?? "").trim();
+  if (source === "rst-lore-panel") {
+    return;
+  }
+  const targetSessionName = String(customEvent.detail?.sessionName ?? "").trim();
+  if (targetSessionName && targetSessionName !== currentSession.value.name) {
+    return;
+  }
+  void refreshLorePanelData(currentSession.value.name);
+}
+
 onMounted(async () => {
   if (typeof window !== "undefined") {
     window.addEventListener(OPEN_CHARACTER_OVERLAY_EVENT, handleOpenCharacterOverlayEvent as EventListener);
+    window.addEventListener(LORE_DATA_CHANGED_EVENT, handleExternalLoreDataChanged as EventListener);
   }
   if (sessions.value.length === 0) {
     await sessionStore.loadSessions();
@@ -1093,6 +1111,7 @@ onBeforeUnmount(() => {
     OPEN_CHARACTER_OVERLAY_EVENT,
     handleOpenCharacterOverlayEvent as EventListener,
   );
+  window.removeEventListener(LORE_DATA_CHANGED_EVENT, handleExternalLoreDataChanged as EventListener);
 });
 
 watch(
@@ -1474,6 +1493,7 @@ async function handleEntryOverlaySave(data: { fields: Record<string, unknown>; c
     await loadSkillEntryOptions(currentSession.value.name);
   }
   activeEntryId.value = result.category === entryCategory.value ? result.id : null;
+  notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
   closeEntryOverlay();
 }
 
@@ -1485,9 +1505,12 @@ async function handleEntryToggle(entryId: string, enabled: boolean) {
   if (!target) {
     return;
   }
-  await loreStore.updateEntry(currentSession.value.name, target.id, {
+  const updated = await loreStore.updateEntry(currentSession.value.name, target.id, {
     disabled: !enabled,
   });
+  if (updated) {
+    notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
+  }
 }
 
 function toggleEntrySelected(entryId: string, checked: boolean) {
@@ -1504,12 +1527,13 @@ async function handleBulkDeleteEntries() {
   if (!currentSession.value?.name || !hasSelection.value) {
     return;
   }
+  const sessionName = currentSession.value.name;
   const ids = [...selectedEntryIds.value];
   for (const id of ids) {
-    await loreStore.deleteEntry(currentSession.value.name, id);
+    await loreStore.deleteEntry(sessionName, id);
   }
   if (entryCategory.value === "skills") {
-    await loadSkillEntryOptions(currentSession.value.name);
+    await loadSkillEntryOptions(sessionName);
   }
   selectedEntryIds.value = [];
   if (activeEntryId.value && ids.includes(activeEntryId.value)) {
@@ -1517,6 +1541,9 @@ async function handleBulkDeleteEntries() {
   }
   if (editingEntryId.value && ids.includes(editingEntryId.value)) {
     closeEntryOverlay();
+  }
+  if (ids.length > 0) {
+    notifyLoreDataChanged(sessionName, "rst-lore-panel");
   }
 }
 
@@ -1537,6 +1564,7 @@ async function confirmCopy() {
   if (!copyTargetSession.value || selectedEntries.value.length === 0) {
     return;
   }
+  const touchedSessions = new Set<string>();
   let copiedCount = 0;
   for (const entry of selectedEntries.value) {
     if (entry.category === "character" || entry.category === "memory") {
@@ -1552,8 +1580,12 @@ async function confirmCopy() {
     });
     if (created) {
       copiedCount += 1;
+      touchedSessions.add(copyTargetSession.value);
     }
   }
+  touchedSessions.forEach((sessionName) => {
+    notifyLoreDataChanged(sessionName, "rst-lore-panel");
+  });
   closeCopyModal();
   if (copiedCount > 0) {
     message.success(
@@ -1568,13 +1600,16 @@ async function handleEntryReorder() {
   if (!currentSession.value?.name || entryRows.value.length === 0) {
     return;
   }
-  const reordered = await loreStore.reorderEntries(currentSession.value.name, {
+  const sessionName = currentSession.value.name;
+  const reordered = await loreStore.reorderEntries(sessionName, {
     category: entryCategory.value,
     entry_ids: entryRows.value.map((entry) => entry.id),
   });
   if (!reordered) {
     entryRows.value = loreStore.entries.map((entry) => ({ ...entry, tags: [...entry.tags] }));
+    return;
   }
+  notifyLoreDataChanged(sessionName, "rst-lore-panel");
 }
 
 function resetCharacterOverlay() {
@@ -2140,7 +2175,25 @@ async function handleCharacterOverlaySave(data: {
     );
   }
   activeCharacterId.value = result.character_id;
+  notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
   closeCharacterOverlay();
+}
+
+function notifyLoreDataChanged(
+  sessionName: string,
+  source: "status-panel" | "rst-lore-panel",
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent(LORE_DATA_CHANGED_EVENT, {
+      detail: {
+        sessionName,
+        source,
+      },
+    }),
+  );
 }
 
 function buildNewFormName(character: CharacterData): string {
@@ -2173,6 +2226,7 @@ async function switchCharacterForm() {
     return;
   }
   openCharacterOverlay(switched.character_id, selectedCharacterFormId.value);
+  notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
 }
 
 async function createCharacterForm() {
@@ -2196,6 +2250,7 @@ async function createCharacterForm() {
     return;
   }
   openCharacterOverlay(switched.character_id, created.form_id);
+  notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
 }
 
 async function deleteCharacterForm() {
@@ -2211,6 +2266,7 @@ async function deleteCharacterForm() {
     return;
   }
   openCharacterOverlay(editingCharacter.value.character_id);
+  notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
 }
 
 async function handleCharacterToggle(characterId: string, enabled: boolean) {
@@ -2221,21 +2277,27 @@ async function handleCharacterToggle(characterId: string, enabled: boolean) {
   if (!target) {
     return;
   }
-  await loreStore.updateCharacter(currentSession.value.name, characterId, {
+  const updated = await loreStore.updateCharacter(currentSession.value.name, characterId, {
     disabled: !enabled,
   });
+  if (updated) {
+    notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
+  }
 }
 
 async function handleCharacterReorder() {
   if (!currentSession.value?.name || characterRows.value.length === 0) {
     return;
   }
-  const reordered = await loreStore.reorderCharacters(currentSession.value.name, {
+  const sessionName = currentSession.value.name;
+  const reordered = await loreStore.reorderCharacters(sessionName, {
     character_ids: characterRows.value.map((character) => character.character_id),
   });
   if (!reordered) {
     characterRows.value = [...loreStore.characters];
+    return;
   }
+  notifyLoreDataChanged(sessionName, "rst-lore-panel");
 }
 
 function toggleCharacterSelected(characterId: string, checked: boolean) {
@@ -2252,9 +2314,10 @@ async function handleBulkDeleteCharacters() {
   if (!currentSession.value?.name || !hasCharacterSelection.value) {
     return;
   }
+  const sessionName = currentSession.value.name;
   const ids = [...selectedCharacterIds.value];
   for (const characterId of ids) {
-    await loreStore.deleteCharacter(currentSession.value.name, characterId);
+    await loreStore.deleteCharacter(sessionName, characterId);
   }
   selectedCharacterIds.value = [];
   if (activeCharacterId.value && ids.includes(activeCharacterId.value)) {
@@ -2262,6 +2325,9 @@ async function handleBulkDeleteCharacters() {
   }
   if (editingCharacterId.value && ids.includes(editingCharacterId.value)) {
     closeCharacterOverlay();
+  }
+  if (ids.length > 0) {
+    notifyLoreDataChanged(sessionName, "rst-lore-panel");
   }
 }
 
@@ -2282,6 +2348,7 @@ async function confirmCharacterCopy() {
   if (!characterCopyTarget.value || selectedCharacters.value.length === 0) {
     return;
   }
+  const touchedSessions = new Set<string>();
   let copiedCount = 0;
   for (const character of selectedCharacters.value) {
     const created = await loreStore.createCharacter(characterCopyTarget.value, {
@@ -2302,8 +2369,12 @@ async function confirmCharacterCopy() {
     });
     if (created) {
       copiedCount += 1;
+      touchedSessions.add(characterCopyTarget.value);
     }
   }
+  touchedSessions.forEach((sessionName) => {
+    notifyLoreDataChanged(sessionName, "rst-lore-panel");
+  });
   closeCharacterCopyModal();
   if (copiedCount > 0) {
     message.success(
@@ -2536,6 +2607,7 @@ async function recoverImportAfterTimeout(sessionName: string, baseline: LoreTota
     const currentTotals = await fetchLoreTotals(sessionName);
     if (didLoreTotalsChange(baseline, currentTotals)) {
       await refreshLorePanelData(sessionName);
+      notifyLoreDataChanged(sessionName, "rst-lore-panel");
       message.success(t("rstPanel.messages.import_timeout_recovered"));
       return;
     }
@@ -2545,6 +2617,7 @@ async function recoverImportAfterTimeout(sessionName: string, baseline: LoreTota
     return;
   }
   await refreshLorePanelData(sessionName);
+  notifyLoreDataChanged(sessionName, "rst-lore-panel");
   message.info(t("rstPanel.messages.import_timeout_refresh_done"));
 }
 
@@ -2582,6 +2655,7 @@ async function confirmImportLore() {
   }
   closeImportModal();
   await refreshLorePanelData(sessionName);
+  notifyLoreDataChanged(sessionName, "rst-lore-panel");
   const entryCount = report.statistics.converted_entries ?? 0;
   const characterCount = report.statistics.converted_characters ?? 0;
   const warningCount = report.statistics.warnings_count ?? 0;

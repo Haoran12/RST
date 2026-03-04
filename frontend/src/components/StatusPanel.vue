@@ -182,7 +182,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 
 import { createEntry, listCharacters, listEntries, updateEntry } from "@/api/lores";
@@ -228,6 +228,7 @@ const PLACE_TAG_KEYS = [
   "\u573a\u666f",
 ];
 const REQUEST_OPEN_CHARACTER_OVERLAY_EVENT = "rst-request-open-character-overlay";
+const LORE_DATA_CHANGED_EVENT = "rst-lore-data-changed";
 
 const sessionStore = useSessionStore();
 const { t } = useI18n();
@@ -491,6 +492,14 @@ onMounted(() => {
     return;
   }
   collapsed.value = window.innerWidth <= 1024;
+  window.addEventListener(LORE_DATA_CHANGED_EVENT, handleExternalRefresh as EventListener);
+});
+
+onBeforeUnmount(() => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.removeEventListener(LORE_DATA_CHANGED_EVENT, handleExternalRefresh as EventListener);
 });
 
 async function loadStatusPanelData(sessionName: string): Promise<void> {
@@ -530,6 +539,37 @@ function refreshData() {
     return;
   }
   void loadStatusPanelData(currentSessionName.value);
+}
+
+function handleExternalRefresh(event: Event) {
+  const sessionName = currentSessionName.value;
+  if (!sessionName) {
+    return;
+  }
+  const customEvent = event as CustomEvent<Record<string, unknown> | undefined>;
+  const source = String(customEvent.detail?.source ?? "").trim();
+  if (source === "status-panel") {
+    return;
+  }
+  const targetSessionName = String(customEvent.detail?.sessionName ?? "").trim();
+  if (targetSessionName && targetSessionName !== sessionName) {
+    return;
+  }
+  void loadStatusPanelData(sessionName);
+}
+
+function emitLoreDataChanged(sessionName: string, source: "status-panel" | "rst-lore-panel") {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent(LORE_DATA_CHANGED_EVENT, {
+      detail: {
+        sessionName,
+        source,
+      },
+    }),
+  );
 }
 
 function requestCharacterOverlay(focus: "vitality" | "stats") {
@@ -578,6 +618,7 @@ async function saveStorySnapshot() {
     }
 
     await loadStatusPanelData(currentSessionName.value);
+    emitLoreDataChanged(currentSessionName.value, "status-panel");
     message.success(t("statusPanel.state.story_saved"));
   } catch (error) {
     message.error(parseApiError(error));
