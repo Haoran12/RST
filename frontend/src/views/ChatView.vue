@@ -812,7 +812,8 @@ function formatSize(bytes: number) {
   border: 1px solid var(--rst-border-color);
   background: var(--rst-bg-secondary);
   color: var(--rst-text-primary);
-  font-size: 14px;
+  font-family: var(--rst-font-family);
+  font-size: calc(14px * var(--rst-font-size-scale));
   line-height: 1.5;
   resize: none;
 }
