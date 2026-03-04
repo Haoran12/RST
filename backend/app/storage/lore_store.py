@@ -13,6 +13,8 @@ from app.models.lore import (
     LoreFile,
     LoreIndex,
     LoreIndexEntry,
+    SceneState,
+    SceneStateFile,
     SchedulerPromptTemplate,
 )
 from app.storage.file_io import read_json, write_json
@@ -226,6 +228,23 @@ class LoreStore:
 
     def save_scheduler_template(self, template: SchedulerPromptTemplate) -> None:
         write_json(self.scheduler_template_path, template.model_dump(mode="json"))
+
+    def load_scene_state(self) -> SceneState:
+        scene_path = self.rst_data_dir / "scene_state.json"
+        data = read_json(scene_path)
+        if isinstance(data, dict):
+            try:
+                return SceneStateFile.model_validate(data).scene
+            except Exception:
+                pass
+        scene_file = SceneStateFile()
+        write_json(scene_path, scene_file.model_dump(mode="json"))
+        return scene_file.scene
+
+    def save_scene_state(self, scene: SceneState) -> None:
+        scene_path = self.rst_data_dir / "scene_state.json"
+        scene_file = SceneStateFile(scene=scene)
+        write_json(scene_path, scene_file.model_dump(mode="json"))
 
     def load_all_entries(self) -> list[LoreEntry | CharacterData]:
         items: list[LoreEntry | CharacterData] = []

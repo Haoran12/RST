@@ -192,6 +192,21 @@ class LoreFile(BaseModel):
     version: int = 1
 
 
+class SceneState(BaseModel):
+    """Current scene state extracted from assistant `<scene>` tags."""
+
+    current_time: str = ""
+    current_location: str = ""
+    characters: list[str] = Field(default_factory=list)
+    raw_tag: str = ""
+    updated_at: str = ""
+
+
+class SceneStateFile(BaseModel):
+    scene: SceneState = Field(default_factory=SceneState)
+    version: int = 1
+
+
 class LoreIndexEntry(BaseModel):
     entry_id: str
     name: str
@@ -383,6 +398,12 @@ class SchedulerTemplateUpdate(BaseModel):
     confirm_prompt: str | None = None
     extract_prompt: str | None = None
     consolidate_prompt: str | None = None
+
+
+class SceneStateUpdate(BaseModel):
+    current_time: str | None = None
+    current_location: str | None = None
+    characters: list[str] | None = None
 
 
 class ScheduleResult(BaseModel):

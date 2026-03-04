@@ -267,6 +267,20 @@ export interface SchedulerTemplateUpdate {
   consolidate_prompt?: string;
 }
 
+export interface SceneState {
+  current_time: string;
+  current_location: string;
+  characters: string[];
+  raw_tag: string;
+  updated_at: string;
+}
+
+export interface SceneStateUpdate {
+  current_time?: string;
+  current_location?: string;
+  characters?: string[];
+}
+
 export interface ScheduleResult {
   injection_block: string;
   matched_entry_ids: string[];

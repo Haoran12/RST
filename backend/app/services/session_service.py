@@ -13,7 +13,13 @@ from app.models.session import (
     SessionSummary,
     SessionUpdate,
 )
-from app.models.lore import LoreCategory, LoreFile, LoreIndex, SchedulerPromptTemplate
+from app.models.lore import (
+    LoreCategory,
+    LoreFile,
+    LoreIndex,
+    SceneStateFile,
+    SchedulerPromptTemplate,
+)
 from app.storage.file_io import read_json, write_json
 
 
@@ -137,6 +143,9 @@ def create_session(payload: SessionCreate) -> SessionResponse:
 
     empty_index = LoreIndex(items=[], updated_at=now)
     write_json(rst_data / ".index" / "index.json", empty_index.model_dump(mode="json"))
+
+    empty_scene_state = SceneStateFile()
+    write_json(rst_data / "scene_state.json", empty_scene_state.model_dump(mode="json"))
 
     default_template = SchedulerPromptTemplate()
     write_json(rst_data / "scheduler_template.json", default_template.model_dump(mode="json"))

@@ -1208,15 +1208,17 @@ async function bootstrapCurrentSession() {
     skillEntryOptions.value = [];
     return;
   }
+  // Reset stale UI state first. Do not reset after async loading, otherwise
+  // a newly opened character overlay can be immediately closed by this reset.
+  entryFilter.value = entryCategory.value;
+  resetEntryListState();
+  resetCharacterListState();
   await Promise.all([
     loreStore.loadEntries(currentSession.value.name, entryCategory.value),
     loreStore.loadCharacters(currentSession.value.name),
     loreStore.refreshSchedulerState(currentSession.value.name),
     loadSkillEntryOptions(currentSession.value.name),
   ]);
-  entryFilter.value = entryCategory.value;
-  resetEntryListState();
-  resetCharacterListState();
 }
 
 function formatText(key: string, params: Record<string, string | number>): string {

@@ -1,78 +1,166 @@
 <template>
-  <div
-    v-if="visible"
-    class="overlay"
-    @pointerdown="handleOverlayPointerDown"
-    @click="handleOverlayClick"
-  >
-    <div class="overlay-card" @click.stop>
-      <header class="overlay-header">
-        <div class="overlay-title">{{ title }}</div>
-        <div v-if="disabledField" class="overlay-header-actions">
-          <span class="overlay-header-label">{{ t("contentOverlay.enabled") }}</span>
-          <n-switch v-model:value="disabledSwitch" size="small" />
-        </div>
-      </header>
-
-      <div class="overlay-body">
-        <slot name="body-prefix" />
-
-        <div
-          v-if="
-            (renderedSections.length > 0 || bottomFields.length > 0) &&
-            (props.sectionFilterable || props.sectionCollapsible)
-          "
-          class="section-toolbar"
-        >
-          <n-input
-            v-if="props.sectionFilterable"
-            v-model:value="sectionFilterQuery"
-            size="small"
-            clearable
-            :placeholder="sectionFilterPlaceholder"
-          />
-          <div v-if="props.sectionCollapsible" class="section-toolbar-actions">
-            <n-button tertiary size="tiny" @click="expandAllSections">
-              {{ t("contentOverlay.section.expand_all") }}
-            </n-button>
-            <n-button tertiary size="tiny" @click="collapseAllSections">
-              {{ t("contentOverlay.section.collapse_all") }}
-            </n-button>
+  <teleport to="body">
+    <div
+      v-if="visible"
+      class="overlay"
+      @pointerdown="handleOverlayPointerDown"
+      @click="handleOverlayClick"
+    >
+      <div class="overlay-card" @click.stop>
+        <header class="overlay-header">
+          <div class="overlay-title">{{ title }}</div>
+          <div v-if="disabledField" class="overlay-header-actions">
+            <span class="overlay-header-label">{{ t("contentOverlay.enabled") }}</span>
+            <n-switch v-model:value="disabledSwitch" size="small" />
           </div>
-        </div>
+        </header>
 
-        <div v-if="filteredSections.length > 0" class="section-list">
-          <section
-            v-for="section in filteredSections"
-            :key="section.key"
-            class="field-section"
+        <div class="overlay-body">
+          <slot name="body-prefix" />
+
+          <div
+            v-if="
+              (renderedSections.length > 0 || bottomFields.length > 0) &&
+              (props.sectionFilterable || props.sectionCollapsible)
+            "
+            class="section-toolbar"
           >
-            <div
-              v-if="section.title || section.description"
-              class="section-header"
-              :class="{ 'section-header--toggle': props.sectionCollapsible }"
-              @click="props.sectionCollapsible ? toggleSection(section.key) : undefined"
+            <n-input
+              v-if="props.sectionFilterable"
+              v-model:value="sectionFilterQuery"
+              size="small"
+              clearable
+              :placeholder="sectionFilterPlaceholder"
+            />
+            <div v-if="props.sectionCollapsible" class="section-toolbar-actions">
+              <n-button tertiary size="tiny" @click="expandAllSections">
+                {{ t("contentOverlay.section.expand_all") }}
+              </n-button>
+              <n-button tertiary size="tiny" @click="collapseAllSections">
+                {{ t("contentOverlay.section.collapse_all") }}
+              </n-button>
+            </div>
+          </div>
+
+          <div v-if="filteredSections.length > 0" class="section-list">
+            <section
+              v-for="section in filteredSections"
+              :key="section.key"
+              class="field-section"
             >
-              <div class="section-header-main">
-                <div v-if="section.title" class="section-title">{{ section.title }}</div>
-                <div v-if="section.description" class="section-description">
-                  {{ section.description }}
+              <div
+                v-if="section.title || section.description"
+                class="section-header"
+                :class="{ 'section-header--toggle': props.sectionCollapsible }"
+                @click="props.sectionCollapsible ? toggleSection(section.key) : undefined"
+              >
+                <div class="section-header-main">
+                  <div v-if="section.title" class="section-title">{{ section.title }}</div>
+                  <div v-if="section.description" class="section-description">
+                    {{ section.description }}
+                  </div>
+                </div>
+                <button
+                  v-if="props.sectionCollapsible"
+                  type="button"
+                  class="section-toggle"
+                  @click.stop="toggleSection(section.key)"
+                >
+                  <span class="section-count">{{ section.fields.length }}</span>
+                  <span class="section-arrow" :class="{ collapsed: isSectionCollapsed(section.key) }">⌄</span>
+                </button>
+              </div>
+
+              <div v-if="!isSectionCollapsed(section.key)" class="field-grid" :style="sectionGridStyle(section)">
+                <div
+                  v-for="field in section.fields"
+                  :key="field.key"
+                  class="field-item"
+                  :class="{
+                    'field-item--readonly': field.readonly,
+                    'field-item--full': isWideField(field),
+                  }"
+                >
+                  <label class="field-label">{{ field.label }}</label>
+                  <div class="field-control">
+                    <n-input
+                      v-if="field.type === 'text'"
+                      v-model:value="fieldValues[field.key] as string"
+                      size="small"
+                      :disabled="field.readonly"
+                      :placeholder="field.placeholder ?? ''"
+                    />
+                    <n-input
+                      v-else-if="field.type === 'textarea'"
+                      v-model:value="fieldValues[field.key] as string"
+                      size="small"
+                      type="textarea"
+                      :disabled="field.readonly"
+                      :placeholder="field.placeholder ?? ''"
+                      :autosize="{ minRows: 3, maxRows: 8 }"
+                    />
+                    <n-input-number
+                      v-else-if="field.type === 'number'"
+                      v-model:value="fieldValues[field.key] as number | null"
+                      size="small"
+                      :disabled="field.readonly"
+                      :min="field.min"
+                      :max="field.max"
+                      :step="field.step ?? 1"
+                      :placeholder="field.placeholder ?? ''"
+                    />
+                    <n-select
+                      v-else-if="field.type === 'select'"
+                      v-model:value="fieldValues[field.key] as string | number | Array<string | number>"
+                      size="small"
+                      :options="field.options ?? []"
+                      :disabled="field.readonly"
+                      :multiple="Boolean(field.multiple)"
+                      :filterable="Boolean(field.multiple)"
+                      :clearable="true"
+                      :max-tag-count="field.multiple ? 'responsive' : undefined"
+                    />
+                    <n-switch
+                      v-else
+                      v-model:value="fieldValues[field.key] as boolean"
+                      size="small"
+                      :disabled="field.readonly"
+                    />
+                  </div>
+                  <div v-if="field.description" class="field-description">
+                    {{ field.description }}
+                  </div>
                 </div>
               </div>
-              <button
-                v-if="props.sectionCollapsible"
-                type="button"
-                class="section-toggle"
-                @click.stop="toggleSection(section.key)"
-              >
-                <span class="section-count">{{ section.fields.length }}</span>
-                <span class="section-arrow" :class="{ collapsed: isSectionCollapsed(section.key) }">⌄</span>
-              </button>
-            </div>
+            </section>
+          </div>
+          <div
+            v-else-if="
+              props.sectionFilterable && normalizedSectionFilter && filteredBottomFields.length === 0
+            "
+            class="section-filter-empty"
+          >
+            {{ t("contentOverlay.section.no_match") }}
+          </div>
 
-            <div v-if="!isSectionCollapsed(section.key)" class="field-grid" :style="sectionGridStyle(section)">
+          <div class="content-section">
+            <label class="field-label">{{ contentLabel }}</label>
+            <n-input
+              v-model:value="contentInput"
+              type="textarea"
+              :disabled="props.contentReadonly"
+              :autosize="{ minRows: 12, maxRows: 24 }"
+              :placeholder="contentPlaceholder"
+            />
+            <div v-if="props.contentReadonly" class="readonly-hint">
+              {{ t("contentOverlay.readonly_hint") }}
+            </div>
+          </div>
+
+          <section v-if="filteredBottomFields.length > 0" class="field-section field-section--bottom">
+            <div class="field-grid" style="--overlay-columns: 1">
               <div
-                v-for="field in section.fields"
+                v-for="field in filteredBottomFields"
                 :key="field.key"
                 class="field-item"
                 :class="{
@@ -133,118 +221,32 @@
             </div>
           </section>
         </div>
-        <div
-          v-else-if="
-            props.sectionFilterable && normalizedSectionFilter && filteredBottomFields.length === 0
-          "
-          class="section-filter-empty"
-        >
-          {{ t("contentOverlay.section.no_match") }}
-        </div>
 
-        <div class="content-section">
-          <label class="field-label">{{ contentLabel }}</label>
-          <n-input
-            v-model:value="contentInput"
-            type="textarea"
-            :disabled="props.contentReadonly"
-            :autosize="{ minRows: 12, maxRows: 24 }"
-            :placeholder="contentPlaceholder"
-          />
-          <div v-if="props.contentReadonly" class="readonly-hint">
-            {{ t("contentOverlay.readonly_hint") }}
-          </div>
-        </div>
-
-        <section v-if="filteredBottomFields.length > 0" class="field-section field-section--bottom">
-          <div class="field-grid" style="--overlay-columns: 1">
-            <div
-              v-for="field in filteredBottomFields"
-              :key="field.key"
-              class="field-item"
-              :class="{
-                'field-item--readonly': field.readonly,
-                'field-item--full': isWideField(field),
-              }"
-            >
-              <label class="field-label">{{ field.label }}</label>
-              <div class="field-control">
-                <n-input
-                  v-if="field.type === 'text'"
-                  v-model:value="fieldValues[field.key] as string"
-                  size="small"
-                  :disabled="field.readonly"
-                  :placeholder="field.placeholder ?? ''"
-                />
-                <n-input
-                  v-else-if="field.type === 'textarea'"
-                  v-model:value="fieldValues[field.key] as string"
-                  size="small"
-                  type="textarea"
-                  :disabled="field.readonly"
-                  :placeholder="field.placeholder ?? ''"
-                  :autosize="{ minRows: 3, maxRows: 8 }"
-                />
-                <n-input-number
-                  v-else-if="field.type === 'number'"
-                  v-model:value="fieldValues[field.key] as number | null"
-                  size="small"
-                  :disabled="field.readonly"
-                  :min="field.min"
-                  :max="field.max"
-                  :step="field.step ?? 1"
-                  :placeholder="field.placeholder ?? ''"
-                />
-                <n-select
-                  v-else-if="field.type === 'select'"
-                  v-model:value="fieldValues[field.key] as string | number | Array<string | number>"
-                  size="small"
-                  :options="field.options ?? []"
-                  :disabled="field.readonly"
-                  :multiple="Boolean(field.multiple)"
-                  :filterable="Boolean(field.multiple)"
-                  :clearable="true"
-                  :max-tag-count="field.multiple ? 'responsive' : undefined"
-                />
-                <n-switch
-                  v-else
-                  v-model:value="fieldValues[field.key] as boolean"
-                  size="small"
-                  :disabled="field.readonly"
-                />
-              </div>
-              <div v-if="field.description" class="field-description">
-                {{ field.description }}
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <footer class="overlay-footer">
-        <n-popconfirm
-          v-if="props.showDelete"
-          :show-icon="false"
-          :positive-text="t('contentOverlay.delete.confirm_button')"
-          :positive-button-props="{ type: 'error' }"
-          @positive-click="emit('delete')"
-        >
-          <template #trigger>
-            <n-button type="error" tertiary>{{
-              props.deleteText ?? t("contentOverlay.delete.trigger")
+        <footer class="overlay-footer">
+          <n-popconfirm
+            v-if="props.showDelete"
+            :show-icon="false"
+            :positive-text="t('contentOverlay.delete.confirm_button')"
+            :positive-button-props="{ type: 'error' }"
+            @positive-click="emit('delete')"
+          >
+            <template #trigger>
+              <n-button type="error" tertiary>{{
+                props.deleteText ?? t("contentOverlay.delete.trigger")
+              }}</n-button>
+            </template>
+            {{ t("contentOverlay.delete.prompt") }}
+          </n-popconfirm>
+          <div class="footer-actions">
+            <n-button type="error" secondary @click="emit('discard')">{{
+              t("contentOverlay.actions.discard")
             }}</n-button>
-          </template>
-          {{ t("contentOverlay.delete.prompt") }}
-        </n-popconfirm>
-        <div class="footer-actions">
-          <n-button type="error" secondary @click="emit('discard')">{{
-            t("contentOverlay.actions.discard")
-          }}</n-button>
-          <n-button type="primary" @click="handleSave">{{ t("contentOverlay.actions.save") }}</n-button>
-        </div>
-      </footer>
+            <n-button type="primary" @click="handleSave">{{ t("contentOverlay.actions.save") }}</n-button>
+          </div>
+        </footer>
+      </div>
     </div>
-  </div>
+  </teleport>
 
   <n-modal
     v-model:show="showUnsaved"

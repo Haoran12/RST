@@ -166,6 +166,10 @@
                 </table>
               </div>
               <div class="character-field-row">
+                <span class="character-field-label">{{ t("statusPanel.character.activity") }}</span>
+                <span class="character-field-value">{{ valueOrFallback(activeCharacterActivity) }}</span>
+              </div>
+              <div class="character-field-row">
                 <span class="character-field-label">{{ t("statusPanel.character.body_state") }}</span>
                 <span class="character-field-value">{{ valueOrFallback(activeCharacterBodyState) }}</span>
               </div>
@@ -185,11 +189,18 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 
-import { createEntry, listCharacters, listEntries, updateEntry } from "@/api/lores";
+import {
+  createEntry,
+  getSceneState,
+  listCharacters,
+  listEntries,
+  updateEntry,
+  updateSceneState,
+} from "@/api/lores";
 import { useI18n } from "@/composables/useI18n";
 import { parseApiError } from "@/stores/api-error";
 import { useSessionStore } from "@/stores/session";
-import type { CharacterData, CharacterForm, LoreEntry } from "@/types/lore";
+import type { CharacterData, CharacterForm, LoreEntry, SceneState } from "@/types/lore";
 import { message } from "@/utils/message";
 
 const CURRENT_TAG_HINTS = [
@@ -239,6 +250,7 @@ const loading = ref(false);
 const placeEntries = ref<LoreEntry[]>([]);
 const plotEntries = ref<LoreEntry[]>([]);
 const characters = ref<CharacterData[]>([]);
+const sceneState = ref<SceneState | null>(null);
 const activeCharacterId = ref<string | null>(null);
 const requestToken = ref(0);
 const editStoryTime = ref("");
@@ -246,6 +258,7 @@ const editStoryLocation = ref("");
 const savingStorySnapshot = ref(false);
 
 const currentSessionName = computed(() => currentSession.value?.name ?? null);
+const isRstMode = computed(() => currentSession.value?.mode === "RST");
 const sessionDisplay = computed(
   () => currentSessionName.value ?? t("statusPanel.value.unselected"),
 );
@@ -254,6 +267,11 @@ const currentPlaceEntry = computed(() => pickCurrentEntry(placeEntries.value));
 const currentPlotEntry = computed(() => pickCurrentEntry(plotEntries.value));
 
 const storyTime = computed(() => {
+  const sceneTime = sceneState.value?.current_time.trim() ?? "";
+  if (sceneTime) {
+    return sceneTime;
+  }
+
   const plot = currentPlotEntry.value;
   if (!plot) {
     return t("statusPanel.value.unknown");
@@ -284,6 +302,11 @@ const storyTime = computed(() => {
 });
 
 const storyLocation = computed(() => {
+  const sceneLocation = sceneState.value?.current_location.trim() ?? "";
+  if (sceneLocation) {
+    return sceneLocation;
+  }
+
   const plot = currentPlotEntry.value;
   if (plot) {
     const fromTags = extractValueByKeys(plot.tags, [
@@ -330,6 +353,16 @@ const presentCharacters = computed(() => {
     .sort((left, right) => left.sort_order - right.sort_order);
   if (enabled.length === 0) {
     return [];
+  }
+
+  if (isRstMode.value && sceneState.value?.characters.length) {
+    const sceneNames = new Set(
+      sceneState.value.characters.map((name) => name.trim().toLowerCase()).filter(Boolean),
+    );
+    const matched = enabled.filter((item) => sceneNames.has(item.name.trim().toLowerCase()));
+    if (matched.length > 0) {
+      return matched;
+    }
   }
 
   const tagged = enabled.filter((item) => hasAnyTag(item.tags, PRESENT_TAG_HINTS));
@@ -427,6 +460,7 @@ const activeCharacterBodyState = computed(() => {
   return form.body.trim();
 });
 
+const activeCharacterActivity = computed(() => activeCharacterForm.value?.activity ?? "");
 const activeCharacterMind = computed(() => activeCharacterForm.value?.mind ?? "");
 const activeCharacterFormDisplay = computed(() => {
   const character = activeCharacter.value;
@@ -451,6 +485,7 @@ watch(
       placeEntries.value = [];
       plotEntries.value = [];
       characters.value = [];
+      sceneState.value = null;
       activeCharacterId.value = null;
       loading.value = false;
       requestToken.value += 1;
@@ -507,10 +542,14 @@ async function loadStatusPanelData(sessionName: string): Promise<void> {
   requestToken.value = currentToken;
   loading.value = true;
   try {
-    const [placeResponse, plotResponse, characterResponse] = await Promise.all([
+    const sceneRequest = isRstMode.value
+      ? getSceneState(sessionName).catch(() => null)
+      : Promise.resolve(null);
+    const [placeResponse, plotResponse, characterResponse, fetchedSceneState] = await Promise.all([
       listEntries(sessionName, "place"),
       listEntries(sessionName, "plot"),
       listCharacters(sessionName),
+      sceneRequest,
     ]);
     if (requestToken.value !== currentToken) {
       return;
@@ -518,10 +557,12 @@ async function loadStatusPanelData(sessionName: string): Promise<void> {
     placeEntries.value = placeResponse.entries.filter((item) => !item.disabled);
     plotEntries.value = plotResponse.entries.filter((item) => !item.disabled);
     characters.value = characterResponse.characters;
+    sceneState.value = fetchedSceneState;
   } catch (error) {
     if (requestToken.value !== currentToken) {
       return;
     }
+    sceneState.value = null;
     message.error(parseApiError(error));
   } finally {
     if (requestToken.value === currentToken) {
@@ -600,7 +641,12 @@ async function saveStorySnapshot() {
 
   savingStorySnapshot.value = true;
   try {
-    if (currentPlotEntry.value) {
+    if (isRstMode.value) {
+      await updateSceneState(currentSessionName.value, {
+        current_time: nextTime,
+        current_location: nextLocation,
+      });
+    } else if (currentPlotEntry.value) {
       const nextTags = upsertTagGroup(
         upsertTagGroup(currentPlotEntry.value.tags, TIME_TAG_KEYS, "time", nextTime),
         PLACE_TAG_KEYS,

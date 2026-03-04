@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.models.preset import Preset, PresetEntry, SYSTEM_ENTRIES
 from app.models.session import Message, SessionMeta
+from app.services.scene_service import scene_service
 
 
 class PromptAssembler:
@@ -11,10 +12,13 @@ class PromptAssembler:
         preset: Preset,
         messages: list[Message],
         lores_block: str,
+        scene_block: str,
         user_input: str,
     ) -> list[dict]:
         result: list[dict] = []
         history = self._select_history(session, messages)
+        if session.mode == "RST":
+            history = scene_service.deduplicate_history(history)
 
         for entry in preset.entries:
             if entry.disabled:
@@ -24,7 +28,13 @@ class PromptAssembler:
                     result.append({"role": msg.role, "content": msg.content})
                 continue
 
-            content = self._resolve_content(entry, session, lores_block, user_input)
+            content = self._resolve_content(
+                entry,
+                session,
+                lores_block,
+                scene_block,
+                user_input,
+            )
             if content:
                 result.append({"role": entry.role, "content": content})
         return result
@@ -42,6 +52,7 @@ class PromptAssembler:
         entry: PresetEntry,
         session: SessionMeta,
         lores_block: str,
+        scene_block: str,
         user_input: str,
     ) -> str | None:
         if entry.name == "Main_Prompt":
@@ -57,6 +68,6 @@ class PromptAssembler:
             case "user_input":
                 return user_input
             case "scene":
-                return None
+                return scene_block or None
             case _:
                 return None

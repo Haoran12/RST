@@ -36,6 +36,32 @@ from app.storage.lore_store import LoreStore
 MEMORY_CONSOLIDATION_THRESHOLD = 30
 MEMORY_CONSOLIDATION_TARGET = 20
 
+CHARACTER_UPDATE_CHAR_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "objective": ("goal", "target", "purpose", "目标", "目的"),
+    "personality": ("persona", "traits", "性格"),
+    "role": ("position", "identity", "角色", "身份"),
+    "faction": ("camp", "组织", "阵营"),
+}
+
+CHARACTER_UPDATE_FORM_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "activity": (
+        "action",
+        "current_action",
+        "current_activity",
+        "behavior",
+        "behaviour",
+        "当前行为",
+        "行为",
+        "行动",
+        "当前行动",
+    ),
+    "physique": ("appearance", "look", "looks", "外貌", "体貌", "体型", "容貌"),
+    "features": ("feature", "traits", "特点", "特征", "外观特征"),
+    "body": ("body_state", "physical_state", "身体状态", "体力状态", "当前身体状态"),
+    "mind": ("mind_state", "mental_state", "心理状态", "精神状态", "当前精神状态"),
+    "clothing": ("outfit", "attire", "穿着", "衣着", "服饰"),
+}
+
 
 class LoreUpdater:
     """Extract lore updates from conversations and apply them to storage."""
@@ -225,6 +251,70 @@ class LoreUpdater:
             return json.dumps(value, ensure_ascii=False)
         except Exception:
             return str(value)
+
+    def _normalize_update_field_key(self, key: str) -> str:
+        normalized = key.strip().lower().replace("-", "_").replace(" ", "_")
+        while "__" in normalized:
+            normalized = normalized.replace("__", "_")
+        return normalized
+
+    def _build_update_field_lookup(
+        self,
+        fields: set[str],
+        aliases: dict[str, tuple[str, ...]],
+    ) -> dict[str, str]:
+        lookup = {self._normalize_update_field_key(field): field for field in fields}
+        for canonical, names in aliases.items():
+            if canonical not in fields:
+                continue
+            for name in names:
+                normalized = self._normalize_update_field_key(name)
+                if normalized:
+                    lookup[normalized] = canonical
+        return lookup
+
+    def _split_character_form_updates(
+        self,
+        updates: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        char_fields = set(CharacterData.model_fields.keys())
+        form_fields = set(CharacterForm.model_fields.keys())
+        char_lookup = self._build_update_field_lookup(char_fields, CHARACTER_UPDATE_CHAR_FIELD_ALIASES)
+        form_lookup = self._build_update_field_lookup(form_fields, CHARACTER_UPDATE_FORM_FIELD_ALIASES)
+        char_updates: dict[str, Any] = {}
+        form_updates: dict[str, Any] = {}
+
+        for raw_key, value in updates.items():
+            key = self._normalize_update_field_key(str(raw_key))
+            if not key:
+                continue
+
+            if key == "active_form" and isinstance(value, dict):
+                for nested_key, nested_value in value.items():
+                    nested = self._normalize_update_field_key(str(nested_key))
+                    canonical = form_lookup.get(nested)
+                    if canonical:
+                        form_updates[canonical] = nested_value
+                continue
+
+            if "." in key:
+                prefix, nested = key.split(".", 1)
+                if prefix in {"active_form", "form"}:
+                    canonical = form_lookup.get(nested)
+                    if canonical:
+                        form_updates[canonical] = value
+                    continue
+
+            canonical_char = char_lookup.get(key)
+            if canonical_char:
+                char_updates[canonical_char] = value
+                continue
+
+            canonical_form = form_lookup.get(key)
+            if canonical_form:
+                form_updates[canonical_form] = value
+
+        return char_updates, form_updates
 
     def _render_consolidate_prompt(
         self,
@@ -429,15 +519,9 @@ class LoreUpdater:
 
                     char_file = self._ensure_character(store, name)
                     old_data = char_file.data
-                    char_updates: dict[str, Any] = {}
-                    form_updates: dict[str, Any] = {}
-                    char_fields = set(CharacterData.model_fields.keys())
-                    form_fields = set(CharacterForm.model_fields.keys())
-                    for key, value in updates.items():
-                        if key in char_fields:
-                            char_updates[key] = value
-                        elif key in form_fields:
-                            form_updates[key] = value
+                    char_updates, form_updates = self._split_character_form_updates(updates)
+                    if not char_updates and not form_updates:
+                        continue
 
                     data = old_data
                     if char_updates:
@@ -495,6 +579,9 @@ class LoreUpdater:
                                 after=after_text,
                             )
                         )
+
+                    if not field_changes:
+                        continue
 
                     data = data.model_copy(update={"updated_at": datetime.utcnow()})
                     store.save_character(CharacterFile(data=data, version=char_file.version))

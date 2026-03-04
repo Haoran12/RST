@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 
 import ApiConfigPanel from "@/components/panels/ApiConfigPanel.vue";
 import AppearancePanel from "@/components/panels/AppearancePanel.vue";
@@ -139,15 +139,22 @@ function handleRequestOpenCharacterOverlay(event: Event) {
   if (!characterId) {
     return;
   }
+  const detail = customEvent.detail ?? { characterId };
   activePanel.value = "rst-lore";
   // Re-dispatch after panel switch so RstLorePanel can consume the event.
-  window.setTimeout(() => {
+  // Emit a few retries to avoid missing the event while panel transition/mount is in progress.
+  const emitOpenEvent = () => {
     window.dispatchEvent(
       new CustomEvent(OPEN_CHARACTER_OVERLAY_EVENT, {
-        detail: customEvent.detail ?? { characterId },
+        detail,
       }),
     );
-  }, 0);
+  };
+  void nextTick(() => {
+    [0, 60, 220].forEach((delayMs) => {
+      window.setTimeout(emitOpenEvent, delayMs);
+    });
+  });
 }
 
 onMounted(() => {

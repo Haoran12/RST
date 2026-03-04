@@ -23,6 +23,8 @@ import type {
   MemoryUpdate,
   ScheduleResult,
   ScheduleStatus,
+  SceneState,
+  SceneStateUpdate,
   SchedulerPromptTemplate,
   SchedulerTemplateUpdate,
   SyncResult,
@@ -252,6 +254,19 @@ export async function deleteMemory(
   memoryId: string,
 ): Promise<void> {
   await apiClient.delete(`${BASE(sessionName)}/characters/${characterId}/memories/${memoryId}`);
+}
+
+export async function getSceneState(sessionName: string): Promise<SceneState> {
+  const { data } = await apiClient.get<SceneState>(`${BASE(sessionName)}/scene`);
+  return data;
+}
+
+export async function updateSceneState(
+  sessionName: string,
+  payload: SceneStateUpdate,
+): Promise<SceneState> {
+  const { data } = await apiClient.put<SceneState>(`${BASE(sessionName)}/scene`, payload);
+  return data;
 }
 
 export async function consolidateMemories(

@@ -1,0 +1,50 @@
+{
+  "data": {
+    "character_id": "09s9wrawqjjn",
+    "name": "char_14",
+    "race": "human",
+    "gender": "",
+    "birth": "",
+    "homeland": "",
+    "aliases": [],
+    "role": "",
+    "faction": "",
+    "objective": "",
+    "personality": "",
+    "relationship": [],
+    "memories": [],
+    "forms": [
+      {
+        "form_id": "beui61zf181f",
+        "form_name": "default",
+        "is_default": true,
+        "physique": "",
+        "features": "",
+        "vitality_max": 100,
+        "strength": 10,
+        "mana_potency": 100,
+        "toughness": 10,
+        "weak": [],
+        "resist": [],
+        "element": [],
+        "skills": [],
+        "penetration": [],
+        "clothing": "",
+        "body": "",
+        "mind": "",
+        "vitality_cur": 50,
+        "activity": ""
+      }
+    ],
+    "active_form_id": "beui61zf181f",
+    "tags": [
+      "character"
+    ],
+    "sort_order": 0,
+    "disabled": false,
+    "constant": false,
+    "created_at": "2026-03-03T06:13:04.120339",
+    "updated_at": "2026-03-03T06:13:04.120339"
+  },
+  "version": 1
+}

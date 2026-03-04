@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from time import perf_counter
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
@@ -30,6 +31,8 @@ from app.models.lore import (
     MemoryUpdate,
     ScheduleResult,
     ScheduleStatus,
+    SceneState,
+    SceneStateUpdate,
     SchedulerPromptTemplate,
     SchedulerTemplateUpdate,
     SyncResult,
@@ -49,6 +52,7 @@ from app.services.lore_service import (
 )
 from app.services.lore_updater import lore_updater
 from app.services.rst_runtime_service import rst_runtime_service
+from app.services.scene_service import scene_service
 from app.services.session_service import (
     SessionNotFoundError,
     get_session_dir,
@@ -58,6 +62,10 @@ from app.storage.message_store import MessageStore
 from app.storage.encryption import EncryptionError
 
 router = APIRouter()
+
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _resolve_category(value: str | None) -> LoreCategory | None:
@@ -443,6 +451,46 @@ def delete_memory_route(session_name: str, character_id: str, memory_id: str):
     except MemoryNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return None
+
+
+@router.get(
+    "/sessions/{session_name}/lores/scene",
+    response_model=SceneState,
+)
+def get_scene_state_route(session_name: str):
+    try:
+        get_session_storage(session_name)
+        return scene_service.load_scene_state(session_name)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put(
+    "/sessions/{session_name}/lores/scene",
+    response_model=SceneState,
+)
+def update_scene_state_route(session_name: str, payload: SceneStateUpdate):
+    try:
+        get_session_storage(session_name)
+        scene = scene_service.load_scene_state(session_name)
+        updates = payload.model_dump(exclude_unset=True)
+
+        normalized_updates: dict[str, object] = {}
+        if "current_time" in updates and updates["current_time"] is not None:
+            normalized_updates["current_time"] = updates["current_time"].strip()
+        if "current_location" in updates and updates["current_location"] is not None:
+            normalized_updates["current_location"] = updates["current_location"].strip()
+        if "characters" in updates and updates["characters"] is not None:
+            normalized_updates["characters"] = [
+                name.strip() for name in updates["characters"] if name.strip()
+            ]
+
+        updated_scene = scene.model_copy(update=normalized_updates)
+        updated_scene.updated_at = _utc_iso()
+        scene_service.save_scene_state(session_name, updated_scene)
+        return updated_scene
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post(

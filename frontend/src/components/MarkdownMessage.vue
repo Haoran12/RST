@@ -13,12 +13,64 @@ const props = defineProps<{
 
 const QUOTED_TEXT_PATTERN = /“([^”\n]+)”|"([^"\n]+)"/g;
 const SKIPPED_TAGS = new Set(["code", "pre"]);
+const SCENE_ESCAPED_RE = /&lt;scene&gt;([\s\S]*?)&lt;\/scene&gt;/gi;
+const SCENE_FIELD_RE = /^(time|location|characters)\s*[:：]\s*(.+)$/i;
 
 function escapeHtml(raw: string): string {
   return raw
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
+}
+
+function decodeHtmlEntities(raw: string): string {
+  if (!raw || typeof document === "undefined") {
+    return raw;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = raw;
+  return textarea.value;
+}
+
+function parseSceneFields(raw: string): { time: string; location: string; characters: string } {
+  const parsed = {
+    time: "",
+    location: "",
+    characters: "",
+  };
+
+  for (const line of raw.split("\n")) {
+    const match = line.trim().match(SCENE_FIELD_RE);
+    if (!match) {
+      continue;
+    }
+    const key = match[1].toLowerCase() as keyof typeof parsed;
+    parsed[key] = match[2].trim();
+  }
+
+  return parsed;
+}
+
+function buildSceneHtml(fields: { time: string; location: string; characters: string }): string {
+  const primary: string[] = [];
+  if (fields.time) {
+    primary.push(fields.time);
+  }
+  if (fields.location) {
+    primary.push(fields.location);
+  }
+  const mainLine = primary.join(" · ");
+  if (!mainLine && !fields.characters) {
+    return "";
+  }
+
+  let html = `<span class="scene-tag">`;
+  html += `<span class="scene-tag__main">📍 ${escapeHtml(mainLine || "场景更新")}</span>`;
+  if (fields.characters) {
+    html += `<span class="scene-tag__characters">${escapeHtml(fields.characters)}</span>`;
+  }
+  html += `</span>`;
+  return html;
 }
 
 function wrapQuotedTextInHtml(html: string): string {
@@ -107,8 +159,14 @@ const markdown = new MarkdownIt({
 });
 
 const renderedHtml = computed(() => {
-  const rawHtml = markdown.render(props.content ?? "");
-  return wrapQuotedTextInHtml(rawHtml);
+  let html = markdown.render(props.content ?? "");
+  html = html.replace(SCENE_ESCAPED_RE, (_, inner: string) => {
+    const normalizedInner = inner.replace(/<br\s*\/?>/gi, "\n");
+    const decoded = decodeHtmlEntities(normalizedInner).trim();
+    const fields = parseSceneFields(decoded);
+    return buildSceneHtml(fields);
+  });
+  return wrapQuotedTextInHtml(html);
 });
 </script>
 
@@ -258,5 +316,30 @@ const renderedHtml = computed(() => {
 .message-markdown :deep(.hljs-template-variable),
 .message-markdown :deep(.hljs-variable) {
   color: var(--rst-md-hljs-literal);
+}
+
+.message-markdown :deep(.scene-tag) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 0.75em;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--rst-border-color);
+  background: rgba(var(--rst-accent-rgb), 0.06);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--rst-text-secondary);
+  opacity: 0.8;
+}
+
+.message-markdown :deep(.scene-tag__main) {
+  font-weight: 500;
+}
+
+.message-markdown :deep(.scene-tag__characters) {
+  font-size: 10px;
+  opacity: 0.85;
+  padding-left: 1.1em;
 }
 </style>

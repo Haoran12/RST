@@ -62,6 +62,31 @@ class _CaptureSchedulerProvider(BaseProvider):
         )
 
 
+class _SchedulerSyncProvider(BaseProvider):
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    async def list_models(self, base_url: str, api_key: str) -> list[str]:
+        return []
+
+    async def chat(
+        self,
+        base_url: str,
+        api_key: str,
+        *,
+        messages: list[dict],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        stream: bool = False,
+    ) -> ProviderChatResult:
+        return ProviderChatResult(
+            text=self.text,
+            request={"messages": messages, "model": model},
+            response={"choices": [{"finish_reason": "stop"}]},
+        )
+
+
 async def _create_api_config(async_client, sample_api_config: dict) -> str:
     response = await async_client.post("/api-configs", json=sample_api_config)
     assert response.status_code == 201
@@ -355,6 +380,73 @@ async def test_schedule_prompt_includes_birth_age_and_birthday(
 
 
 @pytest.mark.asyncio
+async def test_sync_updates_character_activity_and_appearance_alias_fields(
+    async_client,
+    sample_api_config,
+    monkeypatch,
+) -> None:
+    sync_text = """
+[
+  {
+    "type": "character_update",
+    "name": "柳璃",
+    "field_updates": {
+      "当前行为": "警戒四周",
+      "外貌": "银发沾雨，披风破损",
+      "active_form.body_state": "左臂擦伤",
+      "active_form.mental_state": "紧张但冷静"
+    }
+  },
+  {
+    "type": "character_update",
+    "name": "柳璃",
+    "field_updates": {
+      "appearance": "湿透的银发贴在额前",
+      "behavior": "收刀入鞘后观察四周"
+    }
+  }
+]
+""".strip()
+    provider = _SchedulerSyncProvider(sync_text)
+    monkeypatch.setattr("app.services.lore_updater.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "LoreSyncAliasSession"
+    await _create_session(async_client, session_name, config_id, preset_id, config_id)
+
+    created_character = await async_client.post(
+        f"/sessions/{session_name}/lores/characters",
+        json={"name": "柳璃", "race": "人类"},
+    )
+    assert created_character.status_code == 201
+
+    sync_response = await async_client.post(f"/sessions/{session_name}/lores/sync")
+    assert sync_response.status_code == 200
+    sync_payload = sync_response.json()
+    assert sync_payload["updated_entries"]
+    changed_fields = [
+        item["field"]
+        for change in sync_payload["changes"]
+        for item in change.get("field_changes", [])
+    ]
+    assert "active_form.activity" in changed_fields
+    assert "active_form.physique" in changed_fields
+    assert "active_form.body" in changed_fields
+    assert "active_form.mind" in changed_fields
+
+    characters = await async_client.get(f"/sessions/{session_name}/lores/characters")
+    assert characters.status_code == 200
+    payload = characters.json()
+    assert payload["total"] == 1
+    active_form = payload["characters"][0]["forms"][0]
+    assert active_form["activity"] == "收刀入鞘后观察四周"
+    assert active_form["physique"] == "湿透的银发贴在额前"
+    assert active_form["body"] == "左臂擦伤"
+    assert active_form["mind"] == "紧张但冷静"
+
+
+@pytest.mark.asyncio
 async def test_sync_status_includes_last_result_details(async_client, sample_api_config) -> None:
     config_id = await _create_api_config(async_client, sample_api_config)
     preset_id = await _create_preset(async_client)
@@ -403,3 +495,33 @@ async def test_sync_status_includes_last_result_details(async_client, sample_api
     assert payload["last_result"]["updated_entries"] == ["char-1"]
     assert payload["last_result"]["created_entries"] == ["entry-1"]
     assert payload["last_result"]["changes"][0]["field_changes"][0]["field"] == "active_form.strength"
+
+
+@pytest.mark.asyncio
+async def test_scene_state_get_and_put(async_client, sample_api_config) -> None:
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "LoreSceneStateSession"
+    await _create_session(async_client, session_name, config_id, preset_id, config_id)
+
+    initial = await async_client.get(f"/sessions/{session_name}/lores/scene")
+    assert initial.status_code == 200
+    initial_payload = initial.json()
+    assert initial_payload["current_time"] == ""
+    assert initial_payload["current_location"] == ""
+    assert initial_payload["characters"] == []
+
+    updated = await async_client.put(
+        f"/sessions/{session_name}/lores/scene",
+        json={
+            "current_time": "灵纪1042年3月18日 午后",
+            "current_location": "泽源·潮汐城·港口",
+            "characters": ["柳璃", "小溪"],
+        },
+    )
+    assert updated.status_code == 200
+    payload = updated.json()
+    assert payload["current_time"] == "灵纪1042年3月18日 午后"
+    assert payload["current_location"] == "泽源·潮汐城·港口"
+    assert payload["characters"] == ["柳璃", "小溪"]
+    assert payload["updated_at"]

@@ -251,3 +251,38 @@ async def test_closing_session_cancels_runtime_and_clears_memory(
     assert chat_response.status_code == 499
     assert rst_runtime_service.get_session_state("RuntimeClose") == {}
     assert rst_runtime_service.has_running_tasks("RuntimeClose") is False
+
+
+@pytest.mark.asyncio
+async def test_chat_extracts_scene_state_from_assistant_reply(
+    async_client, sample_api_config, monkeypatch
+) -> None:
+    provider = _StubProvider(
+        texts=[
+            (
+                "故事继续推进。\n"
+                "<scene>\n"
+                "time: 灵纪1042年3月18日 午后\n"
+                "location: 泽源·潮汐城·港口\n"
+                "characters: 柳璃, 小溪\n"
+                "</scene>"
+            )
+        ]
+    )
+    monkeypatch.setattr("app.services.chat_service.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "ChatFlowScene"
+    await _create_session(async_client, session_name, config_id, preset_id)
+
+    chat_response = await async_client.post(f"/sessions/{session_name}/chat", json={"content": "继续"})
+    assert chat_response.status_code == 200
+
+    scene_response = await async_client.get(f"/sessions/{session_name}/lores/scene")
+    assert scene_response.status_code == 200
+    scene_payload = scene_response.json()
+    assert scene_payload["current_time"] == "灵纪1042年3月18日 午后"
+    assert scene_payload["current_location"] == "泽源·潮汐城·港口"
+    assert scene_payload["characters"] == ["柳璃", "小溪"]
+    assert scene_payload["updated_at"]

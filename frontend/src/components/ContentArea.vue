@@ -440,11 +440,14 @@ const removeAttachment = async (messageId: string, attachmentName: string) => {
 
 .edit-textarea {
   width: 100%;
-  min-height: 200px;
+  min-height: 320px;
   border-radius: 8px;
   border: 1px solid var(--rst-border-color);
   background: var(--rst-bg-secondary);
   color: var(--rst-text-primary);
+  font-family: var(--rst-font-family);
+  font-size: calc(14px * var(--rst-font-size-scale));
+  line-height: 1.7;
   padding: 10px 12px;
   resize: vertical;
 }

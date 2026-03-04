@@ -25,6 +25,7 @@ from app.services.lore_updater import lore_updater
 from app.services.preset_service import PresetNotFoundError, get_preset_storage
 from app.services.prompt_assembler import PromptAssembler
 from app.services.rst_runtime_service import rst_runtime_service
+from app.services.scene_service import scene_service
 from app.services.session_service import (
     SessionNotFoundError,
     get_session_dir,
@@ -309,12 +310,18 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
         st_messages = _load_history(store, session.scan_depth)
         lores_block = st_mode_inject(lore_store.load_all_entries(), st_messages)
 
+    scene_block = ""
+    if session.mode == "RST":
+        scene_state = scene_service.load_scene_state(session_name)
+        scene_block = scene_service.render_scene_prompt(scene_state)
+
     assembler = PromptAssembler()
     prompt_messages = assembler.build(
         session=session,
         preset=preset,
         messages=prompt_history,
         lores_block=lores_block,
+        scene_block=scene_block,
         user_input=user_input,
     )
 
@@ -403,6 +410,13 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
     )
     store.append(assistant_message)
     touch_session(session_name)
+    if session.mode == "RST":
+        parsed_scene = scene_service.parse_scene_tag(assistant_text)
+        if parsed_scene is not None:
+            previous_scene = scene_service.load_scene_state(session_name)
+            merged_scene = scene_service.merge_scene_state(previous_scene, parsed_scene)
+            merged_scene.updated_at = _utc_iso()
+            scene_service.save_scene_state(session_name, merged_scene)
 
     response_time = _utc_iso()
     duration_ms = int((perf_counter() - started_at) * 1000)
