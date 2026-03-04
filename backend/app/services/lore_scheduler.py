@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from time import perf_counter
 from typing import Callable
@@ -304,30 +305,22 @@ class LoreScheduler:
                 char_file = store.load_character(entry_id)
                 if char_file is None:
                     continue
-                active_form = next(
-                    (form for form in char_file.data.forms if form.form_id == char_file.data.active_form_id),
-                    char_file.data.forms[0] if char_file.data.forms else None,
-                )
-                profile = [
-                    f"[CHARACTER] {char_file.data.name}",
-                    f"race: {char_file.data.race}",
-                    f"gender: {char_file.data.gender}",
-                    f"birth: {char_file.data.birth}",
-                    f"role: {char_file.data.role}",
-                    f"objective: {char_file.data.objective}",
-                ]
+                payload = char_file.model_dump(mode="json")
                 birth_date = parse_fantasy_date(char_file.data.birth)
                 if birth_date is not None and scene_date is not None:
-                    profile.append(f"scene_date: {scene_date_text}")
-                    profile.append(f"age: {compute_age_at(birth_date, scene_date)}")
-                    profile.append(
-                        "birthday_today: "
-                        f"{'yes' if is_birthday_today(birth_date, scene_date) else 'no'}"
+                    payload["scene_meta"] = {
+                        "scene_date": scene_date_text,
+                        "age": compute_age_at(birth_date, scene_date),
+                        "birthday_today": is_birthday_today(birth_date, scene_date),
+                    }
+                blocks.append(
+                    "\n".join(
+                        [
+                            f"[CHARACTER_FULL] {char_file.data.name} ({entry_id})",
+                            json.dumps(payload, ensure_ascii=False, indent=2),
+                        ]
                     )
-                if active_form is not None:
-                    profile.append(f"activity: {active_form.activity}")
-                    profile.append(f"body: {active_form.body}")
-                blocks.append("\n".join(profile))
+                )
                 continue
 
             found = store.find_entry(entry_id)

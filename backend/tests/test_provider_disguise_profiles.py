@@ -66,7 +66,6 @@ async def test_anthropic_chat_uses_sillytavern_style_headers(
     assert request.headers["x-api-key"] == "sk-ant-test"
     assert request.headers["anthropic-version"] == "2023-06-01"
     assert request.headers["Content-Type"].startswith("application/json")
-    assert "SillyTavern" in request.headers["User-Agent"]
 
     payload = json.loads(request.content.decode("utf-8"))
     assert payload == {
@@ -124,7 +123,6 @@ async def test_gemini_chat_uses_sillytavern_style_headers(monkeypatch: pytest.Mo
     assert request.url.path == "/v1beta/models/gemini-2.0-flash:generateContent"
     assert request.url.params.get("key") == "gm-test-key"
     assert request.headers["Content-Type"].startswith("application/json")
-    assert "SillyTavern" in request.headers["User-Agent"]
 
     payload = json.loads(request.content.decode("utf-8"))
     assert payload == {
@@ -166,5 +164,6 @@ async def test_deepseek_chat_uses_openai_compat_disguise_headers(
     assert request.url.path == "/v1/chat/completions"
     assert request.headers["Authorization"] == "Bearer sk-deepseek-test"
     assert request.headers["Content-Type"].startswith("application/json")
-    assert "SillyTavern" in request.headers["User-Agent"]
+    assert request.headers["HTTP-Referer"] == "https://sillytavern.app"
+    assert request.headers["X-Title"] == "SillyTavern"
     assert result.request["headers"]["Authorization"] == "Bearer [redacted]"

@@ -26,7 +26,7 @@ def _patch_async_client(
 
 
 @pytest.mark.asyncio
-async def test_openai_list_models_uses_browser_like_headers(
+async def test_openai_list_models_uses_sillytavern_compat_headers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, httpx.Request] = {}
@@ -48,13 +48,12 @@ async def test_openai_list_models_uses_browser_like_headers(
     assert request.method == "GET"
     assert request.url.path == "/v1/models"
     assert request.headers["Authorization"] == "Bearer sk-test"
-    assert "SillyTavern" in request.headers["User-Agent"]
-    assert request.headers["Accept"] == "application/json, text/plain, */*"
-    assert request.headers["Sec-Fetch-Mode"] == "cors"
+    assert request.headers["HTTP-Referer"] == "https://sillytavern.app"
+    assert request.headers["X-Title"] == "SillyTavern"
 
 
 @pytest.mark.asyncio
-async def test_openai_chat_uses_sillytavern_style_headers_and_chat_payload(
+async def test_openai_chat_uses_sillytavern_compat_headers_and_chat_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, httpx.Request] = {}
@@ -85,7 +84,8 @@ async def test_openai_chat_uses_sillytavern_style_headers_and_chat_payload(
     assert request.url.path == "/v1/chat/completions"
     assert request.headers["Authorization"] == "Bearer sk-test"
     assert request.headers["Content-Type"].startswith("application/json")
-    assert "SillyTavern" in request.headers["User-Agent"]
+    assert request.headers["HTTP-Referer"] == "https://sillytavern.app"
+    assert request.headers["X-Title"] == "SillyTavern"
     payload = json.loads(request.content.decode("utf-8"))
     assert payload == {
         "model": "gpt-test",
@@ -98,3 +98,86 @@ async def test_openai_chat_uses_sillytavern_style_headers_and_chat_payload(
     request_context = result.request
     assert request_context["url"] == "https://example.test/v1/chat/completions"
     assert request_context["headers"]["Authorization"] == "Bearer [redacted]"
+    assert request_context["headers"]["HTTP-Referer"] == "https://sillytavern.app"
+    assert request_context["headers"]["X-Title"] == "SillyTavern"
+
+
+@pytest.mark.asyncio
+async def test_openrouter_list_models_uses_sillytavern_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, httpx.Request] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["request"] = request
+        return httpx.Response(
+            status_code=200,
+            json={"data": [{"id": "openrouter/model-a"}]},
+            request=request,
+        )
+
+    _patch_async_client(monkeypatch, handler)
+    provider = OpenAIProvider()
+    models = await provider.list_models("https://openrouter.ai/api/v1", "sk-or-test")
+
+    assert models == ["openrouter/model-a"]
+    request = captured["request"]
+    assert request.method == "GET"
+    assert request.url.path == "/api/v1/models"
+    assert request.headers["Authorization"] == "Bearer sk-or-test"
+    assert request.headers["HTTP-Referer"] == "https://sillytavern.app"
+    assert request.headers["X-Title"] == "SillyTavern"
+
+
+@pytest.mark.asyncio
+async def test_openrouter_chat_uses_sillytavern_headers_and_payload_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, httpx.Request] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["request"] = request
+        return httpx.Response(
+            status_code=200,
+            json={"choices": [{"message": {"content": "openrouter hello"}}]},
+            request=request,
+        )
+
+    _patch_async_client(monkeypatch, handler)
+    provider = OpenAIProvider()
+    result = await provider.chat(
+        "https://openrouter.ai/api/v1",
+        "sk-or-test",
+        messages=[{"role": "user", "content": "ping"}],
+        model="openrouter/model-a",
+        temperature=0.7,
+        max_tokens=256,
+        stream=False,
+    )
+
+    assert result.text == "openrouter hello"
+    request = captured["request"]
+    assert request.method == "POST"
+    assert request.url.path == "/api/v1/chat/completions"
+    assert request.headers["Authorization"] == "Bearer sk-or-test"
+    assert request.headers["Content-Type"].startswith("application/json")
+    assert request.headers["HTTP-Referer"] == "https://sillytavern.app"
+    assert request.headers["X-Title"] == "SillyTavern"
+
+    payload = json.loads(request.content.decode("utf-8"))
+    assert payload == {
+        "model": "openrouter/model-a",
+        "messages": [{"role": "user", "content": "ping"}],
+        "temperature": 0.7,
+        "max_tokens": 256,
+        "stream": False,
+        "transforms": ["middle-out"],
+        "plugins": [],
+        "include_reasoning": True,
+    }
+
+    request_context = result.request
+    assert request_context["url"] == "https://openrouter.ai/api/v1/chat/completions"
+    assert request_context["headers"]["Authorization"] == "Bearer [redacted]"
+    assert request_context["headers"]["HTTP-Referer"] == "https://sillytavern.app"
+    assert request_context["headers"]["X-Title"] == "SillyTavern"

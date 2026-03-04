@@ -52,6 +52,7 @@ def _character_file(
     relationship: list[Relationship] | None = None,
     skills: list[str] | None = None,
     element: list[str] | None = None,
+    mana_potency: int = 100,
 ) -> CharacterFile:
     now = datetime.utcnow()
     form = CharacterForm(
@@ -59,6 +60,7 @@ def _character_file(
         form_name="默认形态",
         skills=skills or [],
         element=element or [],
+        mana_potency=mana_potency,
     )
     return CharacterFile(
         data=CharacterData(
@@ -359,6 +361,30 @@ class TestExpandRelatedIds:
 
         assert len(capped) == 50
         assert capped[:2] == constant_ids
+
+    def test_build_candidate_text_includes_active_form_mana_potency(self, tmp_path) -> None:
+        store = LoreStore(tmp_path / "session")
+        store.save_character(
+            _character_file(
+                character_id="char1",
+                name="Wu Ye",
+                race="human",
+                mana_potency=6000,
+            )
+        )
+        store.rebuild_index()
+        scheduler = LoreScheduler()
+
+        candidate_text = scheduler._build_candidate_text(
+            store=store,
+            candidate_ids=["char1"],
+            scene_context="",
+        )
+
+        assert "[CHARACTER_FULL] Wu Ye (char1)" in candidate_text
+        assert '"character_id": "char1"' in candidate_text
+        assert '"mana_potency": 6000' in candidate_text
+        assert '"active_form_id": "char1-form"' in candidate_text
 
 
 def _create_scheduler_fixture_session(name: str) -> tuple[LoreStore, LoreScheduler]:

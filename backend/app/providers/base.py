@@ -4,6 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 
 def _env_positive_float(name: str, default: float) -> float:
@@ -26,33 +27,45 @@ PROVIDER_CHAT_TIMEOUT_SECONDS = _env_positive_float(
     300.0,
 )
 
-# Browser-like defaults for outbound LLM API calls.
-# The User-Agent intentionally identifies as SillyTavern-compatible.
-DEFAULT_OUTBOUND_HEADERS: dict[str, str] = {
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    "DNT": "1",
-    "Origin": "https://sillytavern.app",
-    "Referer": "https://sillytavern.app/",
-    "Sec-CH-UA": '"Not(A:Brand";v="99", "Google Chrome";v="124", "Chromium";v="124"',
-    "Sec-CH-UA-Mobile": "?0",
-    "Sec-CH-UA-Platform": '"Windows"',
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "cross-site",
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "SillyTavern/1.12.8 Chrome/124.0.0.0 Safari/537.36"
-    ),
+# Keep provider defaults minimal. Provider-specific behavior should be explicit.
+DEFAULT_OUTBOUND_HEADERS: dict[str, str] = {}
+
+# SillyTavern identity headers used by OpenAI-compatible requests.
+SILLYTAVERN_OPENAI_COMPAT_HEADERS: dict[str, str] = {
+    "HTTP-Referer": "https://sillytavern.app",
+    "X-Title": "SillyTavern",
 }
 
 
-def build_outbound_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+def is_openrouter_base_url(base_url: str) -> bool:
+    candidate = base_url.strip()
+    if not candidate:
+        return False
+    if "://" not in candidate:
+        candidate = f"https://{candidate}"
+
+    try:
+        hostname = urlparse(candidate).hostname
+    except Exception:
+        return False
+
+    if not hostname:
+        return False
+    host = hostname.lower()
+    return host == "openrouter.ai" or host.endswith(".openrouter.ai")
+
+
+def build_outbound_headers(
+    extra: dict[str, str] | None = None,
+    *,
+    base_url: str | None = None,
+    use_sillytavern_openai_compat: bool = False,
+) -> dict[str, str]:
     headers = dict(DEFAULT_OUTBOUND_HEADERS)
+    if use_sillytavern_openai_compat or (
+        base_url and is_openrouter_base_url(base_url)
+    ):
+        headers.update(SILLYTAVERN_OPENAI_COMPAT_HEADERS)
     if extra:
         headers.update(extra)
     return headers

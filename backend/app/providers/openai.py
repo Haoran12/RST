@@ -11,6 +11,7 @@ from app.providers.base import (
     ProviderChatResult,
     ProviderError,
     build_outbound_headers,
+    is_openrouter_base_url,
     redact_outbound_headers,
 )
 
@@ -27,7 +28,11 @@ class OpenAIProvider(BaseProvider):
 
     async def list_models(self, base_url: str, api_key: str) -> list[str]:
         url = f"{base_url.rstrip('/')}/models"
-        headers = build_outbound_headers({"Authorization": f"Bearer {api_key}"})
+        headers = build_outbound_headers(
+            {"Authorization": f"Bearer {api_key}"},
+            base_url=base_url,
+            use_sillytavern_openai_compat=True,
+        )
         try:
             async with httpx.AsyncClient(timeout=PROVIDER_LIST_MODELS_TIMEOUT_SECONDS) as client:
                 response = await client.get(url, headers=headers)
@@ -61,7 +66,9 @@ class OpenAIProvider(BaseProvider):
             {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-            }
+            },
+            base_url=base_url,
+            use_sillytavern_openai_compat=True,
         )
         payload = {
             "model": model,
@@ -70,6 +77,15 @@ class OpenAIProvider(BaseProvider):
             "max_tokens": max_tokens,
             "stream": False,
         }
+        if is_openrouter_base_url(base_url):
+            # Match SillyTavern's OpenRouter /chat/completions shape.
+            payload.update(
+                {
+                    "transforms": ["middle-out"],
+                    "plugins": [],
+                    "include_reasoning": True,
+                }
+            )
         request_context = {
             "method": "POST",
             "url": url,
