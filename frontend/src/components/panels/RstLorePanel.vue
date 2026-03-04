@@ -33,16 +33,17 @@
     <n-spin v-else :show="loreStore.loading" class="panel-body">
       <n-tabs v-model:value="activeTab" type="line" animated>
         <n-tab-pane name="entries" :tab="t('rstPanel.tabs.entries')">
-          <div class="entries-filter-row">
-            <n-select
-              v-model:value="entryFilter"
-              size="small"
-              :options="entryFilterOptions"
-              @update:value="handleEntryFilterChange"
-            />
-          </div>
+          <div class="tab-content-wrapper">
+            <div class="entries-filter-row">
+              <n-select
+                v-model:value="entryFilter"
+                size="small"
+                :options="entryFilterOptions"
+                @update:value="handleEntryFilterChange"
+              />
+            </div>
 
-          <div class="entries-panel">
+            <div class="entries-panel">
             <div class="entries-actions-row">
               <div class="entries-title">{{ t("rstPanel.entries.title") }}</div>
               <div class="entries-actions">
@@ -127,9 +128,11 @@
             <div v-else class="entry-list-empty">{{ t("rstPanel.entries.empty") }}</div>
             </div>
           </div>
+          </div>
         </n-tab-pane>
 
         <n-tab-pane name="characters" :tab="t('rstPanel.tabs.characters')">
+          <div class="tab-content-wrapper">
           <div class="entries-panel">
             <div class="entries-actions-row">
               <div class="entries-title">{{ t("rstPanel.characters.title") }}</div>
@@ -216,9 +219,11 @@
             <div v-else class="entry-list-empty">{{ t("rstPanel.characters.empty") }}</div>
             </div>
           </div>
+          </div>
         </n-tab-pane>
 
         <n-tab-pane name="scheduler" :tab="t('rstPanel.tabs.scheduler')">
+          <div class="tab-content-wrapper">
           <div class="scheduler-card">
             <div class="status-grid">
               <div>
@@ -308,6 +313,7 @@
                 </section>
               </div>
             </div>
+          </div>
           </div>
         </n-tab-pane>
       </n-tabs>
@@ -1255,7 +1261,7 @@ function parseTags(text: string): string[] {
 
 function parseDelimitedText(text: string): string[] {
   return text
-    .split(/[\n,，]/)
+    .split(/[\n,\uFF0C]/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -1296,7 +1302,7 @@ function parseRelationships(text: string): Relationship[] {
     .filter(Boolean);
   return rows
     .map((row) => {
-      const separator = row.includes("：") ? "：" : ":";
+      const separator = row.includes("\uFF1A") ? "\uFF1A" : ":";
       if (!row.includes(separator)) {
         return { target: row, relation: "" };
       }
@@ -2769,9 +2775,17 @@ function actionLabel(action: string): string {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .panel-body :deep(.n-spin-container) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-body :deep(.n-spin-content) {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -2783,6 +2797,7 @@ function actionLabel(action: string): string {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .panel-body :deep(.n-tabs-pane-wrapper) {
@@ -2790,11 +2805,20 @@ function actionLabel(action: string): string {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: hidden !important;
 }
 
 .panel-body :deep(.n-tab-pane) {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.tab-content-wrapper {
+  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2872,6 +2896,7 @@ function actionLabel(action: string): string {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .entry-list {
@@ -3122,6 +3147,7 @@ function actionLabel(action: string): string {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 8px;
   display: flex;
   flex-direction: column;
