@@ -10,6 +10,8 @@ from app.providers.base import (
     BaseProvider,
     ProviderChatResult,
     ProviderError,
+    build_outbound_headers,
+    redact_outbound_headers,
 )
 
 
@@ -25,7 +27,7 @@ class OpenAIProvider(BaseProvider):
 
     async def list_models(self, base_url: str, api_key: str) -> list[str]:
         url = f"{base_url.rstrip('/')}/models"
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = build_outbound_headers({"Authorization": f"Bearer {api_key}"})
         try:
             async with httpx.AsyncClient(timeout=PROVIDER_LIST_MODELS_TIMEOUT_SECONDS) as client:
                 response = await client.get(url, headers=headers)
@@ -55,7 +57,12 @@ class OpenAIProvider(BaseProvider):
         stream: bool = False,
     ) -> ProviderChatResult:
         url = f"{base_url.rstrip('/')}/chat/completions"
-        headers = {"Authorization": f"Bearer {api_key}"}
+        headers = build_outbound_headers(
+            {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+        )
         payload = {
             "model": model,
             "messages": messages,
@@ -63,7 +70,12 @@ class OpenAIProvider(BaseProvider):
             "max_tokens": max_tokens,
             "stream": False,
         }
-        request_context = {"method": "POST", "url": url, "payload": payload}
+        request_context = {
+            "method": "POST",
+            "url": url,
+            "headers": redact_outbound_headers(headers),
+            "payload": payload,
+        }
 
         data: Any = None
         try:

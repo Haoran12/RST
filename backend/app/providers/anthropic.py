@@ -9,6 +9,8 @@ from app.providers.base import (
     BaseProvider,
     ProviderChatResult,
     ProviderError,
+    build_outbound_headers,
+    redact_outbound_headers,
 )
 
 
@@ -62,13 +64,20 @@ class AnthropicProvider(BaseProvider):
         if system_parts:
             payload["system"] = "\n\n".join(system_parts)
 
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        }
+        headers = build_outbound_headers(
+            {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+        )
         url = f"{base_url.rstrip('/')}/messages"
-        request_context = {"method": "POST", "url": url, "payload": payload}
+        request_context = {
+            "method": "POST",
+            "url": url,
+            "headers": redact_outbound_headers(headers),
+            "payload": payload,
+        }
 
         data: Any = None
         try:

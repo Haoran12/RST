@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import os
 from typing import Any
 
 
@@ -25,6 +25,49 @@ PROVIDER_CHAT_TIMEOUT_SECONDS = _env_positive_float(
     "RST_PROVIDER_CHAT_TIMEOUT_SECONDS",
     300.0,
 )
+
+# Browser-like defaults for outbound LLM API calls.
+# The User-Agent intentionally identifies as SillyTavern-compatible.
+DEFAULT_OUTBOUND_HEADERS: dict[str, str] = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "DNT": "1",
+    "Origin": "https://sillytavern.app",
+    "Referer": "https://sillytavern.app/",
+    "Sec-CH-UA": '"Not(A:Brand";v="99", "Google Chrome";v="124", "Chromium";v="124"',
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "cross-site",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "SillyTavern/1.12.8 Chrome/124.0.0.0 Safari/537.36"
+    ),
+}
+
+
+def build_outbound_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
+    headers = dict(DEFAULT_OUTBOUND_HEADERS)
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def redact_outbound_headers(headers: dict[str, str]) -> dict[str, str]:
+    redacted = dict(headers)
+    for key in ("Authorization", "x-api-key", "api-key", "x-goog-api-key"):
+        value = redacted.get(key)
+        if value:
+            if key == "Authorization" and value.startswith("Bearer "):
+                redacted[key] = "Bearer [redacted]"
+            else:
+                redacted[key] = "[redacted]"
+    return redacted
 
 
 class ProviderError(RuntimeError):

@@ -10,6 +10,8 @@ from app.providers.base import (
     BaseProvider,
     ProviderChatResult,
     ProviderError,
+    build_outbound_headers,
+    redact_outbound_headers,
 )
 
 
@@ -25,9 +27,10 @@ class GeminiProvider(BaseProvider):
 
     async def list_models(self, base_url: str, api_key: str) -> list[str]:
         url = f"{base_url.rstrip('/')}/models"
+        headers = build_outbound_headers()
         try:
             async with httpx.AsyncClient(timeout=PROVIDER_LIST_MODELS_TIMEOUT_SECONDS) as client:
-                response = await client.get(url, params={"key": api_key})
+                response = await client.get(url, params={"key": api_key}, headers=headers)
             response.raise_for_status()
             payload = response.json()
         except Exception as exc:
@@ -57,6 +60,7 @@ class GeminiProvider(BaseProvider):
         stream: bool = False,
     ) -> ProviderChatResult:
         url = f"{base_url.rstrip('/')}/models/{model}:generateContent"
+        headers = build_outbound_headers({"Content-Type": "application/json"})
         system_parts: list[str] = []
         contents: list[dict] = []
 
@@ -88,6 +92,7 @@ class GeminiProvider(BaseProvider):
         request_context = {
             "method": "POST",
             "url": url,
+            "headers": redact_outbound_headers(headers),
             "query": {"key": "[redacted]"},
             "payload": payload,
         }
@@ -95,7 +100,12 @@ class GeminiProvider(BaseProvider):
         data: Any = None
         try:
             async with httpx.AsyncClient(timeout=PROVIDER_CHAT_TIMEOUT_SECONDS) as client:
-                response = await client.post(url, params={"key": api_key}, json=payload)
+                response = await client.post(
+                    url,
+                    params={"key": api_key},
+                    headers=headers,
+                    json=payload,
+                )
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPStatusError as exc:
@@ -106,7 +116,10 @@ class GeminiProvider(BaseProvider):
                 status_code=exc.response.status_code,
             ) from exc
         except Exception as exc:
-            raise ProviderError("Failed to send Gemini chat request", request=request_context) from exc
+            raise ProviderError(
+                "Failed to send Gemini chat request",
+                request=request_context,
+            ) from exc
 
         try:
             candidate = data["candidates"][0]["content"]["parts"][0]
