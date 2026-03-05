@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Environment variables are read from repo .env with no prefix
     rst_data_dir: str = Field(default="./data", alias="RST_DATA_DIR")
     rst_backend_port: int = Field(default=18080, alias="RST_BACKEND_PORT")
+    rst_backend_reload: bool = Field(default=False, alias="RST_BACKEND_RELOAD")
+    rst_serve_frontend: bool = Field(default=False, alias="RST_SERVE_FRONTEND")
+    rst_frontend_dist: str = Field(default="./frontend/dist", alias="RST_FRONTEND_DIST")
     vite_dev_port: int = Field(default=15173, alias="VITE_DEV_PORT")
 
     model_config = SettingsConfigDict(
@@ -35,6 +38,13 @@ class Settings(BaseSettings):
     def data_path(self) -> Path:
         # Normalize to an absolute path rooted at the repo
         path = Path(self.rst_data_dir)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        return path.resolve()
+
+    @property
+    def frontend_dist_path(self) -> Path:
+        path = Path(self.rst_frontend_dist)
         if not path.is_absolute():
             path = PROJECT_ROOT / path
         return path.resolve()

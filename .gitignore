@@ -1,6 +1,10 @@
 ﻿# Runtime data
 data/
 .keyfile
+_tmp_llm_import_data/
+release/
+*.log
+*.pid
 
 # Python
 __pycache__/

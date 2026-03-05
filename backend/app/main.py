@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.routers.api_configs import router as api_configs_router
@@ -50,6 +51,12 @@ def create_app() -> FastAPI:
     app.include_router(lores_router, tags=["Lores"])
     app.include_router(chat_router, tags=["Chat"])
     app.include_router(logs_router, tags=["Logs"])
+
+    # Optional release mode: serve built frontend from backend.
+    if settings.rst_serve_frontend:
+        frontend_dist = settings.frontend_dist_path
+        if frontend_dist.is_dir():
+            app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
     return app
 
 
@@ -64,7 +71,7 @@ def main() -> None:
         "app.main:app",
         host="0.0.0.0",
         port=settings.rst_backend_port,
-        reload=True,
+        reload=settings.rst_backend_reload,
     )
 
 

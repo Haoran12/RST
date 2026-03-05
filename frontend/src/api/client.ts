@@ -3,7 +3,7 @@
 // Use Vite proxy in dev and explicit API base in production
 const baseURL = import.meta.env.DEV
   ? "/api"
-  : (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://localhost:18080";
+  : (import.meta.env.VITE_API_BASE as string | undefined) ?? window.location.origin;
 
 const DEFAULT_API_TIMEOUT_MS = 300000;
 const parsedTimeout = Number.parseInt(
