@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import suppress
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -8,19 +9,25 @@ from fastapi import APIRouter, HTTPException, Request, status
 from app.models.chat import ChatRequest, ChatResponse, MessageListResponse, MessageUpdate
 from app.models.session import Message
 from app.providers.base import ProviderError
-from app.services.chat_service import ChatConfigError, run_chat
-from app.services.rst_runtime_service import rst_runtime_service
-from app.services.session_service import SessionNotFoundError, get_session_dir, get_session_storage, touch_session
-from app.storage.message_store import MessageStore
-from app.storage.encryption import EncryptionError
 from app.services.api_config_service import ApiConfigNotFoundError
+from app.services.chat_service import ChatConfigError, run_chat
 from app.services.preset_service import PresetNotFoundError
+from app.services.rst_runtime_service import rst_runtime_service
+from app.services.session_service import (
+    SessionNotFoundError,
+    get_session_dir,
+    get_session_storage,
+    touch_session,
+)
+from app.storage.encryption import EncryptionError
+from app.storage.message_store import MessageStore
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def _await_with_disconnect(
-    task: "asyncio.Task[ChatResponse]",
+    task: asyncio.Task[ChatResponse],
     request: Request,
 ) -> ChatResponse:
     while not task.done():
@@ -54,7 +61,14 @@ def update_message(name: str, message_id: str, payload: MessageUpdate) -> Messag
         updated = store.update_message(message_id, payload.content, payload.visible)
         if updated is None:
             raise HTTPException(status_code=404, detail="Message not found")
-        touch_session(name)
+        try:
+            touch_session(name)
+        except OSError:
+            logger.warning(
+                "Failed to touch session metadata after message update: %s",
+                name,
+                exc_info=True,
+            )
         return updated
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -68,7 +82,14 @@ def delete_message(name: str, message_id: str):
         deleted = store.delete_message(message_id)
         if not deleted:
             raise HTTPException(status_code=404, detail="Message not found")
-        touch_session(name)
+        try:
+            touch_session(name)
+        except OSError:
+            logger.warning(
+                "Failed to touch session metadata after message delete: %s",
+                name,
+                exc_info=True,
+            )
         return None
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -80,8 +101,8 @@ async def chat(name: str, payload: ChatRequest, request: Request) -> ChatRespons
     rst_runtime_service.register_task(name, task)
     try:
         return await _await_with_disconnect(task, request)
-    except asyncio.CancelledError:
-        raise HTTPException(status_code=499, detail="Request cancelled")
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=499, detail="Request cancelled") from exc
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PresetNotFoundError as exc:

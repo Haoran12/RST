@@ -16,6 +16,7 @@ from app.models.lore import (
     ConsolidateResult,
     LoreCategory,
     LoreEntry,
+    Relationship,
     SchedulerPromptTemplate,
     SyncChange,
     SyncFieldChange,
@@ -41,6 +42,7 @@ CHARACTER_UPDATE_CHAR_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "personality": ("persona", "traits", "性格"),
     "role": ("position", "identity", "角色", "身份"),
     "faction": ("camp", "组织", "阵营"),
+    "relationship": ("relationships", "relation", "relations", "关系", "人际关系"),
 }
 
 CHARACTER_UPDATE_FORM_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
@@ -61,6 +63,34 @@ CHARACTER_UPDATE_FORM_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "mind": ("mind_state", "mental_state", "心理状态", "精神状态", "当前精神状态"),
     "clothing": ("outfit", "attire", "穿着", "衣着", "服饰"),
 }
+
+SYNC_ACTION_ALIASES: dict[str, str] = {
+    "character": "character_update",
+    "update_character": "character_update",
+    "character_state": "character_update",
+    "character_state_update": "character_update",
+    "update_character_state": "character_update",
+    "plot": "plot_event",
+    "event": "plot_event",
+    "plotevent": "plot_event",
+    "memory": "character_memory",
+    "add_memory": "character_memory",
+    "memory_add": "character_memory",
+    "update_lore": "lore_update",
+    "append_lore": "lore_update",
+    "lore_append": "lore_update",
+}
+
+EXTRACT_OUTPUT_CONTRACT = """OUTPUT CONTRACT (STRICT):
+- Return a JSON array only. Do not add markdown fences.
+- Every item must include a valid "type" and follow one of these schemas:
+  1) {"type":"character_update","name":"角色名","field_updates":{"mind":"...","active_form.body":"..."}}
+  2) {"type":"plot_event","name":"事件名","content":"事件内容","tags":["tag1"]}
+  3) {"type":"character_memory","character_name":"角色名","event":"记忆内容","importance":1-10,"tags":["tag1"],"known_by":["角色名"],"plot_event_name":"事件名"}
+  4) {"type":"lore_update","name":"条目名","category":"world_base|society|place|faction|skills|others|plot","content_append":"追加内容","tags":["tag1"]}
+- Use exact key names above. For character updates, put fields under field_updates only.
+- If nothing needs to be updated, return [].
+"""
 
 
 class LoreUpdater:
@@ -238,6 +268,7 @@ class LoreUpdater:
         prompt = prompt.replace("{conversation_context}", conversation_context)
         prompt = prompt.replace("{existing_entries_summary}", existing_entries_summary)
         prompt = prompt.replace("{character_list}", character_list)
+        prompt = f"{prompt.rstrip()}\n\n{EXTRACT_OUTPUT_CONTRACT}"
         return prompt
 
     def _format_change_value(self, value: Any) -> str:
@@ -256,6 +287,195 @@ class LoreUpdater:
         normalized = key.strip().lower().replace("-", "_").replace(" ", "_")
         while "__" in normalized:
             normalized = normalized.replace("__", "_")
+        return normalized
+
+    def _normalize_action_type(self, value: Any) -> str:
+        normalized = self._normalize_update_field_key(str(value))
+        if normalized in {"character_update", "plot_event", "character_memory", "lore_update"}:
+            return normalized
+        return SYNC_ACTION_ALIASES.get(normalized, "")
+
+    def _normalize_string_list(self, value: Any) -> list[str]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str):
+            return [part.strip() for part in value.replace("，", ",").split(",") if part.strip()]
+        return []
+
+    def _normalize_relationship_updates(self, value: Any) -> list[Relationship]:
+        relations: list[Relationship] = []
+        seen_targets: set[str] = set()
+
+        def append_relation(target_raw: Any, relation_raw: Any) -> None:
+            target = str(target_raw).strip()
+            if not target:
+                return
+            relation = str(relation_raw).strip()
+            target_key = target.lower()
+            if target_key in seen_targets:
+                return
+            seen_targets.add(target_key)
+            relations.append(Relationship(target=target, relation=relation))
+
+        if isinstance(value, dict):
+            for target, relation in value.items():
+                append_relation(target, relation)
+            return relations
+
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, Relationship):
+                    append_relation(item.target, item.relation)
+                    continue
+                if isinstance(item, dict):
+                    target = (
+                        item.get("target")
+                        or item.get("name")
+                        or item.get("character")
+                        or item.get("character_name")
+                    )
+                    relation = (
+                        item.get("relation")
+                        or item.get("description")
+                        or item.get("summary")
+                        or item.get("value")
+                        or ""
+                    )
+                    append_relation(target, relation)
+                    continue
+                text = str(item).strip()
+                if ":" in text:
+                    target, relation = text.split(":", 1)
+                    append_relation(target, relation)
+            return relations
+
+        text = str(value).strip()
+        if not text:
+            return relations
+        for line in text.splitlines():
+            candidate = line.strip().lstrip("-").strip()
+            if ":" not in candidate:
+                continue
+            target, relation = candidate.split(":", 1)
+            append_relation(target, relation)
+        return relations
+
+    def _coerce_legacy_character_updates(self, value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            return {}
+
+        updates: dict[str, Any] = {}
+        for raw_key, raw_value in value.items():
+            key = self._normalize_update_field_key(str(raw_key))
+
+            if key == "field_updates" and isinstance(raw_value, dict):
+                updates.update(raw_value)
+                continue
+
+            if key in {"state", "status"} and isinstance(raw_value, dict):
+                for nested_key, nested_value in raw_value.items():
+                    nested = self._normalize_update_field_key(str(nested_key))
+                    if nested in {"relationship", "relationships", "relation", "relations"}:
+                        relation_updates = self._normalize_relationship_updates(nested_value)
+                        if relation_updates:
+                            updates["relationship"] = relation_updates
+                        continue
+                    updates[str(nested_key)] = nested_value
+                continue
+
+            if key in {"relationship", "relationships", "relation", "relations"}:
+                relation_updates = self._normalize_relationship_updates(raw_value)
+                if relation_updates:
+                    updates["relationship"] = relation_updates
+                continue
+
+            updates[str(raw_key)] = raw_value
+        return updates
+
+    def _infer_action_type(self, item: dict[str, Any]) -> str:
+        inferred = self._normalize_action_type(item.get("type"))
+        if inferred:
+            return inferred
+
+        for type_key in ("action", "kind", "op", "operation"):
+            inferred = self._normalize_action_type(item.get(type_key))
+            if inferred:
+                return inferred
+
+        name = str(item.get("name", "")).strip()
+        character_name = str(item.get("character_name", "")).strip()
+        has_character = bool(name or character_name)
+        if has_character and (
+            isinstance(item.get("field_updates"), dict) or isinstance(item.get("updates"), dict)
+        ):
+            return "character_update"
+
+        event = str(item.get("event") or item.get("memory_event") or "").strip()
+        if has_character and event:
+            return "character_memory"
+
+        category = self._normalize_update_field_key(str(item.get("category", "")))
+        content_like = str(item.get("content") or item.get("content_append") or item.get("summary") or "").strip()
+        if name and content_like and category in {"plot", "plot_event", "event"}:
+            return "plot_event"
+        if name and category and content_like:
+            return "lore_update"
+        return ""
+
+    def _normalize_sync_instruction(self, item: dict[str, Any]) -> dict[str, Any]:
+        action_type = self._infer_action_type(item)
+        if not action_type:
+            return {}
+
+        normalized = dict(item)
+        normalized["type"] = action_type
+
+        if action_type == "character_update":
+            if not str(normalized.get("name", "")).strip():
+                candidate_name = str(normalized.get("character_name", "")).strip()
+                if candidate_name:
+                    normalized["name"] = candidate_name
+
+            field_updates = normalized.get("field_updates")
+            if not isinstance(field_updates, dict):
+                field_updates = self._coerce_legacy_character_updates(normalized.get("updates"))
+            if isinstance(field_updates, dict):
+                normalized["field_updates"] = field_updates
+            return normalized
+
+        if action_type == "character_memory":
+            if not str(normalized.get("character_name", "")).strip():
+                alias_name = str(normalized.get("name", "")).strip()
+                if alias_name:
+                    normalized["character_name"] = alias_name
+            if not str(normalized.get("event", "")).strip():
+                memory_event = str(normalized.get("memory_event", "")).strip()
+                if memory_event:
+                    normalized["event"] = memory_event
+            if "tags" in normalized:
+                normalized["tags"] = self._normalize_string_list(normalized.get("tags"))
+            if "known_by" in normalized:
+                normalized["known_by"] = self._normalize_string_list(normalized.get("known_by"))
+            return normalized
+
+        if action_type == "plot_event":
+            if not str(normalized.get("content", "")).strip():
+                fallback = str(normalized.get("content_append") or normalized.get("summary") or "").strip()
+                if fallback:
+                    normalized["content"] = fallback
+            if "tags" in normalized:
+                normalized["tags"] = self._normalize_string_list(normalized.get("tags"))
+            return normalized
+
+        if not str(normalized.get("content_append", "")).strip():
+            fallback = str(normalized.get("content") or normalized.get("summary") or "").strip()
+            if fallback:
+                normalized["content_append"] = fallback
+        if "tags" in normalized:
+            normalized["tags"] = self._normalize_string_list(normalized.get("tags"))
+        category = str(normalized.get("category", "")).strip()
+        if category:
+            normalized["category"] = self._normalize_update_field_key(category)
         return normalized
 
     def _build_update_field_lookup(
@@ -307,6 +527,11 @@ class LoreUpdater:
 
             canonical_char = char_lookup.get(key)
             if canonical_char:
+                if canonical_char == "relationship":
+                    relation_updates = self._normalize_relationship_updates(value)
+                    if relation_updates:
+                        char_updates[canonical_char] = relation_updates
+                    continue
                 char_updates[canonical_char] = value
                 continue
 
@@ -497,7 +722,11 @@ class LoreUpdater:
                 prompt,
                 stage="scheduler_sync_extract",
             )
-            instructions = self._extract_json_array(raw_text)
+            instructions = [
+                normalized
+                for item in self._extract_json_array(raw_text)
+                if (normalized := self._normalize_sync_instruction(item))
+            ]
 
             updated_entries: list[str] = []
             created_entries: list[str] = []
@@ -507,13 +736,21 @@ class LoreUpdater:
             changes: list[SyncChange] = []
 
             for item in instructions:
-                action_type = str(item.get("type", "")).strip().lower()
+                action_type = self._infer_action_type(item)
                 if not action_type:
                     continue
 
                 if action_type == "character_update":
                     name = str(item.get("name", "")).strip()
+                    if not name:
+                        character_id = str(item.get("character_id", "")).strip()
+                        if character_id:
+                            by_id = store.load_character(character_id)
+                            if by_id is not None:
+                                name = by_id.data.name
                     updates = item.get("field_updates")
+                    if not isinstance(updates, dict):
+                        updates = self._coerce_legacy_character_updates(item.get("updates"))
                     if not name or not isinstance(updates, dict):
                         continue
 
@@ -601,8 +838,8 @@ class LoreUpdater:
 
                 if action_type == "plot_event":
                     name = str(item.get("name", "")).strip()
-                    content = str(item.get("content", "")).strip()
-                    tags = [str(tag).strip() for tag in item.get("tags", []) if str(tag).strip()]
+                    content = str(item.get("content") or item.get("content_append") or "").strip()
+                    tags = self._normalize_string_list(item.get("tags"))
                     if not name or not content:
                         continue
                     self._append_or_create_lore_update(
@@ -619,8 +856,8 @@ class LoreUpdater:
                     continue
 
                 if action_type == "character_memory":
-                    char_name = str(item.get("character_name", "")).strip()
-                    event = str(item.get("event", "")).strip()
+                    char_name = str(item.get("character_name") or item.get("name") or "").strip()
+                    event = str(item.get("event") or item.get("memory_event") or "").strip()
                     if not char_name or not event:
                         continue
 
@@ -631,10 +868,8 @@ class LoreUpdater:
                     except Exception:
                         importance = 5
                     importance = max(1, min(10, importance))
-                    tags = [str(tag).strip() for tag in item.get("tags", []) if str(tag).strip()]
-                    known_by_names = [
-                        str(name).strip() for name in item.get("known_by", []) if str(name).strip()
-                    ]
+                    tags = self._normalize_string_list(item.get("tags"))
+                    known_by_names = self._normalize_string_list(item.get("known_by"))
                     known_by_ids = self._resolve_known_by_ids(store, known_by_names)
                     plot_event_id = self._resolve_plot_event_id(store, item.get("plot_event_name"))
 
@@ -667,8 +902,8 @@ class LoreUpdater:
                 if action_type == "lore_update":
                     name = str(item.get("name", "")).strip()
                     category_raw = str(item.get("category", "")).strip().lower()
-                    content_append = str(item.get("content_append", "")).strip()
-                    tags = [str(tag).strip() for tag in item.get("tags", []) if str(tag).strip()]
+                    content_append = str(item.get("content_append") or item.get("content") or "").strip()
+                    tags = self._normalize_string_list(item.get("tags"))
                     if not name or not content_append:
                         continue
                     try:

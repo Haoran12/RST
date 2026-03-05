@@ -70,14 +70,26 @@
       <section class="status-panel__section status-panel__section--characters">
         <div class="status-panel__section-head">
           <div class="status-panel__section-title">{{ t("statusPanel.section.characters") }}</div>
-          <button
-            type="button"
-            class="refresh-button"
-            :disabled="loading || !currentSessionName"
-            @click="refreshData"
-          >
-            {{ t("statusPanel.action.refresh") }}
-          </button>
+          <div class="status-panel__section-actions">
+            <button
+              type="button"
+              class="edit-button"
+              :disabled="!canOpenCharacterPicker"
+              :title="t('statusPanel.action.edit_present_characters')"
+              :aria-label="t('statusPanel.action.edit_present_characters')"
+              @click="openCharacterPicker"
+            >
+              &#9998;
+            </button>
+            <button
+              type="button"
+              class="refresh-button"
+              :disabled="loading || !currentSessionName"
+              @click="refreshData"
+            >
+              {{ t("statusPanel.action.refresh") }}
+            </button>
+          </div>
         </div>
 
         <div v-if="loading" class="status-placeholder">
@@ -182,12 +194,46 @@
         </div>
       </section>
     </div>
+
+    <n-modal
+      v-model:show="characterPickerVisible"
+      preset="card"
+      :title="t('statusPanel.picker.title')"
+      size="small"
+    >
+      <div class="character-picker-body">
+        <n-select
+          v-model:value="pickerCharacterIds"
+          :options="pickerCharacterOptions"
+          :placeholder="t('statusPanel.picker.placeholder')"
+          multiple
+          filterable
+          clearable
+          :max-tag-count="'responsive'"
+          :disabled="pickerCharacterOptions.length === 0"
+        />
+        <div v-if="pickerCharacterOptions.length === 0" class="character-picker-empty">
+          {{ t("statusPanel.state.no_character") }}
+        </div>
+      </div>
+      <template #footer>
+        <div class="character-picker-actions">
+          <n-button secondary @click="closeCharacterPicker">
+            {{ t("common.cancel") }}
+          </n-button>
+          <n-button type="primary" @click="confirmCharacterPicker">
+            {{ t("statusPanel.picker.confirm") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
   </aside>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
+import { NButton, NModal, NSelect } from "naive-ui";
 
 import {
   createEntry,
@@ -240,8 +286,8 @@ const PLACE_TAG_KEYS = [
 ];
 const REQUEST_OPEN_CHARACTER_OVERLAY_EVENT = "rst-request-open-character-overlay";
 const LORE_DATA_CHANGED_EVENT = "rst-lore-data-changed";
-const SCENE_NAME_NOTE_RE = /\([^)]*\)|（[^）]*）|\[[^\]]*]|【[^】]*】/g;
-const SCENE_NAME_SEPARATOR_RE = /[\s\u3000,，、;；:：·・"'`“”‘’]/g;
+const SCENE_NAME_NOTE_RE = /\([^)]*\)|\uFF08[^\uFF09]*\uFF09|\[[^\]]*]|\u3010[^\u3011]*\u3011/g;
+const SCENE_NAME_SEPARATOR_RE = /[\s\u3000,\uFF0C\u3001;\uFF1B\u00B7\u2027"'`\u201C\u201D\u2018\u2019]/g;
 
 const sessionStore = useSessionStore();
 const { t } = useI18n();
@@ -254,6 +300,8 @@ const plotEntries = ref<LoreEntry[]>([]);
 const characters = ref<CharacterData[]>([]);
 const sceneState = ref<SceneState | null>(null);
 const activeCharacterId = ref<string | null>(null);
+const characterPickerVisible = ref(false);
+const pickerCharacterIds = ref<string[]>([]);
 const requestToken = ref(0);
 const editStoryTime = ref("");
 const editStoryLocation = ref("");
@@ -384,6 +432,22 @@ const presentCharacters = computed(() => {
 
   return enabled;
 });
+const canOpenCharacterPicker = computed(
+  () =>
+    Boolean(currentSessionName.value) &&
+    !loading.value &&
+    isRstMode.value &&
+    pickerCharacterOptions.value.length > 0,
+);
+const pickerCharacterOptions = computed<Array<{ label: string; value: string }>>(() =>
+  [...characters.value]
+    .filter((character) => !character.disabled)
+    .sort((left, right) => left.sort_order - right.sort_order)
+    .map((character) => ({
+      label: character.name || character.character_id,
+      value: character.character_id,
+    })),
+);
 
 const activeCharacter = computed(
   () =>
@@ -489,6 +553,8 @@ watch(
       characters.value = [];
       sceneState.value = null;
       activeCharacterId.value = null;
+      characterPickerVisible.value = false;
+      pickerCharacterIds.value = [];
       loading.value = false;
       requestToken.value += 1;
       return;
@@ -503,10 +569,14 @@ watch(
   (characterIds) => {
     if (characterIds.length === 0) {
       activeCharacterId.value = null;
+      pickerCharacterIds.value = [];
       return;
     }
     if (!activeCharacterId.value || !characterIds.includes(activeCharacterId.value)) {
       activeCharacterId.value = characterIds[0];
+    }
+    if (!characterPickerVisible.value) {
+      pickerCharacterIds.value = resolveSceneCharacterSelectionIds();
     }
   },
   { immediate: true },
@@ -615,19 +685,88 @@ function emitLoreDataChanged(sessionName: string, source: "status-panel" | "rst-
   );
 }
 
-function requestCharacterOverlay(focus: "vitality" | "stats") {
-  if (typeof window === "undefined" || !activeCharacter.value) {
+function openCharacterPicker() {
+  if (!canOpenCharacterPicker.value) {
+    return;
+  }
+  pickerCharacterIds.value = resolveSceneCharacterSelectionIds();
+  if (pickerCharacterIds.value.length === 0 && activeCharacter.value) {
+    pickerCharacterIds.value = [activeCharacter.value.character_id];
+  }
+  characterPickerVisible.value = true;
+}
+
+function closeCharacterPicker() {
+  characterPickerVisible.value = false;
+}
+
+function resolveSceneCharacterSelectionIds(): string[] {
+  if (sceneState.value?.characters.length) {
+    const normalizedSceneNames = sceneState.value.characters
+      .map((name) => normalizeSceneCharacterName(name))
+      .filter(Boolean);
+    if (normalizedSceneNames.length > 0) {
+      return pickerCharacterOptions.value
+        .map((option) => option.value)
+        .filter((characterId) => {
+          const character = characters.value.find((item) => item.character_id === characterId);
+          if (!character) {
+            return false;
+          }
+          return isCharacterInScene(character, normalizedSceneNames);
+        });
+    }
+  }
+  return presentCharacters.value.map((character) => character.character_id);
+}
+
+async function confirmCharacterPicker() {
+  if (!currentSessionName.value || !isRstMode.value) {
+    return;
+  }
+  const selectedNames = pickerCharacterIds.value
+    .map((characterId) =>
+      characters.value.find((character) => character.character_id === characterId),
+    )
+    .filter((item): item is CharacterData => Boolean(item))
+    .map((character) => (character.name || character.character_id).trim())
+    .filter(Boolean);
+  try {
+    await updateSceneState(currentSessionName.value, {
+      characters: selectedNames,
+    });
+    await loadStatusPanelData(currentSessionName.value);
+    emitLoreDataChanged(currentSessionName.value, "status-panel");
+    message.success(t("statusPanel.state.present_characters_saved"));
+    closeCharacterPicker();
+  } catch (error) {
+    message.error(parseApiError(error));
+  }
+}
+
+function requestCharacterOverlayForCharacter(
+  character: CharacterData,
+  focus: "vitality" | "stats",
+) {
+  if (typeof window === "undefined") {
     return;
   }
   window.dispatchEvent(
     new CustomEvent(REQUEST_OPEN_CHARACTER_OVERLAY_EVENT, {
       detail: {
-        characterId: activeCharacter.value.character_id,
-        preferredFormId: activeCharacterForm.value?.form_id ?? null,
+        characterId: character.character_id,
+        preferredFormId: getActiveForm(character)?.form_id ?? null,
         focus,
       },
     }),
   );
+}
+
+function requestCharacterOverlay(focus: "vitality" | "stats") {
+  if (!activeCharacter.value) {
+    return;
+  }
+  requestCharacterOverlayForCharacter(activeCharacter.value, focus);
 }
 
 async function saveStorySnapshot() {
@@ -968,6 +1107,34 @@ function escapeRegExp(value: string): string {
   margin-bottom: 6px;
 }
 
+.status-panel__section-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-button {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--rst-text-secondary);
+  width: 28px;
+  height: 24px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.edit-button:hover:not(:disabled) {
+  border-color: var(--rst-accent);
+  color: var(--rst-text-primary);
+}
+
+.edit-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .refresh-button {
   border: 1px solid var(--rst-border-color);
   border-radius: 8px;
@@ -986,6 +1153,23 @@ function escapeRegExp(value: string): string {
 .refresh-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.character-picker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.character-picker-empty {
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.character-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .summary-grid {

@@ -21,7 +21,7 @@ If Not fso.FileExists(envFile) Then
   End If
 End If
 
-cmd = "cmd /c cd /d """ & backendDir & """ && set RST_BACKEND_RELOAD=0 && set RST_SERVE_FRONTEND=1 && uv run python -m app.main"
+cmd = "cmd /c cd /d """ & backendDir & """ && set RST_BACKEND_RELOAD=0&& set RST_SERVE_FRONTEND=1&& uv run python -m app.main"
 shell.Run cmd, 0, False
 
 WScript.Sleep 2500

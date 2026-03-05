@@ -1,7 +1,9 @@
 ﻿from __future__ import annotations
 
 from pathlib import Path
-from pydantic import Field
+from typing import Any
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +36,18 @@ class Settings(BaseSettings):
         env_prefix="",
         extra="ignore",
     )
+
+    @field_validator("rst_backend_reload", "rst_serve_frontend", mode="before")
+    @classmethod
+    def parse_bool_like_env(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+            return normalized
+        return value
 
     @property
     def data_path(self) -> Path:

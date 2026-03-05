@@ -31,7 +31,26 @@ ENTRY_CATEGORIES: tuple[LoreCategory, ...] = (
 
 DEFAULT_CONFIRM_PROMPT = """你是一个世界设定管理助手。以下是当前对话上下文和候选设定条目。\n\n## 当前对话上下文\n{conversation_context}\n\n## 候选设定与记忆条目\n{candidate_entries}\n\n请筛选与当前场景相关的条目，并输出精简后的可注入设定文本。\n如果没有相关条目，输出空字符串。"""
 
-DEFAULT_EXTRACT_PROMPT = """你是一个世界设定与记忆记录助手。请分析对话并输出需要更新的信息。\n\n## 当前对话\n{conversation_context}\n\n## 已有设定条目摘要\n{existing_entries_summary}\n\n## 已有人物列表\n{character_list}\n\n仅输出 JSON 数组，不要输出其他内容。"""
+DEFAULT_EXTRACT_PROMPT = """You are a lore synchronization assistant.
+Analyze the conversation and output structured update instructions.
+
+## Conversation
+{conversation_context}
+
+## Existing lore summary
+{existing_entries_summary}
+
+## Existing characters
+{character_list}
+
+Return a JSON array only. Do not include markdown fences or extra explanation.
+Each item must include a valid type and follow one of these formats:
+- {"type":"character_update","name":"CharacterName","field_updates":{"mind":"...","active_form.body":"..."}}
+- {"type":"plot_event","name":"EventName","content":"Event details","tags":["tag1"]}
+- {"type":"character_memory","character_name":"CharacterName","event":"Memory text","importance":5,"tags":["tag1"],"known_by":["OtherName"],"plot_event_name":"EventName"}
+- {"type":"lore_update","name":"EntryName","category":"world_base|society|place|faction|skills|others|plot","content_append":"Append text","tags":["tag1"]}
+If no updates are needed, return [].
+"""
 
 DEFAULT_CONSOLIDATE_PROMPT = """你是一个记忆整理助手。请将人物旧记忆合并为更精炼的摘要。\n\n## 人物：{character_name}\n\n## 待合并的记忆\n{memories_to_consolidate}\n\n请输出 JSON 数组，每个元素包含 event、importance、tags。"""
 

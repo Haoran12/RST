@@ -220,6 +220,8 @@
               </div>
             </div>
           </section>
+
+          <slot name="body-suffix" />
         </div>
 
         <footer class="overlay-footer">

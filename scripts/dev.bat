@@ -4,7 +4,7 @@ setlocal
 
 set "ROOT=%~dp0.."
 
-start "RST Backend" cmd /k "cd /d %ROOT%\backend && set RST_BACKEND_RELOAD=1 && set RST_SERVE_FRONTEND=0 && uv run python -m app.main"
+start "RST Backend" cmd /k "cd /d %ROOT%\backend && set RST_BACKEND_RELOAD=1&& set RST_SERVE_FRONTEND=0&& uv run python -m app.main"
 
 timeout /t 2 >nul
 

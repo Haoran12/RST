@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+
 import pytest
 
 from app.providers.base import BaseProvider, ProviderChatResult
@@ -178,7 +179,40 @@ async def test_empty_send_reuses_latest_visible_user_as_user_input(
 
 
 @pytest.mark.asyncio
-async def test_logs_include_usage_and_stop_reason(async_client, sample_api_config, monkeypatch) -> None:
+async def test_update_message_ignores_touch_session_oserror(
+    async_client, sample_api_config, monkeypatch
+) -> None:
+    provider = _StubProvider(texts=["first-answer"])
+    monkeypatch.setattr("app.services.chat_service.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    await _create_session(async_client, "ChatFlowTouchFail", config_id, preset_id)
+
+    first = await async_client.post(
+        "/sessions/ChatFlowTouchFail/chat",
+        json={"content": "hello user"},
+    )
+    assert first.status_code == 200
+    assistant_id = first.json()["assistant_message"]["id"]
+
+    def _broken_touch(_: str) -> None:
+        raise OSError("mock touch_session failure")
+
+    monkeypatch.setattr("app.routers.chat.touch_session", _broken_touch)
+
+    hidden = await async_client.patch(
+        f"/sessions/ChatFlowTouchFail/messages/{assistant_id}",
+        json={"visible": False},
+    )
+    assert hidden.status_code == 200
+    assert hidden.json()["visible"] is False
+
+
+@pytest.mark.asyncio
+async def test_logs_include_usage_and_stop_reason(
+    async_client, sample_api_config, monkeypatch
+) -> None:
     provider = _StubProvider(texts=["log-answer"])
     monkeypatch.setattr("app.services.chat_service.get_provider", lambda _: provider)
 
@@ -276,7 +310,10 @@ async def test_chat_extracts_scene_state_from_assistant_reply(
     session_name = "ChatFlowScene"
     await _create_session(async_client, session_name, config_id, preset_id)
 
-    chat_response = await async_client.post(f"/sessions/{session_name}/chat", json={"content": "继续"})
+    chat_response = await async_client.post(
+        f"/sessions/{session_name}/chat",
+        json={"content": "继续"},
+    )
     assert chat_response.status_code == 200
 
     scene_response = await async_client.get(f"/sessions/{session_name}/lores/scene")

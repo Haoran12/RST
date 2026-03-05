@@ -87,6 +87,36 @@ class _SchedulerSyncProvider(BaseProvider):
         )
 
 
+class _CaptureSchedulerSyncProvider(_SchedulerSyncProvider):
+    def __init__(self, text: str) -> None:
+        super().__init__(text)
+        self.calls: list[list[dict]] = []
+
+    async def chat(
+        self,
+        base_url: str,
+        api_key: str,
+        *,
+        messages: list[dict],
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        stream: bool = False,
+    ) -> ProviderChatResult:
+        self.calls.append(
+            [{"role": message["role"], "content": message["content"]} for message in messages]
+        )
+        return await super().chat(
+            base_url,
+            api_key,
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=stream,
+        )
+
+
 async def _create_api_config(async_client, sample_api_config: dict) -> str:
     response = await async_client.post("/api-configs", json=sample_api_config)
     assert response.status_code == 201
@@ -377,6 +407,91 @@ async def test_schedule_prompt_includes_birth_age_and_birthday(
     assert "birth: 神历1200年15月20日" in prompt_text
     assert "age: 18" in prompt_text
     assert "birthday_today: yes" in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_sync_prompt_includes_strict_output_contract(
+    async_client,
+    sample_api_config,
+    monkeypatch,
+) -> None:
+    provider = _CaptureSchedulerSyncProvider("[]")
+    monkeypatch.setattr("app.services.lore_updater.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "LoreSyncPromptContractSession"
+    await _create_session(async_client, session_name, config_id, preset_id, config_id)
+
+    sync_response = await async_client.post(f"/sessions/{session_name}/lores/sync")
+    assert sync_response.status_code == 200
+    assert provider.calls
+
+    prompt_text = provider.calls[-1][0]["content"]
+    assert "OUTPUT CONTRACT (STRICT)" in prompt_text
+    assert '"type":"character_update"' in prompt_text
+    assert '"field_updates"' in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_sync_tolerates_legacy_character_updates_without_type(
+    async_client,
+    sample_api_config,
+    monkeypatch,
+) -> None:
+    sync_text = """
+```json
+[
+  {
+    "character_id": "sq7a0bj08lq9",
+    "name": "云景",
+    "updates": {
+      "state": {
+        "mind": "对来意保持谨慎，等待对方回答。"
+      },
+      "relationships": {
+        "遐蝶": "有些不自在，但愿意继续交谈。"
+      }
+    }
+  }
+]
+```
+""".strip()
+    provider = _SchedulerSyncProvider(sync_text)
+    monkeypatch.setattr("app.services.lore_updater.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "LoreSyncLegacyShapeSession"
+    await _create_session(async_client, session_name, config_id, preset_id, config_id)
+
+    created_character = await async_client.post(
+        f"/sessions/{session_name}/lores/characters",
+        json={"name": "云景", "race": "人类"},
+    )
+    assert created_character.status_code == 201
+
+    sync_response = await async_client.post(f"/sessions/{session_name}/lores/sync")
+    assert sync_response.status_code == 200
+    sync_payload = sync_response.json()
+    assert sync_payload["updated_entries"]
+    changed_fields = [
+        item["field"]
+        for change in sync_payload["changes"]
+        for item in change.get("field_changes", [])
+    ]
+    assert "active_form.mind" in changed_fields
+    assert "relationship" in changed_fields
+
+    characters = await async_client.get(f"/sessions/{session_name}/lores/characters")
+    assert characters.status_code == 200
+    payload = characters.json()
+    assert payload["total"] == 1
+    character = payload["characters"][0]
+    active_form = character["forms"][0]
+    assert active_form["mind"] == "对来意保持谨慎，等待对方回答。"
+    assert character["relationship"]
+    assert character["relationship"][0]["target"] == "遐蝶"
 
 
 @pytest.mark.asyncio

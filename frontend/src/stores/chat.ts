@@ -258,7 +258,8 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function deleteMessages(messageIds: string[]): Promise<boolean> {
-    if (!activeSession.value) {
+    const sessionName = activeSession.value;
+    if (!sessionName) {
       return false;
     }
     const ids = Array.from(new Set(messageIds));
@@ -266,10 +267,12 @@ export const useChatStore = defineStore("chat", () => {
       return false;
     }
     try {
-      await Promise.all(ids.map((id) => deleteMessageApi(activeSession.value!, id)));
+      for (const id of ids) {
+        await deleteMessageApi(sessionName, id);
+      }
       const idSet = new Set(ids);
       const next = currentMessages.value.filter((msg) => !idSet.has(msg.id));
-      setMessages(activeSession.value, next);
+      setMessages(sessionName, next);
       return true;
     } catch (error) {
       message.error(parseApiError(error));
@@ -281,7 +284,8 @@ export const useChatStore = defineStore("chat", () => {
     messageIds: string[],
     visible: boolean,
   ): Promise<boolean> {
-    if (!activeSession.value) {
+    const sessionName = activeSession.value;
+    if (!sessionName) {
       return false;
     }
     const ids = Array.from(new Set(messageIds));
@@ -289,14 +293,14 @@ export const useChatStore = defineStore("chat", () => {
       return false;
     }
     try {
-      const updates = await Promise.all(
-        ids.map((id) =>
-          updateMessageApi(activeSession.value!, id, { visible }),
-        ),
-      );
+      const updates: ChatMessage[] = [];
+      for (const id of ids) {
+        const updated = await updateMessageApi(sessionName, id, { visible });
+        updates.push(updated);
+      }
       const updatedMap = new Map(updates.map((msg) => [msg.id, msg]));
       const next = currentMessages.value.map((msg) => updatedMap.get(msg.id) ?? msg);
-      setMessages(activeSession.value, next);
+      setMessages(sessionName, next);
       return true;
     } catch (error) {
       message.error(parseApiError(error));

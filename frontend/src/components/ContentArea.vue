@@ -16,8 +16,8 @@
       <div v-else class="message-list">
         <article
           v-for="(msg, index) in currentMessages"
-          :key="msg.id"
           :id="`message-${index}`"
+          :key="msg.id"
           class="message-card"
           :class="[
             `role-${msg.role}`,
@@ -36,38 +36,56 @@
             <span class="meta-role">{{ msg.role }}</span>
             <span class="meta-time">{{ formatTime(msg.timestamp) }}</span>
 
-            <div v-if="editingId !== msg.id && !isBatchMode" class="meta-actions">
-              <button
-                type="button"
-                class="meta-button"
-                @click="chatStore.toggleMessageVisibility(msg.id)"
-              >
-                {{ msg.visible ? "Hide" : "Show" }}
-              </button>
-              <button type="button" class="meta-button" @click="startEdit(msg)">
-                ✏
-              </button>
-              <button
-                type="button"
-                class="meta-button danger"
-                @click="handleDelete(msg.id)"
-              >
-                🗑
-              </button>
-            </div>
-          </header>
-
-          <div class="message-body">
-            <div v-if="editingId === msg.id" class="edit-area">
-              <textarea v-model="editContent" class="edit-textarea"></textarea>
-              <div class="edit-actions">
+            <div v-if="!isBatchMode" class="meta-actions">
+              <template v-if="editingId === msg.id">
                 <button type="button" class="meta-button" @click="saveEdit(msg.id)">
                   Save
                 </button>
                 <button type="button" class="meta-button" @click="cancelEdit">
                   Cancel
                 </button>
-              </div>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="meta-button icon-only"
+                  title="Copy message"
+                  aria-label="Copy message"
+                  @click="copyMessage(msg.content)"
+                >
+                  📑
+                </button>
+                <button
+                  type="button"
+                  class="meta-button icon-only"
+                  :class="{ 'is-toggled': !msg.visible }"
+                  :title="msg.visible ? 'Hide message' : 'Show message'"
+                  :aria-label="msg.visible ? 'Hide message' : 'Show message'"
+                  @click="chatStore.toggleMessageVisibility(msg.id)"
+                >
+                  {{ msg.visible ? "👁" : "🙈" }}
+                </button>
+                <button type="button" class="meta-button" @click="startEdit(msg)">
+                  ✏
+                </button>
+                <button
+                  type="button"
+                  class="meta-button danger"
+                  @click="handleDelete(msg.id)"
+                >
+                  🗑
+                </button>
+              </template>
+            </div>
+          </header>
+
+          <div class="message-body">
+            <div v-if="editingId === msg.id" class="edit-area">
+              <textarea
+                v-model="editContent"
+                class="edit-textarea"
+                @keydown.esc.prevent="cancelEdit"
+              ></textarea>
             </div>
             <MarkdownMessage
               v-else
@@ -82,8 +100,8 @@
                 <button
                   type="button"
                   class="attachment-remove"
-                  @click="removeAttachment(msg.id, file.name)"
                   title="Remove attachment"
+                  @click="removeAttachment(msg.id, file.name)"
                 >
                   Remove
                 </button>
@@ -186,11 +204,23 @@ const handleGotoMessage = (event: Event) => {
   void scrollToMessageTop(index);
 };
 
+const handleEscapeKey = (event: KeyboardEvent) => {
+  if (event.key !== "Escape") {
+    return;
+  }
+  if (!editingId.value) {
+    return;
+  }
+  event.preventDefault();
+  cancelEdit();
+};
+
 onMounted(() => {
   if (typeof window === "undefined") {
     return;
   }
   window.addEventListener(GOTO_MESSAGE_EVENT, handleGotoMessage as EventListener);
+  window.addEventListener("keydown", handleEscapeKey as EventListener);
 });
 
 onUnmounted(() => {
@@ -198,6 +228,7 @@ onUnmounted(() => {
     return;
   }
   window.removeEventListener(GOTO_MESSAGE_EVENT, handleGotoMessage as EventListener);
+  window.removeEventListener("keydown", handleEscapeKey as EventListener);
 });
 
 const startEdit = (msg: ChatMessage) => {
@@ -219,6 +250,47 @@ const saveEdit = (id: string) => {
 const cancelEdit = () => {
   editingId.value = null;
   editContent.value = "";
+};
+
+const copyMessage = async (content: string) => {
+  const text = content ?? "";
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      message.success("Message copied.");
+      return;
+    }
+  } catch {
+    // Fallback handled below.
+  }
+
+  if (typeof document === "undefined") {
+    message.error("Failed to copy message.");
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+
+  if (copied) {
+    message.success("Message copied.");
+    return;
+  }
+  message.error("Failed to copy message.");
 };
 
 const handleSelectionChange = (event: Event, messageId: string) => {
@@ -437,6 +509,21 @@ const formatMessageContent = (content: string) => {
   color: var(--rst-danger);
 }
 
+.meta-button.icon-only {
+  width: 28px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.meta-button.icon-only.is-toggled {
+  border-color: var(--rst-accent);
+  color: var(--rst-accent);
+}
+
 .message-body {
   margin-top: 10px;
 }
@@ -447,8 +534,6 @@ const formatMessageContent = (content: string) => {
 
 .edit-area {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .edit-textarea {
@@ -463,11 +548,6 @@ const formatMessageContent = (content: string) => {
   line-height: 1.7;
   padding: 10px 12px;
   resize: vertical;
-}
-
-.edit-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .attachment-list {

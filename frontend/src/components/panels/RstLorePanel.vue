@@ -404,6 +404,147 @@
           </div>
         </div>
       </template>
+      <template #body-suffix>
+        <div v-if="showCharacterMemoryPanel" class="character-memory-panel">
+          <button type="button" class="character-memory-toggle" @click="toggleMemoryPanelCollapsed">
+            <span class="character-memory-title">{{ t("rstPanel.overlay.character.memory.title") }}</span>
+            <span class="character-memory-toggle-meta">
+              <span class="character-memory-count">
+                {{
+                  formatText("rstPanel.overlay.character.memory.summary", {
+                    count: characterMemoryItems.length,
+                  })
+                }}
+              </span>
+              <span class="character-memory-arrow" :class="{ collapsed: characterMemoryCollapsed }">
+                &#x2304;
+              </span>
+            </span>
+          </button>
+          <div v-show="!characterMemoryCollapsed" class="character-memory-body">
+            <div v-if="characterMemoryItems.length === 0" class="character-memory-empty">
+              {{ t("rstPanel.overlay.character.memory.empty") }}
+            </div>
+            <div v-else class="character-memory-list">
+              <div
+                v-for="memory in characterMemoryItems"
+                :key="memory.memory_id"
+                class="character-memory-item"
+              >
+                <div class="character-memory-item-header">
+                  <div class="character-memory-event">
+                    {{ memory.event || memory.memory_id }}
+                  </div>
+                  <div class="character-memory-item-actions">
+                    <n-button
+                      size="tiny"
+                      secondary
+                      :disabled="memoryActionLoading"
+                      @click="startMemoryEdit(memory)"
+                    >
+                      {{ t("rstPanel.overlay.character.memory.edit") }}
+                    </n-button>
+                    <n-popconfirm
+                      :show-icon="false"
+                      :positive-text="t('common.confirm')"
+                      :positive-button-props="{ type: 'error' }"
+                      @positive-click="deleteMemoryEntry(memory.memory_id)"
+                    >
+                      <template #trigger>
+                        <n-button size="tiny" tertiary type="error" :disabled="memoryActionLoading">
+                          {{ t("rstPanel.overlay.character.memory.delete") }}
+                        </n-button>
+                      </template>
+                      {{ t("rstPanel.overlay.character.memory.delete_confirm") }}
+                    </n-popconfirm>
+                  </div>
+                </div>
+                <template v-if="editingMemoryId === memory.memory_id">
+                  <div class="memory-edit-grid">
+                    <div class="memory-edit-item memory-edit-item--full">
+                      <label class="memory-edit-label">{{ t("rstPanel.overlay.character.memory.field.event") }}</label>
+                      <n-input
+                        v-model:value="memoryEditDraft.event"
+                        type="textarea"
+                        size="small"
+                        :autosize="{ minRows: 2, maxRows: 6 }"
+                        :placeholder="t('rstPanel.overlay.character.memory.placeholder.event')"
+                      />
+                    </div>
+                    <div class="memory-edit-item">
+                      <label class="memory-edit-label">{{ t("rstPanel.overlay.character.memory.field.importance") }}</label>
+                      <n-input-number
+                        v-model:value="memoryEditDraft.importance"
+                        size="small"
+                        :min="1"
+                        :max="10"
+                        :step="1"
+                      />
+                    </div>
+                    <div class="memory-edit-item memory-edit-item--full">
+                      <label class="memory-edit-label">{{ t("rstPanel.overlay.character.memory.field.tags") }}</label>
+                      <n-input
+                        v-model:value="memoryEditDraft.tags"
+                        size="small"
+                        :placeholder="t('rstPanel.overlay.character.memory.placeholder.tags')"
+                      />
+                    </div>
+                    <div class="memory-edit-item memory-edit-item--full">
+                      <label class="memory-edit-label">{{ t("rstPanel.overlay.character.memory.field.known_by") }}</label>
+                      <n-input
+                        v-model:value="memoryEditDraft.known_by"
+                        size="small"
+                        :placeholder="t('rstPanel.overlay.character.memory.placeholder.known_by')"
+                      />
+                    </div>
+                  </div>
+                  <div class="memory-edit-actions">
+                    <n-button
+                      size="tiny"
+                      type="primary"
+                      :loading="memoryActionLoading"
+                      @click="saveMemoryEdit(memory.memory_id)"
+                    >
+                      {{ t("rstPanel.overlay.character.memory.save") }}
+                    </n-button>
+                    <n-button
+                      size="tiny"
+                      secondary
+                      :disabled="memoryActionLoading"
+                      @click="cancelMemoryEdit"
+                    >
+                      {{ t("rstPanel.overlay.character.memory.cancel") }}
+                    </n-button>
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="character-memory-meta">
+                    <span>
+                      {{ t("rstPanel.overlay.character.memory.importance") }}: {{ memory.importance }}
+                    </span>
+                    <span v-if="memory.plot_event_id">
+                      {{ t("rstPanel.overlay.character.memory.plot_event") }}: {{ memory.plot_event_id }}
+                    </span>
+                    <span>
+                      {{ t("rstPanel.overlay.character.memory.created_at") }}:
+                      {{ formatMemoryCreatedAt(memory.created_at) }}
+                    </span>
+                    <span v-if="memory.is_consolidated">
+                      {{ t("rstPanel.overlay.character.memory.consolidated") }}
+                    </span>
+                  </div>
+                  <div v-if="memory.tags.length > 0" class="character-memory-extra">
+                    {{ t("rstPanel.overlay.character.memory.tags") }}: {{ memory.tags.join(", ") }}
+                  </div>
+                  <div v-if="memory.known_by.length > 0" class="character-memory-extra">
+                    {{ t("rstPanel.overlay.character.memory.known_by") }}: {{ memory.known_by.join(", ") }}
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
     </ContentOverlay>
 
     <n-modal
@@ -736,9 +877,22 @@ import {
 } from "naive-ui";
 import Draggable from "vuedraggable";
 
-import { listCharacters, listEntries } from "@/api/lores";
+import {
+  addForm,
+  addMemory,
+  createCharacter,
+  createEntry,
+  deleteCharacter,
+  deleteMemory,
+  listCharacters,
+  listEntries,
+  setActiveForm,
+  updateMemory,
+  updateForm,
+} from "@/api/lores";
 import ContentOverlay from "@/components/panels/ContentOverlay.vue";
 import { useI18n } from "@/composables/useI18n";
+import { parseApiError } from "@/stores/api-error";
 import { useLoreStore } from "@/stores/lore";
 import { useSessionStore } from "@/stores/session";
 import { message } from "@/utils/message";
@@ -746,6 +900,7 @@ import { message } from "@/utils/message";
 import type {
   CharacterData,
   CharacterForm,
+  CharacterMemory,
   ConversionReport,
   LoreCategory,
   LoreEntry,
@@ -809,6 +964,13 @@ interface OpenCharacterOverlayRequest {
   preferredFormId?: string | null;
 }
 
+interface MemoryEditDraft {
+  event: string;
+  importance: number | null;
+  tags: string;
+  known_by: string;
+}
+
 const OPEN_CHARACTER_OVERLAY_EVENT = "rst-open-character-overlay";
 const LORE_DATA_CHANGED_EVENT = "rst-lore-data-changed";
 
@@ -869,8 +1031,22 @@ const characterRows = ref<CharacterData[]>([]);
 const selectedCharacterIds = ref<string[]>([]);
 const characterCopyModalVisible = ref(false);
 const characterCopyTarget = ref<string | null>(null);
+const characterMemoryCollapsed = ref(true);
+const editingMemoryId = ref<string | null>(null);
+const memoryActionLoading = ref(false);
+const memoryEditDraft = reactive<MemoryEditDraft>({
+  event: "",
+  importance: 5,
+  tags: "",
+  known_by: "",
+});
 const skillEntryOptions = ref<Array<{ label: string; value: string }>>([]);
 const pendingCharacterOverlayRequest = ref<OpenCharacterOverlayRequest | null>(null);
+
+function setSkillEntryOptions(options: Array<{ label: string; value: string }>): void {
+  // Keep the same array reference so already-open overlays receive async option updates.
+  skillEntryOptions.value.splice(0, skillEntryOptions.value.length, ...options);
+}
 
 const templateForm = reactive({
   confirm_prompt: "",
@@ -943,6 +1119,21 @@ const activeFormDisplayName = computed(() => {
 const showCharacterFormToolbar = computed(
   () => Boolean(editingCharacter.value && characterFormOptions.value.length > 0),
 );
+const showCharacterMemoryPanel = computed(() => Boolean(editingCharacter.value));
+const characterMemoryItems = computed<CharacterMemory[]>(() => {
+  const character = editingCharacter.value;
+  if (!character) {
+    return [];
+  }
+  return [...character.memories].sort((left, right) => {
+    const leftTs = Date.parse(left.created_at);
+    const rightTs = Date.parse(right.created_at);
+    if (Number.isNaN(leftTs) || Number.isNaN(rightTs)) {
+      return 0;
+    }
+    return rightTs - leftTs;
+  });
+});
 const canSwitchCharacterForm = computed(() => {
   const character = editingCharacter.value;
   if (!character || !selectedCharacterFormId.value) {
@@ -1136,7 +1327,7 @@ watch(
   (entries) => {
     entryRows.value = entries.map((entry) => ({ ...entry, tags: [...entry.tags] }));
     if (entryCategory.value === "skills") {
-      skillEntryOptions.value = toSkillEntryOptions(entryRows.value);
+      setSkillEntryOptions(toSkillEntryOptions(entryRows.value));
     }
     const validIds = new Set(entryRows.value.map((entry) => entry.id));
     selectedEntryIds.value = selectedEntryIds.value.filter((entryId) => validIds.has(entryId));
@@ -1224,7 +1415,7 @@ async function bootstrapCurrentSession() {
     entryFilter.value = entryCategory.value;
     resetCharacterListState();
     characterRows.value = [];
-    skillEntryOptions.value = [];
+    setSkillEntryOptions([]);
     return;
   }
   // Reset stale UI state first. Do not reset after async loading, otherwise
@@ -1340,9 +1531,9 @@ function toSkillEntryOptions(entries: LoreEntry[]): Array<{ label: string; value
 async function loadSkillEntryOptions(sessionName: string): Promise<void> {
   try {
     const response = await listEntries(sessionName, "skills");
-    skillEntryOptions.value = toSkillEntryOptions(response.entries);
+    setSkillEntryOptions(toSkillEntryOptions(response.entries));
   } catch {
-    skillEntryOptions.value = [];
+    setSkillEntryOptions([]);
   }
 }
 
@@ -1585,23 +1776,26 @@ async function confirmCopy() {
   if (!copyTargetSession.value || selectedEntries.value.length === 0) {
     return;
   }
+  const targetSessionName = copyTargetSession.value;
   const touchedSessions = new Set<string>();
   let copiedCount = 0;
   for (const entry of selectedEntries.value) {
     if (entry.category === "character" || entry.category === "memory") {
       continue;
     }
-    const created = await loreStore.createEntry(copyTargetSession.value, {
-      name: entry.name,
-      category: entry.category,
-      content: entry.content,
-      tags: [...entry.tags],
-      disabled: entry.disabled,
-      constant: entry.constant,
-    });
-    if (created) {
+    try {
+      await createEntry(targetSessionName, {
+        name: entry.name,
+        category: entry.category,
+        content: entry.content,
+        tags: [...entry.tags],
+        disabled: entry.disabled,
+        constant: entry.constant,
+      });
       copiedCount += 1;
-      touchedSessions.add(copyTargetSession.value);
+      touchedSessions.add(targetSessionName);
+    } catch (error) {
+      message.error(parseApiError(error));
     }
   }
   touchedSessions.forEach((sessionName) => {
@@ -1642,6 +1836,8 @@ function resetCharacterOverlay() {
   characterOverlaySections.value = [];
   characterOverlayContent.value = "";
   selectedCharacterFormId.value = null;
+  characterMemoryCollapsed.value = true;
+  cancelMemoryEdit();
 }
 
 function resetCharacterListState() {
@@ -1660,6 +1856,105 @@ function characterFormMeta(character: CharacterData): string {
     active: activeForm?.form_name || t("rstPanel.overlay.character.form.none"),
     count: character.forms.length,
   });
+}
+
+function formatMemoryCreatedAt(raw: string): string {
+  if (!raw) {
+    return "-";
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return raw;
+  }
+  return parsed.toLocaleString();
+}
+
+function toggleMemoryPanelCollapsed() {
+  characterMemoryCollapsed.value = !characterMemoryCollapsed.value;
+}
+
+function resetMemoryEditDraft() {
+  memoryEditDraft.event = "";
+  memoryEditDraft.importance = 5;
+  memoryEditDraft.tags = "";
+  memoryEditDraft.known_by = "";
+}
+
+function startMemoryEdit(memory: CharacterMemory) {
+  editingMemoryId.value = memory.memory_id;
+  memoryEditDraft.event = memory.event;
+  memoryEditDraft.importance = memory.importance;
+  memoryEditDraft.tags = memory.tags.join(", ");
+  memoryEditDraft.known_by = memory.known_by.join(", ");
+  characterMemoryCollapsed.value = false;
+}
+
+function cancelMemoryEdit() {
+  editingMemoryId.value = null;
+  resetMemoryEditDraft();
+}
+
+function normalizeMemoryImportance(value: number | null): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 5;
+  }
+  const rounded = Math.round(value);
+  if (rounded < 1) {
+    return 1;
+  }
+  if (rounded > 10) {
+    return 10;
+  }
+  return rounded;
+}
+
+async function saveMemoryEdit(memoryId: string) {
+  if (!currentSession.value?.name || !editingCharacterId.value) {
+    return;
+  }
+  const eventText = memoryEditDraft.event.trim();
+  if (!eventText) {
+    message.error(t("rstPanel.overlay.character.memory.validation.event_required"));
+    return;
+  }
+
+  memoryActionLoading.value = true;
+  try {
+    await updateMemory(currentSession.value.name, editingCharacterId.value, memoryId, {
+      event: eventText,
+      importance: normalizeMemoryImportance(memoryEditDraft.importance),
+      tags: parseDelimitedText(memoryEditDraft.tags),
+      known_by: parseDelimitedText(memoryEditDraft.known_by),
+    });
+    await loreStore.loadCharacters(currentSession.value.name);
+    notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
+    cancelMemoryEdit();
+    message.success(t("rstPanel.overlay.character.memory.updated"));
+  } catch (error) {
+    message.error(parseApiError(error));
+  } finally {
+    memoryActionLoading.value = false;
+  }
+}
+
+async function deleteMemoryEntry(memoryId: string) {
+  if (!currentSession.value?.name || !editingCharacterId.value) {
+    return;
+  }
+  memoryActionLoading.value = true;
+  try {
+    await deleteMemory(currentSession.value.name, editingCharacterId.value, memoryId);
+    await loreStore.loadCharacters(currentSession.value.name);
+    notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
+    if (editingMemoryId.value === memoryId) {
+      cancelMemoryEdit();
+    }
+    message.success(t("rstPanel.overlay.character.memory.deleted"));
+  } catch (error) {
+    message.error(parseApiError(error));
+  } finally {
+    memoryActionLoading.value = false;
+  }
 }
 
 interface CharacterOverlayValues {
@@ -2078,6 +2373,8 @@ function openNewCharacterOverlay() {
   editingCharacterId.value = null;
   activeCharacterId.value = null;
   selectedCharacterFormId.value = null;
+  characterMemoryCollapsed.value = true;
+  cancelMemoryEdit();
   characterOverlayTitle.value = t("rstPanel.overlay.character.create_title");
   const config = buildCharacterOverlayConfig({
     name: "",
@@ -2123,6 +2420,7 @@ function openCharacterOverlay(characterId: string, preferredFormId?: string) {
   if (!target) {
     return;
   }
+  cancelMemoryEdit();
   activeCharacterId.value = target.character_id;
   editingCharacterId.value = target.character_id;
   characterOverlayTitle.value = formatText("rstPanel.overlay.character.edit_title", {
@@ -2384,32 +2682,192 @@ function closeCharacterCopyModal() {
   characterCopyTarget.value = null;
 }
 
+function toFormCreatePayload(form: CharacterForm) {
+  return {
+    form_name: form.form_name,
+    is_default: form.is_default,
+    physique: form.physique,
+    features: form.features,
+    vitality_max: form.vitality_max,
+    strength: form.strength,
+    mana_potency: form.mana_potency,
+    toughness: form.toughness,
+    weak: [...form.weak],
+    resist: [...form.resist],
+    element: [...form.element],
+    skills: [...form.skills],
+    penetration: [...form.penetration],
+  };
+}
+
+function toFormUpdatePayload(form: CharacterForm) {
+  return {
+    form_name: form.form_name,
+    is_default: form.is_default,
+    physique: form.physique,
+    features: form.features,
+    vitality_max: form.vitality_max,
+    strength: form.strength,
+    mana_potency: form.mana_potency,
+    toughness: form.toughness,
+    weak: [...form.weak],
+    resist: [...form.resist],
+    element: [...form.element],
+    skills: [...form.skills],
+    penetration: [...form.penetration],
+    clothing: form.clothing,
+    body: form.body,
+    mind: form.mind,
+    vitality_cur: form.vitality_cur,
+    activity: form.activity,
+  };
+}
+
+async function copyCharacterFormsToSession(
+  targetSessionName: string,
+  sourceCharacter: CharacterData,
+  targetCharacterId: string,
+  initialTargetFormId: string | null,
+): Promise<boolean> {
+  if (sourceCharacter.forms.length === 0) {
+    return true;
+  }
+  if (!initialTargetFormId) {
+    return false;
+  }
+
+  const sourceToTargetFormId = new Map<string, string>();
+  const firstSourceForm = sourceCharacter.forms[0];
+
+  try {
+    await updateForm(
+      targetSessionName,
+      targetCharacterId,
+      initialTargetFormId,
+      toFormUpdatePayload(firstSourceForm),
+    );
+    sourceToTargetFormId.set(firstSourceForm.form_id, initialTargetFormId);
+
+    for (const sourceForm of sourceCharacter.forms.slice(1)) {
+      const createdForm = await addForm(
+        targetSessionName,
+        targetCharacterId,
+        toFormCreatePayload(sourceForm),
+      );
+      await updateForm(
+        targetSessionName,
+        targetCharacterId,
+        createdForm.form_id,
+        toFormUpdatePayload(sourceForm),
+      );
+      sourceToTargetFormId.set(sourceForm.form_id, createdForm.form_id);
+    }
+
+    const sourceDefaultForm = sourceCharacter.forms.find((form) => form.is_default);
+    if (sourceDefaultForm) {
+      const mappedDefaultFormId = sourceToTargetFormId.get(sourceDefaultForm.form_id);
+      if (!mappedDefaultFormId) {
+        return false;
+      }
+      await updateForm(targetSessionName, targetCharacterId, mappedDefaultFormId, {
+        is_default: true,
+      });
+    }
+
+    const mappedActiveFormId = sourceToTargetFormId.get(sourceCharacter.active_form_id);
+    if (mappedActiveFormId) {
+      await setActiveForm(targetSessionName, targetCharacterId, mappedActiveFormId);
+    }
+  } catch (error) {
+    message.error(parseApiError(error));
+    return false;
+  }
+
+  return true;
+}
+
+async function copyCharacterMemoriesToSession(
+  targetSessionName: string,
+  sourceCharacter: CharacterData,
+  targetCharacterId: string,
+): Promise<boolean> {
+  try {
+    for (const memory of sourceCharacter.memories) {
+      await addMemory(targetSessionName, targetCharacterId, {
+        event: memory.event,
+        importance: memory.importance,
+        tags: [...memory.tags],
+        known_by: [...memory.known_by],
+        plot_event_id: memory.plot_event_id ?? undefined,
+      });
+    }
+  } catch (error) {
+    message.error(parseApiError(error));
+    return false;
+  }
+  return true;
+}
+
 async function confirmCharacterCopy() {
   if (!characterCopyTarget.value || selectedCharacters.value.length === 0) {
     return;
   }
+  const targetSessionName = characterCopyTarget.value;
   const touchedSessions = new Set<string>();
   let copiedCount = 0;
   for (const character of selectedCharacters.value) {
-    const created = await loreStore.createCharacter(characterCopyTarget.value, {
-      name: character.name,
-      race: character.race,
-      gender: character.gender,
-      birth: character.birth,
-      homeland: character.homeland,
-      aliases: [...character.aliases],
-      role: character.role,
-      faction: character.faction,
-      objective: character.objective,
-      personality: character.personality,
-      relationship: character.relationship.map((item) => ({ ...item })),
-      tags: [...character.tags],
-      disabled: character.disabled,
-      constant: character.constant,
-    });
-    if (created) {
+    let createdCharacterId: string | null = null;
+    try {
+      const created = await createCharacter(targetSessionName, {
+        name: character.name,
+        race: character.race,
+        gender: character.gender,
+        birth: character.birth,
+        homeland: character.homeland,
+        aliases: [...character.aliases],
+        role: character.role,
+        faction: character.faction,
+        objective: character.objective,
+        personality: character.personality,
+        relationship: character.relationship.map((item) => ({ ...item })),
+        tags: [...character.tags],
+        disabled: character.disabled,
+        constant: character.constant,
+      });
+      createdCharacterId = created.character_id;
+
+      const formsCopied = await copyCharacterFormsToSession(
+        targetSessionName,
+        character,
+        created.character_id,
+        created.forms[0]?.form_id ?? null,
+      );
+      if (!formsCopied) {
+        await deleteCharacter(targetSessionName, created.character_id);
+        continue;
+      }
+
+      const memoriesCopied = await copyCharacterMemoriesToSession(
+        targetSessionName,
+        character,
+        created.character_id,
+      );
+      if (!memoriesCopied) {
+        await deleteCharacter(targetSessionName, created.character_id);
+        continue;
+      }
+
       copiedCount += 1;
-      touchedSessions.add(characterCopyTarget.value);
+      touchedSessions.add(targetSessionName);
+    } catch (error) {
+      message.error(parseApiError(error));
+      if (createdCharacterId) {
+        try {
+          await deleteCharacter(targetSessionName, createdCharacterId);
+        } catch {
+          // Ignore rollback failures to keep copy flow moving.
+        }
+      }
     }
   }
   touchedSessions.forEach((sessionName) => {
@@ -3001,6 +3459,150 @@ function actionLabel(action: string): string {
   max-width: 100%;
 }
 
+.character-memory-panel {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--rst-bg-topbar) 75%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.character-memory-toggle {
+  border: none;
+  background: transparent;
+  color: inherit;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.character-memory-toggle-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.character-memory-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.character-memory-count {
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.character-memory-arrow {
+  display: inline-flex;
+  transition: transform 0.2s ease;
+}
+
+.character-memory-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+.character-memory-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.character-memory-empty {
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.character-memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.character-memory-item {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--rst-bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.character-memory-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.character-memory-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.character-memory-event {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
+  min-width: 0;
+}
+
+.character-memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 11px;
+  color: var(--rst-text-secondary);
+}
+
+.character-memory-extra {
+  font-size: 11px;
+  color: var(--rst-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memory-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.memory-edit-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.memory-edit-item--full {
+  grid-column: 1 / -1;
+}
+
+.memory-edit-label {
+  font-size: 11px;
+  color: var(--rst-text-secondary);
+}
+
+.memory-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .entry-toggle {
   display: flex;
   align-items: center;
@@ -3520,6 +4122,10 @@ function actionLabel(action: string): string {
 
   .character-form-toolbar-actions :deep(.n-select) {
     width: 100%;
+  }
+
+  .memory-edit-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

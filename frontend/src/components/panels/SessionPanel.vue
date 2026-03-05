@@ -90,8 +90,8 @@
                 :max="40"
                 :step="1"
                 :format-tooltip="formatDepthTooltip"
-                @update:value="handleSliderUpdate('scan_depth')"
-                @change="handleSliderCommit('scan_depth', $event)"
+                @dragstart="handleSliderDragStart('scan_depth')"
+                @dragend="handleSliderDragEnd('scan_depth')"
               />
               <n-input-number
                 v-model:value="formState.scan_depth"
@@ -111,8 +111,8 @@
                 :max="400"
                 :step="5"
                 :format-tooltip="formatMemTooltip"
-                @update:value="handleSliderUpdate('mem_length')"
-                @change="handleSliderCommit('mem_length', $event)"
+                @dragstart="handleSliderDragStart('mem_length')"
+                @dragend="handleSliderDragEnd('mem_length')"
               />
               <n-input-number
                 v-model:value="formState.mem_length"
@@ -131,8 +131,8 @@
                 :min="1"
                 :max="syncIntervalUpperBound"
                 :step="1"
-                @update:value="handleSliderUpdate('lore_sync_interval')"
-                @change="handleSliderCommit('lore_sync_interval', $event)"
+                @dragstart="handleSliderDragStart('lore_sync_interval')"
+                @dragend="handleSliderDragEnd('lore_sync_interval')"
               />
               <n-input-number
                 v-model:value="formState.lore_sync_interval"
@@ -433,21 +433,23 @@ async function confirmLeaveIfBusy(): Promise<boolean> {
   return true;
 }
 
-function handleSliderUpdate(field: "scan_depth" | "mem_length" | "lore_sync_interval") {
+function handleSliderDragStart(field: "scan_depth" | "mem_length" | "lore_sync_interval") {
   sliderDraggingField.value = field;
 }
 
-function handleSliderCommit(
-  field: "scan_depth" | "mem_length" | "lore_sync_interval",
-  value: number,
-) {
+function handleSliderDragEnd(field: "scan_depth" | "mem_length" | "lore_sync_interval") {
   sliderDraggingField.value = null;
   if (field === "scan_depth") {
-    formState.scan_depth = coerceNumber(value, -1, 40, 1);
+    formState.scan_depth = coerceNumber(formState.scan_depth, -1, 40, 1);
   } else if (field === "mem_length") {
-    formState.mem_length = coerceNumber(value, -1, 400, 5);
+    formState.mem_length = coerceNumber(formState.mem_length, -1, 400, 5);
   } else {
-    formState.lore_sync_interval = coerceNumber(value, 1, syncIntervalUpperBound.value, 1);
+    formState.lore_sync_interval = coerceNumber(
+      formState.lore_sync_interval,
+      1,
+      syncIntervalUpperBound.value,
+      1,
+    );
   }
   if (!selectedName.value) {
     return;
