@@ -16,9 +16,11 @@ REQUIRED_SUBDIRS = [
 
 
 def ensure_data_dirs() -> Path:
-    # Create the root data directory and required subdirectories
+    # Create the root data directory and required subdirectories.
     data_root = settings.data_path
     for name in REQUIRED_SUBDIRS:
         (data_root / name).mkdir(parents=True, exist_ok=True)
+    # Create top-level logs directory for persisted runtime logs.
+    settings.logs_path.mkdir(parents=True, exist_ok=True)
     logger.info("Data directory ensured at %s", data_root)
     return data_root

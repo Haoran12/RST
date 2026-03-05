@@ -20,6 +20,7 @@ from app.storage.init_dirs import ensure_data_dirs
 @pytest.fixture()
 def tmp_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(settings, "rst_data_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "rst_logs_dir", str(tmp_path / "logs"))
     monkeypatch.delenv("RST_ENCRYPTION_KEY", raising=False)
     encryption._cached_key = None
     ensure_data_dirs()

@@ -1,7 +1,11 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
-import { fetchLogs, fetchLogDetail } from "@/api/logs";
+import {
+  cleanupExpiredLogs as cleanupExpiredLogsRequest,
+  fetchLogDetail,
+  fetchLogs,
+} from "@/api/logs";
 import { parseApiError } from "@/stores/api-error";
 import type { LogEntry } from "@/types/log";
 import { message } from "@/utils/message";
@@ -40,11 +44,22 @@ export const useLogStore = defineStore("log", () => {
     }
   }
 
+  async function cleanupExpiredLogs(retentionDays = 7): Promise<number | null> {
+    try {
+      return await cleanupExpiredLogsRequest(retentionDays);
+    } catch (err) {
+      const parsed = parseApiError(err);
+      message.warning(`Log cleanup skipped: ${parsed}`);
+      return null;
+    }
+  }
+
   return {
     logs,
     loading,
     error,
     loadLogs,
     loadLogDetail,
+    cleanupExpiredLogs,
   };
 });

@@ -1,0 +1,81 @@
+$ErrorActionPreference = "Stop"
+
+param(
+  [string]$Tag = "v0.2",
+  [string]$Title = "RST v0.2",
+  [string]$NotesFile = "docs/release-notes-v0.2.md",
+  [switch]$Draft,
+  [switch]$Prerelease
+)
+
+function Fail([string]$Message) {
+  Write-Host "[ERROR] $Message" -ForegroundColor Red
+  exit 1
+}
+
+if (-not $env:GITHUB_TOKEN) {
+  Fail "GITHUB_TOKEN is not set in current shell."
+}
+
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+Set-Location $repoRoot
+
+if (-not (Test-Path $NotesFile)) {
+  Fail "Notes file not found: $NotesFile"
+}
+
+$originUrl = git remote get-url origin
+if ($LASTEXITCODE -ne 0 -or -not $originUrl) {
+  Fail "Failed to read git origin URL."
+}
+
+$repoSlug = $null
+if ($originUrl -match "github\.com[:/](.+?)(?:\.git)?$") {
+  $repoSlug = $Matches[1]
+}
+if (-not $repoSlug) {
+  Fail "Cannot parse owner/repo from origin URL: $originUrl"
+}
+
+$notes = Get-Content -Path $NotesFile -Raw -Encoding utf8
+$apiBase = "https://api.github.com/repos/$repoSlug"
+$headers = @{
+  Authorization = "Bearer $($env:GITHUB_TOKEN)"
+  Accept = "application/vnd.github+json"
+  "X-GitHub-Api-Version" = "2022-11-28"
+}
+
+$existing = $null
+try {
+  $existing = Invoke-RestMethod -Method Get -Uri "$apiBase/releases/tags/$Tag" -Headers $headers
+} catch {
+  if (-not $_.Exception.Response -or $_.Exception.Response.StatusCode.value__ -ne 404) {
+    throw
+  }
+}
+
+if ($existing) {
+  $body = @{
+    tag_name = $Tag
+    name = $Title
+    body = $notes
+    draft = [bool]$Draft
+    prerelease = [bool]$Prerelease
+  } | ConvertTo-Json
+
+  $updated = Invoke-RestMethod -Method Patch -Uri "$apiBase/releases/$($existing.id)" -Headers $headers -Body $body
+  Write-Host "[INFO] Updated release: $($updated.html_url)" -ForegroundColor Green
+  exit 0
+}
+
+$createBody = @{
+  tag_name = $Tag
+  target_commitish = (git rev-parse --abbrev-ref HEAD)
+  name = $Title
+  body = $notes
+  draft = [bool]$Draft
+  prerelease = [bool]$Prerelease
+} | ConvertTo-Json
+
+$created = Invoke-RestMethod -Method Post -Uri "$apiBase/releases" -Headers $headers -Body $createBody
+Write-Host "[INFO] Created release: $($created.html_url)" -ForegroundColor Green

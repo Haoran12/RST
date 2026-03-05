@@ -85,7 +85,7 @@ BM25 检索 ── 第一轮候选 ──┐
                            │
               ┌────────────┼────────────┐
               ▼            ▼            ▼
-         race 关联    faction 关联   homeland 关联 ...
+         race 关联    faction 关联   relationship 关联 ...
               │            │            │
               ▼            ▼            ▼
          扩展候选 ─── 合并去重 ──── 最终候选集
@@ -117,11 +117,11 @@ BM25 检索 ── 第一轮候选 ──┐
 class CharacterData(BaseModel):
     race: str           # → 查找 WORLD_BASE / SOCIETY 条目
     faction: str        # → 查找 FACTION 条目
-    homeland: str       # → 查找 PLACE 条目
+    homeland: str       # → 查找 PLACE/SOCIETY 条目
     relationship: list[Relationship]  # → 查找其他 CHARACTER 条目
-    # active_form:
-    #   skills: list[str]    # → 查找 SKILLS 条目（已是 entry_id，直接加入）
-    #   element: list[str]   # → 查找 SKILLS 条目（已是 entry_id，直接加入）
+    active_form:
+    skills: list[str]    # → 查找 SKILLS 条目（已是 entry_id，直接加入）
+    element: list[str]   # → 查找 SKILLS 条目（已是 entry_id，直接加入）
 ```
 
 ### 3.2 非 CHARACTER 条目的关联字段

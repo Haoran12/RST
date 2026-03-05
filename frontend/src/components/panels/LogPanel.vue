@@ -153,6 +153,7 @@ const selectedLog = ref<LogEntry | null>(null);
 const detailVisible = ref(false);
 const sourceFilter = ref<"all" | "main" | "scheduler">("all");
 const AUTO_REFRESH_INTERVAL_MS = 2000;
+const CLEANUP_RETENTION_DAYS = 7;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const filteredLogs = computed(() => {
@@ -179,7 +180,10 @@ onBeforeUnmount(() => {
 });
 
 function handleRefresh() {
-  void logStore.loadLogs();
+  void (async () => {
+    await logStore.cleanupExpiredLogs(CLEANUP_RETENTION_DAYS);
+    await logStore.loadLogs();
+  })();
 }
 
 async function openLogDetail(log: LogEntry) {
@@ -338,6 +342,7 @@ function formatJson(payload: unknown) {
 .panel-body {
   margin-top: 12px;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -359,7 +364,28 @@ function formatJson(payload: unknown) {
   flex-direction: column;
   gap: 8px;
   max-height: 100%;
+  padding-right: 4px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rst-border-color) transparent;
+}
+
+.log-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.log-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.log-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.log-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
 }
 
 .log-card {

@@ -1,5 +1,7 @@
 ﻿# Runtime data
 data/
+logs/*.json
+!logs/.gitkeep
 .keyfile
 _tmp_llm_import_data/
 release/

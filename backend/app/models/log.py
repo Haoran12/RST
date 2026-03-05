@@ -21,3 +21,7 @@ class LogEntry(BaseModel):
     stop_reason: str | None = None
     raw_request: Any
     raw_response: Any
+
+
+class LogCleanupResult(BaseModel):
+    removed: int

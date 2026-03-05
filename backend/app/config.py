@@ -22,6 +22,7 @@ ENV_FILE = PROJECT_ROOT / ".env"
 class Settings(BaseSettings):
     # Environment variables are read from repo .env with no prefix
     rst_data_dir: str = Field(default="./data", alias="RST_DATA_DIR")
+    rst_logs_dir: str = Field(default="./logs", alias="RST_LOGS_DIR")
     rst_backend_port: int = Field(default=18080, alias="RST_BACKEND_PORT")
     rst_backend_reload: bool = Field(default=False, alias="RST_BACKEND_RELOAD")
     rst_serve_frontend: bool = Field(default=False, alias="RST_SERVE_FRONTEND")
@@ -45,6 +46,13 @@ class Settings(BaseSettings):
     @property
     def frontend_dist_path(self) -> Path:
         path = Path(self.rst_frontend_dist)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        return path.resolve()
+
+    @property
+    def logs_path(self) -> Path:
+        path = Path(self.rst_logs_dir)
         if not path.is_absolute():
             path = PROJECT_ROOT / path
         return path.resolve()
