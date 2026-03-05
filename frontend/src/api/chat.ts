@@ -43,7 +43,7 @@ export async function sendChatMessage(
 export async function updateMessage(
   sessionName: string,
   messageId: string,
-  payload: { content?: string; visible?: boolean },
+  payload: { content?: string; visible?: boolean; attachments?: ChatAttachment[] | null },
 ): Promise<ChatMessage> {
   const { data } = await apiClient.patch<ChatMessage>(
     `/sessions/${encodeURIComponent(sessionName)}/messages/${encodeURIComponent(messageId)}`,

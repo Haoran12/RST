@@ -41,6 +41,7 @@ class AnthropicProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, Any] | None = None,
     ) -> ProviderChatResult:
         system_parts: list[str] = []
         chat_messages: list[dict] = []

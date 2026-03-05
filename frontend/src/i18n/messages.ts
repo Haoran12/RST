@@ -213,6 +213,12 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.scheduler.placeholder.extract_prompt": "extract_prompt (extraction prompt)",
     "rstPanel.scheduler.placeholder.consolidate_prompt":
       "consolidate_prompt (consolidation prompt)",
+    "rstPanel.scheduler.hint.confirm_prompt":
+      "Runtime placeholders: {conversation_context}, {candidate_entries}. Final prompt also includes retrieved lore/character/memory blocks.",
+    "rstPanel.scheduler.hint.extract_prompt":
+      "Runtime placeholders: {conversation_context}, {existing_entries_summary}, {character_list}. Backend appends OUTPUT CONTRACT (STRICT) automatically.",
+    "rstPanel.scheduler.hint.consolidate_prompt":
+      "Runtime placeholders: {character_name}, {memories_to_consolidate}. Triggered when character memories exceed the consolidation threshold.",
     "rstPanel.scheduler.save_template": "Save Template",
     "rstPanel.scheduler.view_hits": "View details",
     "rstPanel.scheduler.prompt_templates": "Prompt Templates",
@@ -682,6 +688,12 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "extract_prompt\uff08\u63d0\u53d6\u63d0\u793a\u8bcd\uff09",
     "rstPanel.scheduler.placeholder.consolidate_prompt":
       "consolidate_prompt\uff08\u6574\u5408\u63d0\u793a\u8bcd\uff09",
+    "rstPanel.scheduler.hint.confirm_prompt":
+      "\u8fd0\u884c\u65f6\u5360\u4f4d\u7b26\uff1a{conversation_context}\u3001{candidate_entries}\u3002\u6700\u7ec8\u8fd8\u4f1a\u62fc\u4e0a\u68c0\u7d22\u5230\u7684\u8bbe\u5b9a/\u4eba\u7269/\u8bb0\u5fc6\u5757\u3002",
+    "rstPanel.scheduler.hint.extract_prompt":
+      "\u8fd0\u884c\u65f6\u5360\u4f4d\u7b26\uff1a{conversation_context}\u3001{existing_entries_summary}\u3001{character_list}\u3002\u540e\u7aef\u4f1a\u81ea\u52a8\u8ffd\u52a0 OUTPUT CONTRACT (STRICT)\u3002",
+    "rstPanel.scheduler.hint.consolidate_prompt":
+      "\u8fd0\u884c\u65f6\u5360\u4f4d\u7b26\uff1a{character_name}\u3001{memories_to_consolidate}\u3002\u5f53\u5355\u89d2\u8272\u8bb0\u5fc6\u6570\u8d85\u8fc7\u6574\u5408\u9608\u503c\u65f6\u89e6\u53d1\u3002",
     "rstPanel.scheduler.save_template": "\u4fdd\u5b58\u6a21\u677f",
     "rstPanel.scheduler.view_hits": "\u67e5\u770b\u660e\u7ec6",
     "rstPanel.scheduler.prompt_templates": "\u63d0\u793a\u8bcd\u6a21\u677f",

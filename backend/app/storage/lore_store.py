@@ -1,6 +1,5 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime
 from pathlib import Path
 
 from app.models.lore import (
@@ -18,6 +17,7 @@ from app.models.lore import (
     SchedulerPromptTemplate,
 )
 from app.storage.file_io import read_json, write_json
+from app.time_utils import now_local
 
 
 class LoreStore:
@@ -51,12 +51,12 @@ class LoreStore:
                 return LoreIndex.model_validate(data)
             except Exception:
                 pass
-        index = LoreIndex(items=[], updated_at=datetime.utcnow())
+        index = LoreIndex(items=[], updated_at=now_local())
         self.save_index(index)
         return index
 
     def save_index(self, index: LoreIndex) -> None:
-        payload = index.model_copy(update={"updated_at": datetime.utcnow()})
+        payload = index.model_copy(update={"updated_at": now_local()})
         write_json(self.index_path, payload.model_dump(mode="json"))
 
     def rebuild_index(self) -> LoreIndex:
@@ -110,7 +110,7 @@ class LoreStore:
                     )
                 )
 
-        index = LoreIndex(items=items, updated_at=datetime.utcnow())
+        index = LoreIndex(items=items, updated_at=now_local())
         self.save_index(index)
         return index
 
@@ -188,7 +188,7 @@ class LoreStore:
         if found is None:
             return None
         entry, lore_file = found
-        merged_updates = {**updates, "updated_at": datetime.utcnow()}
+        merged_updates = {**updates, "updated_at": now_local()}
         updated_entry = entry.model_copy(update=merged_updates)
 
         # If category changes, move the entry across category files.
@@ -290,7 +290,7 @@ class LoreStore:
         char_data = char_file.data.model_copy(
             update={
                 "memories": [*char_file.data.memories, memory],
-                "updated_at": datetime.utcnow(),
+                "updated_at": now_local(),
             }
         )
         self.save_character(CharacterFile(data=char_data, version=char_file.version))
@@ -314,7 +314,7 @@ class LoreStore:
             return None
 
         char_data = char_file.data.model_copy(
-            update={"memories": updated_memories, "updated_at": datetime.utcnow()}
+            update={"memories": updated_memories, "updated_at": now_local()}
         )
         self.save_character(CharacterFile(data=char_data, version=char_file.version))
         return updated_target
@@ -329,7 +329,7 @@ class LoreStore:
             return False
 
         char_data = char_file.data.model_copy(
-            update={"memories": memories, "updated_at": datetime.utcnow()}
+            update={"memories": memories, "updated_at": now_local()}
         )
         self.save_character(CharacterFile(data=char_data, version=char_file.version))
         return True
@@ -339,6 +339,6 @@ class LoreStore:
         if char_file is None:
             raise ValueError("character not found")
         char_data = char_file.data.model_copy(
-            update={"memories": list(memories), "updated_at": datetime.utcnow()}
+            update={"memories": list(memories), "updated_at": now_local()}
         )
         self.save_character(CharacterFile(data=char_data, version=char_file.version))

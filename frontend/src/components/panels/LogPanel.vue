@@ -62,7 +62,13 @@
 
     <div class="panel-footer">Showing recent requests</div>
 
-    <n-modal v-model:show="detailVisible" preset="card" title="Log Detail" size="large">
+    <n-modal
+      v-model:show="detailVisible"
+      preset="card"
+      title="Log Detail"
+      size="large"
+      :style="CONTENT_VIEW_MODAL_STYLE"
+    >
       <div v-if="selectedLog" class="detail-body">
         <div class="detail-section">
           <div class="detail-title">Overview</div>
@@ -145,8 +151,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { NButton, NModal } from "naive-ui";
 
+import { CONTENT_VIEW_MODAL_STYLE } from "@/constants/modal";
 import { useLogStore } from "@/stores/log";
 import type { LogEntry } from "@/types/log";
+import { formatTimestampLocal } from "@/utils/time";
 
 const logStore = useLogStore();
 const selectedLog = ref<LogEntry | null>(null);
@@ -196,16 +204,7 @@ async function openLogDetail(log: LogEntry) {
 }
 
 function formatTime(isoString: string) {
-  if (!isoString) {
-    return "-";
-  }
-  const hasTimezone = /[zZ]$|[+-]\d{2}:\d{2}$/.test(isoString);
-  const normalized = hasTimezone ? isoString : `${isoString}Z`;
-  const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) {
-    return isoString;
-  }
-  return parsed.toLocaleString();
+  return formatTimestampLocal(isoString, "-");
 }
 
 function formatDuration(duration: number | null | undefined) {

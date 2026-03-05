@@ -1,7 +1,5 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime
-
 from app.models import generate_id
 from app.models.lore import (
     ActiveFormUpdate,
@@ -32,6 +30,7 @@ from app.models.lore import (
 )
 from app.services.session_service import get_session_dir, get_session_storage
 from app.storage.lore_store import LoreStore
+from app.time_utils import now_local
 
 
 class LoreError(RuntimeError):
@@ -86,7 +85,7 @@ class LoreService:
         if payload.category in {LoreCategory.CHARACTER, LoreCategory.MEMORY}:
             raise LoreValidationError("Entry category cannot be character or memory")
 
-        now = datetime.utcnow()
+        now = now_local()
         entry = LoreEntry(
             id=generate_id(),
             name=payload.name,
@@ -219,7 +218,7 @@ class LoreService:
                 raise CharacterNotFoundError(f"Character '{character_id}' not found")
             character_files[character_id] = char_file
 
-        now = datetime.utcnow()
+        now = now_local()
         reordered: list[CharacterData] = []
         for index, character_id in enumerate(requested_ids):
             char_file = character_files[character_id]
@@ -237,7 +236,7 @@ class LoreService:
 
     def create_character(self, session_name: str, payload: CharacterCreate) -> CharacterData:
         store = self._store(session_name)
-        now = datetime.utcnow()
+        now = now_local()
         existing = store.list_characters()
         next_sort_order = max((item.sort_order for item in existing), default=-1) + 1
         default_form = CharacterForm(
@@ -293,7 +292,7 @@ class LoreService:
         updates = payload.model_dump(exclude_unset=True)
         if "tags" in updates:
             updates["tags"] = self._normalize_tags(updates.get("tags"))
-        updates["updated_at"] = datetime.utcnow()
+        updates["updated_at"] = now_local()
 
         updated_data = char_file.data.model_copy(update=updates)
         store.save_character(CharacterFile(data=updated_data, version=char_file.version))
@@ -345,7 +344,7 @@ class LoreService:
             update={
                 "forms": forms,
                 "active_form_id": active_form_id,
-                "updated_at": datetime.utcnow(),
+                "updated_at": now_local(),
             }
         )
         store.save_character(CharacterFile(data=updated, version=char_file.version))
@@ -387,7 +386,7 @@ class LoreService:
             forms[0] = forms[0].model_copy(update={"is_default": True})
 
         updated = char_file.data.model_copy(
-            update={"forms": forms, "updated_at": datetime.utcnow()}
+            update={"forms": forms, "updated_at": now_local()}
         )
         store.save_character(CharacterFile(data=updated, version=char_file.version))
         self._rebuild_index(store)
@@ -417,7 +416,7 @@ class LoreService:
             update={
                 "forms": forms,
                 "active_form_id": active_form_id,
-                "updated_at": datetime.utcnow(),
+                "updated_at": now_local(),
             }
         )
         store.save_character(CharacterFile(data=updated, version=char_file.version))
@@ -438,7 +437,7 @@ class LoreService:
             raise FormNotFoundError(f"Form '{payload.form_id}' not found")
 
         updated = char_file.data.model_copy(
-            update={"active_form_id": payload.form_id, "updated_at": datetime.utcnow()}
+            update={"active_form_id": payload.form_id, "updated_at": now_local()}
         )
         store.save_character(CharacterFile(data=updated, version=char_file.version))
         self._rebuild_index(store)
@@ -469,7 +468,7 @@ class LoreService:
             known_by=payload.known_by,
             plot_event_id=payload.plot_event_id,
             is_consolidated=False,
-            created_at=datetime.utcnow(),
+            created_at=now_local(),
         )
         store.add_memory(character_id, memory)
         self._rebuild_index(store)

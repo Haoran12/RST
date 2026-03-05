@@ -3,7 +3,6 @@
 import json
 import os
 import re
-from datetime import datetime, timezone
 from typing import Any
 
 import yaml
@@ -31,6 +30,7 @@ from app.services.log_service import log_service
 from app.services.session_service import get_session_dir
 from app.storage.encryption import EncryptionError, decrypt_api_key
 from app.storage.lore_store import LoreStore
+from app.time_utils import now_local, now_local_iso
 
 
 def _env_positive_int(name: str, default: int) -> int:
@@ -67,8 +67,8 @@ class LoreConverter:
     _llm_batch_tokens_per_item_estimate = 80
     _llm_single_fallback_budget_default = 2
 
-    def _utc_iso(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+    def _local_iso(self) -> str:
+        return now_local_iso()
 
     def __init__(
         self,
@@ -87,7 +87,7 @@ class LoreConverter:
         self.llm_api_config_id = llm_api_config_id.strip() if llm_api_config_id else None
 
         self._store = LoreStore(get_session_dir(session_name))
-        self._now = datetime.utcnow()
+        self._now = now_local()
 
         self._llm_ready = self.llm_fallback
         self._llm_unavailable_reason: str | None = None
@@ -627,8 +627,8 @@ class LoreConverter:
         api_config,
         prompt: str,
     ) -> str:
-        request_time = self._utc_iso()
-        started_at = datetime.utcnow()
+        request_time = self._local_iso()
+        started_at = now_local()
         provider_name = api_config.provider.value
         source_ids = [src.id for src in batch]
 
@@ -657,8 +657,8 @@ class LoreConverter:
                 stream=False,
             )
         except ProviderError as exc:
-            response_time = self._utc_iso()
-            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            response_time = self._local_iso()
+            duration_ms = int((now_local() - started_at).total_seconds() * 1000)
             log_service.add_log(
                 LogEntry(
                     id=generate_id(),
@@ -680,8 +680,8 @@ class LoreConverter:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            response_time = self._utc_iso()
-            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            response_time = self._local_iso()
+            duration_ms = int((now_local() - started_at).total_seconds() * 1000)
             log_service.add_log(
                 LogEntry(
                     id=generate_id(),
@@ -699,8 +699,8 @@ class LoreConverter:
             )
             raise
 
-        response_time = self._utc_iso()
-        duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+        response_time = self._local_iso()
+        duration_ms = int((now_local() - started_at).total_seconds() * 1000)
         log_service.add_log(
             LogEntry(
                 id=generate_id(),
@@ -854,8 +854,8 @@ class LoreConverter:
             return None
 
     async def _call_llm_for_character_yaml(self, src: SourceEntry, api_config, prompt: str) -> str:
-        request_time = self._utc_iso()
-        started_at = datetime.utcnow()
+        request_time = self._local_iso()
+        started_at = now_local()
         provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
         provider = get_provider(api_config.provider)
@@ -883,8 +883,8 @@ class LoreConverter:
                 stream=False,
             )
         except ProviderError as exc:
-            response_time = self._utc_iso()
-            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            response_time = self._local_iso()
+            duration_ms = int((now_local() - started_at).total_seconds() * 1000)
             log_service.add_log(
                 LogEntry(
                     id=generate_id(),
@@ -906,8 +906,8 @@ class LoreConverter:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            response_time = self._utc_iso()
-            duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+            response_time = self._local_iso()
+            duration_ms = int((now_local() - started_at).total_seconds() * 1000)
             log_service.add_log(
                 LogEntry(
                     id=generate_id(),
@@ -925,8 +925,8 @@ class LoreConverter:
             )
             raise
 
-        response_time = self._utc_iso()
-        duration_ms = int((datetime.utcnow() - started_at).total_seconds() * 1000)
+        response_time = self._local_iso()
+        duration_ms = int((now_local() - started_at).total_seconds() * 1000)
         log_service.add_log(
             LogEntry(
                 id=generate_id(),
@@ -1431,7 +1431,7 @@ class LoreConverter:
         self._id_mapping[key] = target_id
 
     def _iso_timestamp(self) -> str:
-        return self._now.replace(microsecond=0).isoformat() + "Z"
+        return self._now.replace(microsecond=0).isoformat()
 
     def _safe_load_yaml(self, text: str) -> Any:
         try:

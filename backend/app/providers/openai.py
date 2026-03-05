@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -21,6 +22,28 @@ def _safe_json(response: httpx.Response) -> Any:
         return response.json()
     except Exception:
         return response.text
+
+
+def _should_retry_without_cache_options(response: httpx.Response) -> bool:
+    if response.status_code != 400:
+        return False
+    payload = _safe_json(response)
+    if isinstance(payload, (dict, list)):
+        text = json.dumps(payload, ensure_ascii=False).lower()
+    else:
+        text = str(payload).lower()
+    if "prompt_cache_key" in text or "prompt_cache_retention" in text:
+        return True
+    return any(
+        indicator in text
+        for indicator in (
+            "unknown parameter",
+            "unexpected field",
+            "additional properties",
+            "extra_forbidden",
+            "unrecognized request argument",
+        )
+    )
 
 
 class OpenAIProvider(BaseProvider):
@@ -60,6 +83,7 @@ class OpenAIProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, Any] | None = None,
     ) -> ProviderChatResult:
         url = f"{base_url.rstrip('/')}/chat/completions"
         headers = build_outbound_headers(
@@ -86,28 +110,58 @@ class OpenAIProvider(BaseProvider):
                     "include_reasoning": True,
                 }
             )
-        request_context = {
-            "method": "POST",
-            "url": url,
-            "headers": redact_outbound_headers(headers),
-            "payload": payload,
-        }
+        payload_with_cache = dict(payload)
+        if cache_options:
+            payload_with_cache.update(cache_options)
+
+        def _build_request_context(active_payload: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "method": "POST",
+                "url": url,
+                "headers": redact_outbound_headers(headers),
+                "payload": active_payload,
+            }
+
+        async def _send(active_payload: dict[str, Any]) -> tuple[Any, httpx.Response]:
+            async with httpx.AsyncClient(timeout=PROVIDER_CHAT_TIMEOUT_SECONDS) as client:
+                response = await client.post(url, headers=headers, json=active_payload)
+            response.raise_for_status()
+            return response.json(), response
 
         data: Any = None
+        response: httpx.Response | None = None
+        request_context = _build_request_context(payload_with_cache)
         try:
-            async with httpx.AsyncClient(timeout=PROVIDER_CHAT_TIMEOUT_SECONDS) as client:
-                response = await client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
+            data, response = await _send(payload_with_cache)
         except httpx.HTTPStatusError as exc:
+            if cache_options and _should_retry_without_cache_options(exc.response):
+                request_context = _build_request_context(payload)
+                try:
+                    data, response = await _send(payload)
+                except httpx.HTTPStatusError as retry_exc:
+                    raise ProviderError(
+                        "Failed to send chat request",
+                        request=request_context,
+                        response=_safe_json(retry_exc.response),
+                        status_code=retry_exc.response.status_code,
+                    ) from retry_exc
+                except Exception as retry_exc:
+                    raise ProviderError(
+                        "Failed to send chat request",
+                        request=request_context,
+                    ) from retry_exc
+            else:
+                raise ProviderError(
+                    "Failed to send chat request",
+                    request=request_context,
+                    response=_safe_json(exc.response),
+                    status_code=exc.response.status_code,
+                ) from exc
+        except Exception as exc:
             raise ProviderError(
                 "Failed to send chat request",
                 request=request_context,
-                response=_safe_json(exc.response),
-                status_code=exc.response.status_code,
             ) from exc
-        except Exception as exc:
-            raise ProviderError("Failed to send chat request", request=request_context) from exc
 
         try:
             text = str(data["choices"][0]["message"]["content"])
@@ -116,7 +170,7 @@ class OpenAIProvider(BaseProvider):
                 "Invalid chat response format",
                 request=request_context,
                 response=data,
-                status_code=response.status_code,
+                status_code=response.status_code if response is not None else None,
             ) from exc
 
         return ProviderChatResult(

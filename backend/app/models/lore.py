@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.time_utils import to_local_tz
 
 
 class LoreCategory(str, Enum):
@@ -55,6 +57,23 @@ If no updates are needed, return [].
 DEFAULT_CONSOLIDATE_PROMPT = """你是一个记忆整理助手。请将人物旧记忆合并为更精炼的摘要。\n\n## 人物：{character_name}\n\n## 待合并的记忆\n{memories_to_consolidate}\n\n请输出 JSON 数组，每个元素包含 event、importance、tags。"""
 
 
+def _normalize_datetime(value: datetime) -> datetime:
+    return to_local_tz(value)
+
+
+def _normalize_iso_datetime(value: str) -> str:
+    trimmed = value.strip()
+    if not trimmed:
+        return ""
+
+    normalized = trimmed.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return trimmed
+    return to_local_tz(parsed).isoformat()
+
+
 class LoreEntry(BaseModel):
     id: str
     name: str = Field(min_length=1, max_length=128)
@@ -65,6 +84,11 @@ class LoreEntry(BaseModel):
     tags: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
 
     @model_validator(mode="after")
     def validate_category(self) -> "LoreEntry":
@@ -145,6 +169,11 @@ class CharacterMemory(BaseModel):
     is_consolidated: bool = False
     created_at: datetime
 
+    @field_validator("created_at")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
 
 class CharacterForm(BaseModel):
     form_id: str
@@ -198,6 +227,11 @@ class CharacterData(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
+
 
 class CharacterFile(BaseModel):
     data: CharacterData
@@ -219,6 +253,11 @@ class SceneState(BaseModel):
     characters: list[str] = Field(default_factory=list)
     raw_tag: str = ""
     updated_at: str = ""
+
+    @field_validator("updated_at")
+    @classmethod
+    def normalize_updated_at(cls, value: str) -> str:
+        return _normalize_iso_datetime(value)
 
 
 class SceneStateFile(BaseModel):
@@ -242,6 +281,11 @@ class LoreIndex(BaseModel):
     items: list[LoreIndexEntry] = Field(default_factory=list)
     updated_at: datetime
     version: int = 1
+
+    @field_validator("updated_at")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        return _normalize_datetime(value)
 
 
 class SchedulerPromptTemplate(BaseModel):
@@ -438,6 +482,13 @@ class ScheduleStatus(BaseModel):
     last_matched_entry_ids: list[str] = Field(default_factory=list)
     cached_candidates: list[str] = Field(default_factory=list)
 
+    @field_validator("last_run_at")
+    @classmethod
+    def normalize_last_run_at(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _normalize_iso_datetime(value)
+
 
 class SyncFieldChange(BaseModel):
     field: str
@@ -474,6 +525,13 @@ class SyncStatus(BaseModel):
     rounds_since_last_sync: int = 0
     sync_interval: int = 3
     last_result: SyncResult | None = None
+
+    @field_validator("last_run_at")
+    @classmethod
+    def normalize_last_run_at(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _normalize_iso_datetime(value)
 
 
 class ConsolidateResult(BaseModel):

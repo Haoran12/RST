@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from datetime import datetime
+﻿from __future__ import annotations
 
 import pytest
 
@@ -18,8 +16,7 @@ from app.services.lore_nlp import LoreNlpEngine
 from app.services.lore_scheduler import LoreScheduler
 from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import create_session, get_session_dir
-from app.storage.lore_store import LoreStore
-
+from app.time_utils import now_local
 
 def _index_entry(
     entry_id: str,
@@ -45,7 +42,7 @@ def _character_file(
     *,
     character_id: str,
     name: str,
-    race: str = "人类",
+    race: str = "浜虹被",
     faction: str = "",
     homeland: str = "",
     aliases: list[str] | None = None,
@@ -54,10 +51,10 @@ def _character_file(
     element: list[str] | None = None,
     mana_potency: int = 100,
 ) -> CharacterFile:
-    now = datetime.utcnow()
+    now = now_local()
     form = CharacterForm(
         form_id=f"{character_id}-form",
-        form_name="默认形态",
+        form_name="榛樿褰㈡€?,
         skills=skills or [],
         element=element or [],
         mana_potency=mana_potency,
@@ -91,7 +88,7 @@ def _save_lore_entry(
     disabled: bool = False,
     constant: bool = False,
 ) -> None:
-    now = datetime.utcnow()
+    now = now_local()
     lore_file = store.load_category_file(category)
     lore_file.entries.append(
         LoreEntry(
@@ -112,10 +109,10 @@ def _save_lore_entry(
 class TestExpandRelatedIds:
     def test_character_race_expansion(self, tmp_path) -> None:
         store = LoreStore(tmp_path / "session")
-        store.save_character(_character_file(character_id="char1", name="吴晔", race="人类"))
+        store.save_character(_character_file(character_id="char1", name="鍚存檾", race="浜虹被"))
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("e_race", "人类", LoreCategory.WORLD_BASE),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("e_race", "浜虹被", LoreCategory.WORLD_BASE),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -132,11 +129,11 @@ class TestExpandRelatedIds:
     def test_character_faction_expansion(self, tmp_path) -> None:
         store = LoreStore(tmp_path / "session")
         store.save_character(
-            _character_file(character_id="char1", name="吴晔", race="人类", faction="宜河吴氏")
+            _character_file(character_id="char1", name="鍚存檾", race="浜虹被", faction="瀹滄渤鍚存皬")
         )
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("e_faction", "宜河吴氏", LoreCategory.FACTION),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("e_faction", "瀹滄渤鍚存皬", LoreCategory.FACTION),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -153,11 +150,11 @@ class TestExpandRelatedIds:
     def test_character_homeland_expansion(self, tmp_path) -> None:
         store = LoreStore(tmp_path / "session")
         store.save_character(
-            _character_file(character_id="char1", name="吴晔", race="人类", homeland="宜河")
+            _character_file(character_id="char1", name="鍚存檾", race="浜虹被", homeland="瀹滄渤")
         )
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("e_place", "宜河", LoreCategory.PLACE),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("e_place", "瀹滄渤", LoreCategory.PLACE),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -176,14 +173,14 @@ class TestExpandRelatedIds:
         store.save_character(
             _character_file(
                 character_id="char1",
-                name="吴晔",
-                relationship=[Relationship(target="陈若水", relation="友人")],
+                name="鍚存檾",
+                relationship=[Relationship(target="闄堣嫢姘?, relation="鍙嬩汉")],
             )
         )
-        store.save_character(_character_file(character_id="char2", name="陈若水"))
+        store.save_character(_character_file(character_id="char2", name="闄堣嫢姘?))
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("char2", "陈若水", LoreCategory.CHARACTER),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("char2", "闄堣嫢姘?, LoreCategory.CHARACTER),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -202,16 +199,16 @@ class TestExpandRelatedIds:
         store.save_character(
             _character_file(
                 character_id="char1",
-                name="吴晔",
-                relationship=[Relationship(target="阿水", relation="友人")],
+                name="鍚存檾",
+                relationship=[Relationship(target="闃挎按", relation="鍙嬩汉")],
             )
         )
         store.save_character(
-            _character_file(character_id="char2", name="陈若水", aliases=["阿水"])
+            _character_file(character_id="char2", name="闄堣嫢姘?, aliases=["闃挎按"])
         )
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("char2", "陈若水", LoreCategory.CHARACTER),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("char2", "闄堣嫢姘?, LoreCategory.CHARACTER),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -230,13 +227,13 @@ class TestExpandRelatedIds:
         store.save_character(
             _character_file(
                 character_id="char1",
-                name="吴晔",
+                name="鍚存檾",
                 skills=["skill_id_1"],
             )
         )
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("skill_id_1", "火球术", LoreCategory.SKILLS),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("skill_id_1", "鐏悆鏈?, LoreCategory.SKILLS),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -253,8 +250,8 @@ class TestExpandRelatedIds:
     def test_entry_tag_expansion(self, tmp_path) -> None:
         store = LoreStore(tmp_path / "session")
         entries = [
-            _index_entry("e_plot", "宜河战事", LoreCategory.PLOT, tags=["宜河"]),
-            _index_entry("e_place", "宜河", LoreCategory.PLACE),
+def _index_entry("e_plot", "瀹滄渤鎴樹簨", LoreCategory.PLOT, tags=["瀹滄渤"]),
+def _index_entry("e_place", "瀹滄渤", LoreCategory.PLACE),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -273,14 +270,14 @@ class TestExpandRelatedIds:
         store.save_character(
             _character_file(
                 character_id="char1",
-                name="吴晔",
-                race="人类",
-                homeland="人类",
+                name="鍚存檾",
+                race="浜虹被",
+                homeland="浜虹被",
             )
         )
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("e_race", "人类", LoreCategory.WORLD_BASE),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("e_race", "浜虹被", LoreCategory.WORLD_BASE),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -296,10 +293,10 @@ class TestExpandRelatedIds:
 
     def test_disabled_entries_excluded(self, tmp_path) -> None:
         store = LoreStore(tmp_path / "session")
-        store.save_character(_character_file(character_id="char1", name="吴晔", race="人类"))
+        store.save_character(_character_file(character_id="char1", name="鍚存檾", race="浜虹被"))
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("e_race", "人类", LoreCategory.WORLD_BASE, disabled=True),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("e_race", "浜虹被", LoreCategory.WORLD_BASE, disabled=True),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -316,9 +313,9 @@ class TestExpandRelatedIds:
     def test_no_recursive_expansion(self, tmp_path) -> None:
         store = LoreStore(tmp_path / "session")
         entries = [
-            _index_entry("e_plot", "宜河战事", LoreCategory.PLOT, tags=["宜河"]),
-            _index_entry("e_place", "宜河", LoreCategory.PLACE, tags=["港口"]),
-            _index_entry("e_port", "港口", LoreCategory.PLACE),
+def _index_entry("e_plot", "瀹滄渤鎴樹簨", LoreCategory.PLOT, tags=["瀹滄渤"]),
+def _index_entry("e_place", "瀹滄渤", LoreCategory.PLACE, tags=["娓彛"]),
+def _index_entry("e_port", "娓彛", LoreCategory.PLACE),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -334,10 +331,10 @@ class TestExpandRelatedIds:
 
     def test_first_round_ids_not_duplicated(self, tmp_path) -> None:
         store = LoreStore(tmp_path / "session")
-        store.save_character(_character_file(character_id="char1", name="吴晔", race="人类"))
+        store.save_character(_character_file(character_id="char1", name="鍚存檾", race="浜虹被"))
         entries = [
-            _index_entry("char1", "吴晔", LoreCategory.CHARACTER),
-            _index_entry("e_race", "人类", LoreCategory.WORLD_BASE),
+def _index_entry("char1", "鍚存檾", LoreCategory.CHARACTER),
+def _index_entry("e_race", "浜虹被", LoreCategory.WORLD_BASE),
         ]
         engine = LoreNlpEngine()
         engine.build_index(entries)
@@ -406,38 +403,38 @@ def _seed_expansion_data(store: LoreStore) -> None:
     _save_lore_entry(
         store,
         entry_id="e_race",
-        name="人类",
+        name="浜虹被",
         category=LoreCategory.WORLD_BASE,
-        content="人类种族设定",
+        content="浜虹被绉嶆棌璁惧畾",
     )
     _save_lore_entry(
         store,
         entry_id="e_faction",
-        name="宜河吴氏",
+        name="瀹滄渤鍚存皬",
         category=LoreCategory.FACTION,
-        content="宜河吴氏势力设定",
+        content="瀹滄渤鍚存皬鍔垮姏璁惧畾",
     )
     _save_lore_entry(
         store,
         entry_id="e_place",
-        name="宜河",
+        name="瀹滄渤",
         category=LoreCategory.PLACE,
-        content="宜河地点设定",
+        content="瀹滄渤鍦扮偣璁惧畾",
     )
     _save_lore_entry(
         store,
         entry_id="skill_fire",
-        name="火球术",
+        name="鐏悆鏈?,
         category=LoreCategory.SKILLS,
-        content="火球术技能",
+        content="鐏悆鏈妧鑳?,
     )
     store.save_character(
         _character_file(
             character_id="char_wuye",
-            name="吴晔",
-            race="人类",
-            faction="宜河吴氏",
-            homeland="宜河",
+            name="鍚存檾",
+            race="浜虹被",
+            faction="瀹滄渤鍚存皬",
+            homeland="瀹滄渤",
             skills=["skill_fire"],
         )
     )
@@ -454,8 +451,8 @@ class TestSchedulerWithExpansion:
             Message(
                 id="msg-1",
                 role="user",
-                content="我想了解吴晔最近的情况。",
-                timestamp=datetime.utcnow(),
+                content="鎴戞兂浜嗚В鍚存檾鏈€杩戠殑鎯呭喌銆?,
+                timestamp=now_local(),
                 visible=True,
             )
         ]
@@ -492,8 +489,8 @@ class TestSchedulerWithExpansion:
             Message(
                 id="msg-1",
                 role="assistant",
-                content="场景切换到宜河城。",
-                timestamp=datetime.utcnow(),
+                content="鍦烘櫙鍒囨崲鍒板疁娌冲煄銆?,
+                timestamp=now_local(),
                 visible=True,
             )
         ]
@@ -501,7 +498,7 @@ class TestSchedulerWithExpansion:
             session_name="sched_full_expand",
             messages=messages,
             scan_depth=4,
-            user_input="继续描写吴晔的战斗",
+            user_input="缁х画鎻忓啓鍚存檾鐨勬垬鏂?,
             scheduler_api_config_id="scheduler_cfg",
         )
 
@@ -510,3 +507,11 @@ class TestSchedulerWithExpansion:
         assert "e_race" in captured["candidates"]
         assert "e_faction" in captured["candidates"]
         assert "skill_fire" in captured["candidates"]
+
+
+
+
+
+
+
+

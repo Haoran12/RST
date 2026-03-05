@@ -103,6 +103,89 @@ async def test_openai_chat_uses_sillytavern_compat_headers_and_chat_payload(
 
 
 @pytest.mark.asyncio
+async def test_openai_chat_includes_cache_options_when_provided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, httpx.Request] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["request"] = request
+        return httpx.Response(
+            status_code=200,
+            json={"choices": [{"message": {"content": "hello"}}]},
+            request=request,
+        )
+
+    _patch_async_client(monkeypatch, handler)
+    provider = OpenAIProvider()
+    _ = await provider.chat(
+        "https://example.test/v1",
+        "sk-test",
+        messages=[{"role": "user", "content": "ping"}],
+        model="gpt-test",
+        temperature=0.7,
+        max_tokens=256,
+        stream=False,
+        cache_options={
+            "prompt_cache_key": "rstv2:test-key",
+            "prompt_cache_retention": "24h",
+        },
+    )
+
+    payload = json.loads(captured["request"].content.decode("utf-8"))
+    assert payload["prompt_cache_key"] == "rstv2:test-key"
+    assert payload["prompt_cache_retention"] == "24h"
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_retries_without_cache_options_when_gateway_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        payload = json.loads(request.content.decode("utf-8"))
+        has_cache_options = "prompt_cache_key" in payload or "prompt_cache_retention" in payload
+        if len(requests) == 1 and has_cache_options:
+            return httpx.Response(
+                status_code=400,
+                json={"error": {"message": "Unknown parameter: prompt_cache_key"}},
+                request=request,
+            )
+        return httpx.Response(
+            status_code=200,
+            json={"choices": [{"message": {"content": "retried ok"}}]},
+            request=request,
+        )
+
+    _patch_async_client(monkeypatch, handler)
+    provider = OpenAIProvider()
+    result = await provider.chat(
+        "https://example.test/v1",
+        "sk-test",
+        messages=[{"role": "user", "content": "ping"}],
+        model="gpt-test",
+        temperature=0.7,
+        max_tokens=256,
+        stream=False,
+        cache_options={
+            "prompt_cache_key": "rstv2:test-key",
+            "prompt_cache_retention": "24h",
+        },
+    )
+
+    assert result.text == "retried ok"
+    assert len(requests) == 2
+    first_payload = json.loads(requests[0].content.decode("utf-8"))
+    second_payload = json.loads(requests[1].content.decode("utf-8"))
+    assert "prompt_cache_key" in first_payload
+    assert "prompt_cache_retention" in first_payload
+    assert "prompt_cache_key" not in second_payload
+    assert "prompt_cache_retention" not in second_payload
+
+
+@pytest.mark.asyncio
 async def test_openrouter_list_models_uses_sillytavern_headers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

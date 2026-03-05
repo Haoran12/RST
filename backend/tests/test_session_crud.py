@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -180,3 +181,61 @@ async def test_get_missing_session_returns_404(async_client) -> None:
     response = await async_client.get("/sessions/missing")
     assert response.status_code == 404
 
+
+@pytest.mark.asyncio
+async def test_list_sessions_handles_mixed_timezone_datetimes(
+    async_client, tmp_data_dir: Path
+) -> None:
+    sessions_dir = tmp_data_dir / "sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    legacy_dir = sessions_dir / "LegacyNaive"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    (legacy_dir / "session.json").write_text(
+        json.dumps(
+            {
+                "name": "LegacyNaive",
+                "mode": "RST",
+                "is_closed": False,
+                "user_description": "",
+                "scan_depth": 4,
+                "mem_length": 40,
+                "lore_sync_interval": 3,
+                "created_at": "2026-03-01T09:00:00",
+                "updated_at": "2026-03-01T10:00:00",
+                "main_api_config_id": "cfg-a",
+                "scheduler_api_config_id": None,
+                "preset_id": "preset-a",
+                "version": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    aware_dir = sessions_dir / "AwareUtc"
+    aware_dir.mkdir(parents=True, exist_ok=True)
+    (aware_dir / "session.json").write_text(
+        json.dumps(
+            {
+                "name": "AwareUtc",
+                "mode": "RST",
+                "is_closed": False,
+                "user_description": "",
+                "scan_depth": 4,
+                "mem_length": 40,
+                "lore_sync_interval": 3,
+                "created_at": "2026-03-01T00:00:00+00:00",
+                "updated_at": "2026-03-01T03:00:00+00:00",
+                "main_api_config_id": "cfg-b",
+                "scheduler_api_config_id": None,
+                "preset_id": "preset-b",
+                "version": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    response = await async_client.get("/sessions")
+    assert response.status_code == 200
+    items = response.json()
+    assert [item["name"] for item in items] == ["AwareUtc", "LegacyNaive"]

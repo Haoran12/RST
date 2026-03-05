@@ -305,10 +305,12 @@
                   <div v-show="!collapsedSchedulerPrompts[prompt.key]" class="scheduler-prompt-input">
                     <n-input
                       v-model:value="templateForm[prompt.key]"
+                      class="scheduler-prompt-editor"
                       type="textarea"
-                      :autosize="{ minRows: 5 }"
+                      :rows="10"
                       :placeholder="prompt.placeholder"
                     />
+                    <div class="scheduler-prompt-hint">{{ prompt.hint }}</div>
                   </div>
                 </section>
               </div>
@@ -884,6 +886,7 @@ import {
   createEntry,
   deleteCharacter,
   deleteMemory,
+  getEntry,
   listCharacters,
   listEntries,
   setActiveForm,
@@ -896,6 +899,7 @@ import { parseApiError } from "@/stores/api-error";
 import { useLoreStore } from "@/stores/lore";
 import { useSessionStore } from "@/stores/session";
 import { message } from "@/utils/message";
+import { formatTimestampLocal, timestampToEpochMs } from "@/utils/time";
 
 import type {
   CharacterData,
@@ -1041,11 +1045,31 @@ const memoryEditDraft = reactive<MemoryEditDraft>({
   known_by: "",
 });
 const skillEntryOptions = ref<Array<{ label: string; value: string }>>([]);
+const skillEntryNameCache = ref<Record<string, string>>({});
+const skillEntryOptionsLoadSeq = ref(0);
 const pendingCharacterOverlayRequest = ref<OpenCharacterOverlayRequest | null>(null);
 
 function setSkillEntryOptions(options: Array<{ label: string; value: string }>): void {
   // Keep the same array reference so already-open overlays receive async option updates.
+  options.forEach((option) => {
+    const optionValue = String(option.value ?? "").trim();
+    if (!optionValue) {
+      return;
+    }
+    const optionLabel = String(option.label ?? "").trim();
+    if (!optionLabel) {
+      return;
+    }
+    skillEntryNameCache.value[optionValue] = optionLabel;
+  });
   skillEntryOptions.value.splice(0, skillEntryOptions.value.length, ...options);
+}
+
+function resetSkillEntryCache(): void {
+  skillEntryOptionsLoadSeq.value += 1;
+  Object.keys(skillEntryNameCache.value).forEach((entryId) => {
+    delete skillEntryNameCache.value[entryId];
+  });
 }
 
 const templateForm = reactive({
@@ -1126,8 +1150,8 @@ const characterMemoryItems = computed<CharacterMemory[]>(() => {
     return [];
   }
   return [...character.memories].sort((left, right) => {
-    const leftTs = Date.parse(left.created_at);
-    const rightTs = Date.parse(right.created_at);
+    const leftTs = timestampToEpochMs(left.created_at);
+    const rightTs = timestampToEpochMs(right.created_at);
     if (Number.isNaN(leftTs) || Number.isNaN(rightTs)) {
       return 0;
     }
@@ -1149,22 +1173,25 @@ const characterCopyConfirmDisabled = computed(
   () => !hasCharacterSelection.value || !characterCopyTarget.value || targetSessionOptions.value.length === 0,
 );
 const schedulerPromptConfigs = computed<
-  Array<{ key: SchedulerPromptKey; label: string; placeholder: string }>
+  Array<{ key: SchedulerPromptKey; label: string; placeholder: string; hint: string }>
 >(() => [
   {
     key: "confirm_prompt",
     label: t("rstPanel.scheduler.prompt.confirm"),
     placeholder: t("rstPanel.scheduler.placeholder.confirm_prompt"),
+    hint: t("rstPanel.scheduler.hint.confirm_prompt"),
   },
   {
     key: "extract_prompt",
     label: t("rstPanel.scheduler.prompt.extract"),
     placeholder: t("rstPanel.scheduler.placeholder.extract_prompt"),
+    hint: t("rstPanel.scheduler.hint.extract_prompt"),
   },
   {
     key: "consolidate_prompt",
     label: t("rstPanel.scheduler.prompt.consolidate"),
     placeholder: t("rstPanel.scheduler.placeholder.consolidate_prompt"),
+    hint: t("rstPanel.scheduler.hint.consolidate_prompt"),
   },
 ]);
 const allSchedulerPromptsCollapsed = computed(() =>
@@ -1259,7 +1286,7 @@ function tryOpenCharacterOverlayFromRequest(request: OpenCharacterOverlayRequest
     return false;
   }
   activeTab.value = "characters";
-  openCharacterOverlay(request.characterId, request.preferredFormId ?? undefined);
+  void openCharacterOverlay(request.characterId, request.preferredFormId ?? undefined);
   return true;
 }
 
@@ -1326,9 +1353,6 @@ watch(
   () => loreStore.entries,
   (entries) => {
     entryRows.value = entries.map((entry) => ({ ...entry, tags: [...entry.tags] }));
-    if (entryCategory.value === "skills") {
-      setSkillEntryOptions(toSkillEntryOptions(entryRows.value));
-    }
     const validIds = new Set(entryRows.value.map((entry) => entry.id));
     selectedEntryIds.value = selectedEntryIds.value.filter((entryId) => validIds.has(entryId));
     if (activeEntryId.value && !validIds.has(activeEntryId.value)) {
@@ -1410,6 +1434,7 @@ async function bootstrapCurrentSession() {
   schedulerHitItems.value = [];
   syncChangesOverlayVisible.value = false;
   if (!currentSession.value?.name) {
+    resetSkillEntryCache();
     resetEntryListState();
     entryRows.value = [];
     entryFilter.value = entryCategory.value;
@@ -1418,6 +1443,8 @@ async function bootstrapCurrentSession() {
     setSkillEntryOptions([]);
     return;
   }
+  resetSkillEntryCache();
+  setSkillEntryOptions([]);
   // Reset stale UI state first. Do not reset after async loading, otherwise
   // a newly opened character overlay can be immediately closed by this reset.
   entryFilter.value = entryCategory.value;
@@ -1518,9 +1545,72 @@ function parseStrength(value: unknown): number {
   return parseNonNegativeInt(value, 100);
 }
 
+function normalizeSkillEntryName(entryName: string): string {
+  return entryName.trim() || t("rstPanel.report.unnamed_entry");
+}
+
+function buildSkillFieldOptions(selectedIds: string[]): Array<{ label: string; value: string }> {
+  const merged = skillEntryOptions.value.map((option) => ({ ...option }));
+  const existingIds = new Set(merged.map((option) => option.value));
+  selectedIds.forEach((rawId) => {
+    const id = String(rawId ?? "").trim();
+    if (!id || existingIds.has(id)) {
+      return;
+    }
+    merged.push({
+      label: skillEntryNameCache.value[id] ?? t("rstPanel.scheduler.hit_type.unknown"),
+      value: id,
+    });
+    existingIds.add(id);
+  });
+  return merged;
+}
+
+async function hydrateSkillEntryNamesForIds(sessionName: string, ids: string[]): Promise<void> {
+  const missingIds = Array.from(
+    new Set(
+      ids
+        .map((id) => String(id ?? "").trim())
+        .filter((id) => id.length > 0 && !skillEntryNameCache.value[id]),
+    ),
+  );
+  if (missingIds.length === 0) {
+    return;
+  }
+  await Promise.all(
+    missingIds.map(async (entryId) => {
+      try {
+        const entry = await getEntry(sessionName, entryId);
+        if (!("id" in entry) || !("category" in entry) || entry.category !== "skills") {
+          return;
+        }
+        skillEntryNameCache.value[entry.id] = normalizeSkillEntryName(entry.name);
+      } catch {
+        // Best-effort lookup only.
+      }
+    }),
+  );
+}
+
+function collectSkillIds(form: CharacterForm | null): string[] {
+  if (!form) {
+    return [];
+  }
+  return [
+    ...form.weak,
+    ...form.resist,
+    ...form.element,
+    ...form.skills,
+    ...form.penetration,
+  ]
+    .map((id) => String(id ?? "").trim())
+    .filter(Boolean);
+}
+
 function toSkillEntryOptions(entries: LoreEntry[]): Array<{ label: string; value: string }> {
   return entries.map((entry) => {
-    const name = entry.name.trim() || t("rstPanel.report.unnamed_entry");
+    const name = normalizeSkillEntryName(entry.name);
+    skillEntryNameCache.value[entry.id] = name;
     return {
       label: name,
       value: entry.id,
@@ -1529,11 +1619,24 @@ function toSkillEntryOptions(entries: LoreEntry[]): Array<{ label: string; value
 }
 
 async function loadSkillEntryOptions(sessionName: string): Promise<void> {
+  const requestSeq = ++skillEntryOptionsLoadSeq.value;
   try {
     const response = await listEntries(sessionName, "skills");
+    if (requestSeq !== skillEntryOptionsLoadSeq.value) {
+      return;
+    }
+    if (currentSession.value?.name !== sessionName) {
+      return;
+    }
     setSkillEntryOptions(toSkillEntryOptions(response.entries));
   } catch {
-    setSkillEntryOptions([]);
+    if (requestSeq !== skillEntryOptionsLoadSeq.value) {
+      return;
+    }
+    if (currentSession.value?.name !== sessionName) {
+      return;
+    }
+    // Keep existing options cache to avoid fallback to raw ids on transient request failures.
   }
 }
 
@@ -1859,14 +1962,7 @@ function characterFormMeta(character: CharacterData): string {
 }
 
 function formatMemoryCreatedAt(raw: string): string {
-  if (!raw) {
-    return "-";
-  }
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return raw;
-  }
-  return parsed.toLocaleString();
+  return formatTimestampLocal(raw, "-");
 }
 
 function toggleMemoryPanelCollapsed() {
@@ -1995,6 +2091,11 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
   fields: OverlayField[];
   sections: OverlaySection[];
 } {
+  const weakOptions = buildSkillFieldOptions(character.weak);
+  const resistOptions = buildSkillFieldOptions(character.resist);
+  const elementOptions = buildSkillFieldOptions(character.element);
+  const skillsOptions = buildSkillFieldOptions(character.skills);
+  const penetrationOptions = buildSkillFieldOptions(character.penetration);
   const fields: OverlayField[] = [
     {
       key: "name",
@@ -2098,7 +2199,7 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
       label: t("rstPanel.overlay.character.field.weak"),
       type: "select",
       value: [...character.weak],
-      options: skillEntryOptions.value,
+      options: weakOptions,
       multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.weak"),
       wide: true,
@@ -2108,7 +2209,7 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
       label: t("rstPanel.overlay.character.field.resist"),
       type: "select",
       value: [...character.resist],
-      options: skillEntryOptions.value,
+      options: resistOptions,
       multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.resist"),
       wide: true,
@@ -2118,7 +2219,7 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
       label: t("rstPanel.overlay.character.field.element"),
       type: "select",
       value: [...character.element],
-      options: skillEntryOptions.value,
+      options: elementOptions,
       multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.element"),
       wide: true,
@@ -2129,7 +2230,7 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
       label: t("rstPanel.overlay.character.field.skills"),
       type: "select",
       value: [...character.skills],
-      options: skillEntryOptions.value,
+      options: skillsOptions,
       multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.skills"),
       wide: true,
@@ -2140,7 +2241,7 @@ function buildCharacterOverlayConfig(character: CharacterOverlayValues): {
       label: t("rstPanel.overlay.character.field.penetration"),
       type: "select",
       value: [...character.penetration],
-      options: skillEntryOptions.value,
+      options: penetrationOptions,
       multiple: true,
       placeholder: t("rstPanel.overlay.character.placeholder.penetration"),
       wide: true,
@@ -2415,7 +2516,19 @@ function openNewCharacterOverlay() {
   characterOverlayVisible.value = true;
 }
 
-function openCharacterOverlay(characterId: string, preferredFormId?: string) {
+async function openCharacterOverlay(characterId: string, preferredFormId?: string) {
+  const initialTarget = loreStore.characters.find((item) => item.character_id === characterId);
+  if (!initialTarget) {
+    return;
+  }
+  const sessionName = currentSession.value?.name;
+  const initialForm = resolveCharacterOverlayForm(initialTarget, preferredFormId);
+  if (sessionName) {
+    await hydrateSkillEntryNamesForIds(sessionName, collectSkillIds(initialForm));
+    if (currentSession.value?.name !== sessionName) {
+      return;
+    }
+  }
   const target = loreStore.characters.find((item) => item.character_id === characterId);
   if (!target) {
     return;
@@ -2563,7 +2676,7 @@ async function switchCharacterForm() {
   if (!switched) {
     return;
   }
-  openCharacterOverlay(switched.character_id, selectedCharacterFormId.value);
+  void openCharacterOverlay(switched.character_id, selectedCharacterFormId.value);
   notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
 }
 
@@ -2587,7 +2700,7 @@ async function createCharacterForm() {
   if (!switched) {
     return;
   }
-  openCharacterOverlay(switched.character_id, created.form_id);
+  void openCharacterOverlay(switched.character_id, created.form_id);
   notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
 }
 
@@ -2603,7 +2716,7 @@ async function deleteCharacterForm() {
   if (!deleted) {
     return;
   }
-  openCharacterOverlay(editingCharacter.value.character_id);
+  void openCharacterOverlay(editingCharacter.value.character_id);
   notifyLoreDataChanged(currentSession.value.name, "rst-lore-panel");
 }
 
@@ -3791,6 +3904,23 @@ function actionLabel(action: string): string {
 .scheduler-prompt-input {
   border-top: 1px solid var(--rst-border-color);
   padding: 8px;
+}
+
+.scheduler-prompt-editor :deep(.n-input__textarea-el) {
+  min-height: 180px;
+  max-height: min(56vh, 560px);
+  overflow-y: auto !important;
+  resize: vertical;
+  line-height: 1.45;
+  tab-size: 2;
+}
+
+.scheduler-prompt-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--rst-text-secondary);
+  white-space: pre-wrap;
 }
 
 .scheduler-hit-overlay-body {

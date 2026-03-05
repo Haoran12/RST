@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+import hashlib
+import os
 from time import perf_counter
 from typing import Any
 
 from app.models import generate_id
-from app.models.chat import ChatRequest, ChatResponse
+from app.models.api_config import ProviderType
+from app.models.chat import (
+    ChatRequest,
+    ChatResponse,
+    PromptPreviewRequest,
+    PromptPreviewResponse,
+    PromptPreviewStage,
+)
 from app.models.lore import CharacterData, LoreCategory, LoreEntry
 from app.models.log import LogEntry
 from app.models.session import ChatAttachment, Message
@@ -36,14 +44,31 @@ from app.services.log_service import log_service
 from app.storage.encryption import EncryptionError, decrypt_api_key
 from app.storage.lore_store import LoreStore
 from app.storage.message_store import MessageStore
+from app.time_utils import now_local, now_local_iso
 
 
 class ChatConfigError(RuntimeError):
     pass
 
 
-def _utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+DYNAMIC_PRESET_ENTRY_NAMES: set[str] = {
+    "chat_history",
+    "user_input",
+    "lores",
+    "scene",
+    "user_description",
+}
+
+
+def _local_iso() -> str:
+    return now_local_iso()
+
+
+def _env_enabled(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _to_int(value: Any) -> int | None:
@@ -79,6 +104,42 @@ def _load_history(store: MessageStore, mem_length: int) -> list[Message]:
     if mem_length < 0:
         return store.load_all()
     return store.load_recent(mem_length)
+
+
+def _build_openai_main_cache_options(
+    *,
+    preset_id: str,
+    preset_version: int,
+    preset_entries: list[Any],
+    model: str,
+) -> dict[str, Any] | None:
+    if not _env_enabled("RST_OPENAI_PROMPT_CACHE_ENABLED", True):
+        return None
+
+    stable_chunks: list[str] = []
+    for entry in preset_entries:
+        if bool(getattr(entry, "disabled", False)):
+            continue
+        name = str(getattr(entry, "name", ""))
+        if name in DYNAMIC_PRESET_ENTRY_NAMES:
+            continue
+        content = str(getattr(entry, "content", "")).strip()
+        if not content:
+            continue
+        role = str(getattr(entry, "role", "system"))
+        stable_chunks.append(f"{role}\n{name}\n{content}")
+
+    if not stable_chunks:
+        return None
+
+    digest = hashlib.sha256("\n\n".join(stable_chunks).encode("utf-8")).hexdigest()[:24]
+    cache_key = f"rstv2:preset:{preset_id}:v{preset_version}:m:{model}:{digest}"
+    options: dict[str, Any] = {"prompt_cache_key": cache_key}
+
+    retention = os.getenv("RST_OPENAI_PROMPT_CACHE_RETENTION", "24h").strip()
+    if retention:
+        options["prompt_cache_retention"] = retention
+    return options
 
 
 def _render_character_for_st_mode(
@@ -244,6 +305,205 @@ def _build_log_request(
     return request
 
 
+def _render_prompt_messages_text(prompt_messages: list[dict[str, Any]]) -> str:
+    chunks: list[str] = []
+    for msg in prompt_messages:
+        role = str(msg.get("role", "user")).upper()
+        content = str(msg.get("content", ""))
+        chunks.append(f"[{role}]\n{content}")
+    return "\n\n".join(chunks)
+
+
+def _preview_schedule_messages(
+    store: MessageStore,
+    scan_depth: int,
+    payload: PromptPreviewRequest,
+    has_explicit_input: bool,
+) -> list[Message]:
+    schedule_messages = _load_history(store, scan_depth)
+    if not has_explicit_input:
+        return schedule_messages
+    schedule_messages.append(
+        Message(
+            id=payload.message_id or generate_id(),
+            role="user",
+            content=payload.content,
+            timestamp=now_local(),
+            visible=True,
+            attachments=payload.attachments,
+        )
+    )
+    return schedule_messages
+
+
+async def preview_chat_prompts(
+    session_name: str,
+    payload: PromptPreviewRequest,
+) -> PromptPreviewResponse:
+    session = get_session_storage(session_name)
+    preset = get_preset_storage(session.preset_id)
+    store = MessageStore(get_session_dir(session_name))
+
+    history = _load_history(store, session.mem_length)
+    has_explicit_input = bool(payload.content.strip()) or bool(payload.attachments)
+    prompt_history = history
+
+    if has_explicit_input:
+        user_input = _compose_user_input(payload.content, payload.attachments)
+    else:
+        latest_visible = store.find_latest_visible()
+        if latest_visible is not None and latest_visible.role == "user":
+            user_input = _compose_user_input(
+                latest_visible.content,
+                latest_visible.attachments,
+            )
+            prompt_history = [msg for msg in history if msg.id != latest_visible.id]
+        else:
+            user_input = "continue"
+
+    stages: list[PromptPreviewStage] = []
+    lores_block = ""
+    schedule_messages = _preview_schedule_messages(
+        store,
+        session.scan_depth,
+        payload,
+        has_explicit_input,
+    )
+
+    if session.mode == "RST" and session.scheduler_api_config_id:
+        confirm_prompt, matched_ids, confirm_notes = lore_scheduler.preview_confirm_prompt(
+            session_name=session_name,
+            messages=schedule_messages,
+            scan_depth=session.scan_depth,
+            user_input=user_input,
+            has_explicit_input=has_explicit_input,
+        )
+        if confirm_prompt:
+            stages.append(
+                PromptPreviewStage(
+                    stage="scheduler_confirm",
+                    label="Scheduler Confirm",
+                    prompt=confirm_prompt,
+                    prompt_length=len(confirm_prompt),
+                    notes=confirm_notes,
+                    meta={
+                        "matched_count": len(matched_ids),
+                        "has_explicit_input": has_explicit_input,
+                    },
+                )
+            )
+        else:
+            stages.append(
+                PromptPreviewStage(
+                    stage="scheduler_confirm",
+                    label="Scheduler Confirm",
+                    prompt="",
+                    prompt_length=0,
+                    notes=confirm_notes or ["No scheduler confirm prompt generated."],
+                    meta={
+                        "matched_count": len(matched_ids),
+                        "has_explicit_input": has_explicit_input,
+                    },
+                )
+            )
+
+        extract_prompt, extract_notes = lore_updater.preview_extract_prompt(
+            session_name=session_name,
+            messages=schedule_messages,
+            scan_depth=session.scan_depth,
+        )
+        stages.append(
+            PromptPreviewStage(
+                stage="scheduler_extract",
+                label="Scheduler Extract",
+                prompt=extract_prompt,
+                prompt_length=len(extract_prompt),
+                notes=extract_notes,
+                meta={},
+            )
+        )
+
+        consolidate_previews = lore_updater.preview_consolidate_prompts(
+            session_name=session_name,
+            max_items=max(0, payload.max_consolidate_prompts),
+        )
+        if not consolidate_previews:
+            stages.append(
+                PromptPreviewStage(
+                    stage="scheduler_consolidate",
+                    label="Scheduler Consolidate",
+                    prompt="",
+                    prompt_length=0,
+                    notes=["No character currently exceeds memory consolidation threshold."],
+                    meta={},
+                )
+            )
+        else:
+            for item in consolidate_previews:
+                prompt = str(item.get("prompt", ""))
+                stages.append(
+                    PromptPreviewStage(
+                        stage=f"scheduler_consolidate:{item.get('character_id', '')}",
+                        label=f"Scheduler Consolidate ({item.get('character_name', '-')})",
+                        prompt=prompt,
+                        prompt_length=len(prompt),
+                        notes=[],
+                        meta={
+                            "character_id": item.get("character_id", ""),
+                            "memory_total": int(item.get("memory_total", 0)),
+                            "candidate_count": int(item.get("candidate_count", 0)),
+                        },
+                    )
+                )
+
+        # Main prompt in RST depends on scheduler LLM output (injection block), which is unknown in preview.
+        # Use last injection snapshot to make this stage inspectable while keeping the caveat explicit.
+        state = rst_runtime_service.get_session_state(session_name)
+        lores_block = str(state.get("last_injection_block", "") or "")
+    elif session.mode == "ST":
+        st_messages = _load_history(store, session.scan_depth)
+        lores_block = st_mode_inject(LoreStore(get_session_dir(session_name)).load_all_entries(), st_messages)
+
+    scene_block = ""
+    if session.mode == "RST":
+        scene_state = scene_service.load_scene_state(session_name)
+        scene_block = scene_service.render_scene_prompt(scene_state)
+
+    assembler = PromptAssembler()
+    main_prompt_messages = assembler.build(
+        session=session,
+        preset=preset,
+        messages=prompt_history,
+        lores_block=lores_block,
+        scene_block=scene_block,
+        user_input=user_input,
+    )
+    main_notes: list[str] = []
+    if session.mode == "RST" and session.scheduler_api_config_id:
+        main_notes.append(
+            "RST main prompt uses scheduler injection block from an LLM call at send time. "
+            "Preview uses last_injection_block snapshot."
+        )
+    stages.insert(
+        0,
+        PromptPreviewStage(
+            stage="main_chat",
+            label="Main Chat",
+            prompt=_render_prompt_messages_text(main_prompt_messages),
+            prompt_length=sum(len(str(item.get("content", ""))) for item in main_prompt_messages),
+            notes=main_notes,
+            meta={"message_count": len(main_prompt_messages)},
+        ),
+    )
+
+    return PromptPreviewResponse(
+        mode=session.mode,
+        has_explicit_input=has_explicit_input,
+        user_input=user_input,
+        stages=stages,
+    )
+
+
 async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
     session = get_session_storage(session_name)
     if session.is_closed:
@@ -269,7 +529,7 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
             id=payload.message_id or generate_id(),
             role="user",
             content=payload.content,
-            timestamp=datetime.utcnow(),
+            timestamp=now_local(),
             visible=True,
             attachments=payload.attachments,
         )
@@ -325,8 +585,16 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
         user_input=user_input,
     )
 
-    request_time = _utc_iso()
+    request_time = _local_iso()
     provider_name = api_config.provider.value
+    cache_options: dict[str, Any] | None = None
+    if api_config.provider in {ProviderType.OPENAI, ProviderType.OPENAI_COMPAT}:
+        cache_options = _build_openai_main_cache_options(
+            preset_id=preset.id,
+            preset_version=preset.version,
+            preset_entries=preset.entries,
+            model=api_config.model,
+        )
     started_at = perf_counter()
     rst_runtime_service.update_session_state(
         session_name,
@@ -346,9 +614,10 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
             temperature=api_config.temperature,
             max_tokens=api_config.max_tokens,
             stream=api_config.stream,
+            cache_options=cache_options,
         )
     except ProviderError as exc:
-        response_time = _utc_iso()
+        response_time = _local_iso()
         duration_ms = int((perf_counter() - started_at) * 1000)
         raw_request = _build_log_request(
             provider=provider_name,
@@ -405,7 +674,7 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
         id=generate_id(),
         role="assistant",
         content=assistant_text,
-        timestamp=datetime.utcnow(),
+        timestamp=now_local(),
         visible=True,
     )
     store.append(assistant_message)
@@ -415,10 +684,10 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
         if parsed_scene is not None:
             previous_scene = scene_service.load_scene_state(session_name)
             merged_scene = scene_service.merge_scene_state(previous_scene, parsed_scene)
-            merged_scene.updated_at = _utc_iso()
+            merged_scene.updated_at = _local_iso()
             scene_service.save_scene_state(session_name, merged_scene)
 
-    response_time = _utc_iso()
+    response_time = _local_iso()
     duration_ms = int((perf_counter() - started_at) * 1000)
     prompt_tokens, completion_tokens, total_tokens = _extract_usage(raw_response)
     stop_reason = _extract_stop_reason(raw_response)

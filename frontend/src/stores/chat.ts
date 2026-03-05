@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import axios from "axios";
 
 import { message } from "@/utils/message";
+import { toLocalIsoString } from "@/utils/time";
 import { parseApiError } from "@/stores/api-error";
 import {
   deleteMessage as deleteMessageApi,
@@ -45,7 +46,9 @@ export const useChatStore = defineStore("chat", () => {
   const selectedIds = ref<string[]>([]);
   const isSending = ref(false);
   const isRstDataUpdating = ref(false);
+  const pendingMessageMutations = ref(0);
   const requestController = ref<AbortController | null>(null);
+  let messageMutationQueue: Promise<void> = Promise.resolve();
 
   const currentMessages = computed<ChatMessage[]>(() => {
     if (!activeSession.value) {
@@ -58,8 +61,30 @@ export const useChatStore = defineStore("chat", () => {
   const hasMessages = computed(() => currentMessages.value.length > 0);
   const isBatchMode = computed(() => batchAction.value !== null);
   const hasRunningWork = computed(
-    () => isSending.value || isRstDataUpdating.value,
+    () => isSending.value || isRstDataUpdating.value || pendingMessageMutations.value > 0,
   );
+
+  function enqueueMessageMutation<T>(task: () => Promise<T>): Promise<T> {
+    const nextTask = messageMutationQueue
+      .catch(() => undefined)
+      .then(async () => {
+        pendingMessageMutations.value += 1;
+        try {
+          return await task();
+        } finally {
+          pendingMessageMutations.value -= 1;
+        }
+      });
+    messageMutationQueue = nextTask.then(
+      () => undefined,
+      () => undefined,
+    );
+    return nextTask;
+  }
+
+  async function waitForMessageMutations(): Promise<void> {
+    await messageMutationQueue;
+  }
 
   function setMessages(name: string, messages: ChatMessage[]): void {
     messagesBySession.value = { ...messagesBySession.value, [name]: messages };
@@ -129,7 +154,7 @@ export const useChatStore = defineStore("chat", () => {
       id: generateId(),
       role: payload.role,
       content: payload.content,
-      timestamp: new Date().toISOString(),
+      timestamp: toLocalIsoString(),
       visible: true,
       attachments: payload.attachments?.length ? payload.attachments : undefined,
     };
@@ -143,6 +168,10 @@ export const useChatStore = defineStore("chat", () => {
   ): Promise<void> {
     if (!activeSession.value) {
       message.error("Select a session first.");
+      return;
+    }
+    await waitForMessageMutations();
+    if (!activeSession.value) {
       return;
     }
     if (isSending.value) {
@@ -159,7 +188,7 @@ export const useChatStore = defineStore("chat", () => {
         id: generateId(),
         role: "user",
         content: trimmed,
-        timestamp: new Date().toISOString(),
+        timestamp: toLocalIsoString(),
         visible: true,
         attachments: attachments?.length ? attachments : undefined,
       };
@@ -205,35 +234,43 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function updateMessage(messageId: string, content: string): Promise<void> {
-    if (!activeSession.value) {
+    const sessionName = activeSession.value;
+    if (!sessionName) {
       return;
     }
-    try {
-      const updated = await updateMessageApi(activeSession.value, messageId, { content });
-      const next = currentMessages.value.map((msg) =>
-        msg.id === messageId ? updated : msg,
-      );
-      setMessages(activeSession.value, next);
-    } catch (error) {
-      message.error(parseApiError(error));
-    }
+    await enqueueMessageMutation(async () => {
+      try {
+        const updated = await updateMessageApi(sessionName, messageId, { content });
+        const current = messagesBySession.value[sessionName] ?? [];
+        const next = current.map((msg) => (msg.id === messageId ? updated : msg));
+        setMessages(sessionName, next);
+        const response = await fetchMessages(sessionName);
+        setMessages(sessionName, response.messages);
+      } catch (error) {
+        message.error(parseApiError(error));
+      }
+    });
   }
 
   async function setMessageVisibility(messageId: string, visible: boolean): Promise<void> {
-    if (!activeSession.value) {
+    const sessionName = activeSession.value;
+    if (!sessionName) {
       return;
     }
-    try {
-      const updated = await updateMessageApi(activeSession.value, messageId, {
-        visible,
-      });
-      const next = currentMessages.value.map((msg) =>
-        msg.id === messageId ? updated : msg,
-      );
-      setMessages(activeSession.value, next);
-    } catch (error) {
-      message.error(parseApiError(error));
-    }
+    await enqueueMessageMutation(async () => {
+      try {
+        const updated = await updateMessageApi(sessionName, messageId, {
+          visible,
+        });
+        const current = messagesBySession.value[sessionName] ?? [];
+        const next = current.map((msg) => (msg.id === messageId ? updated : msg));
+        setMessages(sessionName, next);
+        const response = await fetchMessages(sessionName);
+        setMessages(sessionName, response.messages);
+      } catch (error) {
+        message.error(parseApiError(error));
+      }
+    });
   }
 
   async function toggleMessageVisibility(messageId: string): Promise<void> {
@@ -245,16 +282,22 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function deleteMessage(messageId: string): Promise<void> {
-    if (!activeSession.value) {
+    const sessionName = activeSession.value;
+    if (!sessionName) {
       return;
     }
-    try {
-      await deleteMessageApi(activeSession.value, messageId);
-      const next = currentMessages.value.filter((msg) => msg.id !== messageId);
-      setMessages(activeSession.value, next);
-    } catch (error) {
-      message.error(parseApiError(error));
-    }
+    await enqueueMessageMutation(async () => {
+      try {
+        await deleteMessageApi(sessionName, messageId);
+        const current = messagesBySession.value[sessionName] ?? [];
+        const next = current.filter((msg) => msg.id !== messageId);
+        setMessages(sessionName, next);
+        const response = await fetchMessages(sessionName);
+        setMessages(sessionName, response.messages);
+      } catch (error) {
+        message.error(parseApiError(error));
+      }
+    });
   }
 
   async function deleteMessages(messageIds: string[]): Promise<boolean> {
@@ -266,18 +309,23 @@ export const useChatStore = defineStore("chat", () => {
     if (!ids.length) {
       return false;
     }
-    try {
-      for (const id of ids) {
-        await deleteMessageApi(sessionName, id);
+    return enqueueMessageMutation(async () => {
+      try {
+        for (const id of ids) {
+          await deleteMessageApi(sessionName, id);
+        }
+        const idSet = new Set(ids);
+        const current = messagesBySession.value[sessionName] ?? [];
+        const next = current.filter((msg) => !idSet.has(msg.id));
+        setMessages(sessionName, next);
+        const response = await fetchMessages(sessionName);
+        setMessages(sessionName, response.messages);
+        return true;
+      } catch (error) {
+        message.error(parseApiError(error));
+        return false;
       }
-      const idSet = new Set(ids);
-      const next = currentMessages.value.filter((msg) => !idSet.has(msg.id));
-      setMessages(sessionName, next);
-      return true;
-    } catch (error) {
-      message.error(parseApiError(error));
-      return false;
-    }
+    });
   }
 
   async function setMessagesVisibility(
@@ -292,37 +340,51 @@ export const useChatStore = defineStore("chat", () => {
     if (!ids.length) {
       return false;
     }
-    try {
-      const updates: ChatMessage[] = [];
-      for (const id of ids) {
-        const updated = await updateMessageApi(sessionName, id, { visible });
-        updates.push(updated);
+    return enqueueMessageMutation(async () => {
+      try {
+        const updates: ChatMessage[] = [];
+        for (const id of ids) {
+          const updated = await updateMessageApi(sessionName, id, { visible });
+          updates.push(updated);
+        }
+        const updatedMap = new Map(updates.map((msg) => [msg.id, msg]));
+        const current = messagesBySession.value[sessionName] ?? [];
+        const next = current.map((msg) => updatedMap.get(msg.id) ?? msg);
+        setMessages(sessionName, next);
+        const response = await fetchMessages(sessionName);
+        setMessages(sessionName, response.messages);
+        return true;
+      } catch (error) {
+        message.error(parseApiError(error));
+        return false;
       }
-      const updatedMap = new Map(updates.map((msg) => [msg.id, msg]));
-      const next = currentMessages.value.map((msg) => updatedMap.get(msg.id) ?? msg);
-      setMessages(sessionName, next);
-      return true;
-    } catch (error) {
-      message.error(parseApiError(error));
-      return false;
-    }
+    });
   }
 
-  function removeAttachment(messageId: string, attachmentName: string): void {
-    if (!activeSession.value) {
+  async function removeAttachment(messageId: string, attachmentName: string): Promise<void> {
+    const sessionName = activeSession.value;
+    if (!sessionName) {
       return;
     }
-    const next = currentMessages.value.map((msg) => {
-      if (msg.id !== messageId || !msg.attachments?.length) {
-        return msg;
+    await enqueueMessageMutation(async () => {
+      const current = messagesBySession.value[sessionName] ?? [];
+      const target = current.find((msg) => msg.id === messageId);
+      if (!target || !target.attachments?.length) {
+        return;
       }
-      const remaining = msg.attachments.filter((att) => att.name !== attachmentName);
-      return {
-        ...msg,
-        attachments: remaining.length ? remaining : undefined,
-      };
+      const remaining = target.attachments.filter((att) => att.name !== attachmentName);
+      try {
+        const updated = await updateMessageApi(sessionName, messageId, {
+          attachments: remaining.length ? remaining : null,
+        });
+        const next = current.map((msg) => (msg.id === messageId ? updated : msg));
+        setMessages(sessionName, next);
+        const response = await fetchMessages(sessionName);
+        setMessages(sessionName, response.messages);
+      } catch (error) {
+        message.error(parseApiError(error));
+      }
     });
-    setMessages(activeSession.value, next);
   }
 
   function addPendingAttachment(attachment: ChatAttachment): void {

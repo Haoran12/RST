@@ -141,6 +141,7 @@ import MarkdownMessage from "@/components/MarkdownMessage.vue";
 import type { ChatMessage } from "@/types/chat";
 import { useChatStore } from "@/stores/chat";
 import { useSessionStore } from "@/stores/session";
+import { formatTimestampLocal } from "@/utils/time";
 
 const chatStore = useChatStore();
 const sessionStore = useSessionStore();
@@ -236,13 +237,13 @@ const startEdit = (msg: ChatMessage) => {
   editContent.value = msg.content;
 };
 
-const saveEdit = (id: string) => {
+const saveEdit = async (id: string) => {
   const next = editContent.value.trim();
   if (!next) {
     message.warning("Message content cannot be empty.");
     return;
   }
-  chatStore.updateMessage(id, next);
+  await chatStore.updateMessage(id, next);
   editingId.value = null;
   editContent.value = "";
 };
@@ -342,11 +343,7 @@ const handleBatchConfirm = async () => {
 };
 
 const formatTime = (timestamp: string) => {
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) {
-    return timestamp;
-  }
-  return parsed.toLocaleString();
+  return formatTimestampLocal(timestamp, timestamp);
 };
 
 const formatSize = (bytes: number) => {
@@ -364,7 +361,7 @@ const removeAttachment = async (messageId: string, attachmentName: string) => {
   if (!confirmed) {
     return;
   }
-  chatStore.removeAttachment(messageId, attachmentName);
+  await chatStore.removeAttachment(messageId, attachmentName);
 };
 
 const formatMessageContent = (content: string) => {

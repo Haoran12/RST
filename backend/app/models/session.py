@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.time_utils import to_local_tz
+
 NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\- \u4e00-\u9fff]{1,64}$")
 
 
@@ -30,6 +32,11 @@ class SessionMeta(BaseModel):
         if not NAME_PATTERN.fullmatch(value):
             raise ValueError("Session name contains invalid characters or length")
         return value
+
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        return to_local_tz(value)
 
     @model_validator(mode="after")
     def validate_sync_interval(self) -> "SessionMeta":
@@ -99,6 +106,11 @@ class SessionSummary(BaseModel):
     is_closed: bool
     updated_at: datetime
 
+    @field_validator("updated_at")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        return to_local_tz(value)
+
 
 class SessionResponse(BaseModel):
     name: str
@@ -115,6 +127,11 @@ class SessionResponse(BaseModel):
     preset_id: str
     version: int
 
+    @field_validator("created_at", "updated_at")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        return to_local_tz(value)
+
 
 class ChatAttachment(BaseModel):
     name: str
@@ -130,3 +147,8 @@ class Message(BaseModel):
     timestamp: datetime
     visible: bool = True
     attachments: list[ChatAttachment] | None = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def normalize_datetime(cls, value: datetime) -> datetime:
+        return to_local_tz(value)

@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from datetime import datetime, timezone
 from time import perf_counter
 from typing import Any
 
@@ -33,6 +32,7 @@ from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import get_session_dir, get_session_storage
 from app.storage.encryption import decrypt_api_key
 from app.storage.lore_store import LoreStore
+from app.time_utils import now_local, now_local_iso
 
 MEMORY_CONSOLIDATION_THRESHOLD = 30
 MEMORY_CONSOLIDATION_TARGET = 20
@@ -100,8 +100,8 @@ class LoreUpdater:
         get_session_storage(session_name)
         return LoreStore(get_session_dir(session_name))
 
-    def _utc_iso(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+    def _local_iso(self) -> str:
+        return now_local_iso()
 
     def _select_messages(self, messages: list[Message], scan_depth: int) -> list[Message]:
         visible = [msg for msg in messages if msg.visible]
@@ -144,7 +144,7 @@ class LoreUpdater:
         prompt: str,
         stage: str,
     ) -> str:
-        request_time = self._utc_iso()
+        request_time = self._local_iso()
         started_at = perf_counter()
         provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
@@ -171,7 +171,7 @@ class LoreUpdater:
                 stream=False,
             )
         except ProviderError as exc:
-            response_time = self._utc_iso()
+            response_time = self._local_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
             log_service.add_log(
                 LogEntry(
@@ -194,7 +194,7 @@ class LoreUpdater:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            response_time = self._utc_iso()
+            response_time = self._local_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
             log_service.add_log(
                 LogEntry(
@@ -213,7 +213,7 @@ class LoreUpdater:
             )
             raise
 
-        response_time = self._utc_iso()
+        response_time = self._local_iso()
         duration_ms = int((perf_counter() - started_at) * 1000)
         log_service.add_log(
             LogEntry(
@@ -552,6 +552,84 @@ class LoreUpdater:
         prompt = prompt.replace("{memories_to_consolidate}", memories_to_consolidate)
         return prompt
 
+    def preview_extract_prompt(
+        self,
+        session_name: str,
+        messages: list[Message],
+        scan_depth: int,
+    ) -> tuple[str, list[str]]:
+        """Build sync extract prompt without calling provider or mutating storage."""
+        notes: list[str] = []
+        store = self._store(session_name)
+        selected = self._select_messages(messages, scan_depth)
+        if not selected:
+            notes.append("No visible messages in selected scan range.")
+        template = store.load_scheduler_template()
+        prompt = self._render_extract_prompt(
+            template,
+            self._conversation_text(selected),
+            self._existing_summary(store),
+            self._character_list_summary(store),
+        )
+        return prompt, notes
+
+    def preview_consolidate_prompts(
+        self,
+        session_name: str,
+        *,
+        max_items: int = 3,
+    ) -> list[dict[str, Any]]:
+        """
+        Build memory-consolidation prompts for characters that exceed threshold.
+        Returns a compact list of preview payloads with prompt text and metadata.
+        """
+        store = self._store(session_name)
+        template = store.load_scheduler_template()
+        previews: list[dict[str, Any]] = []
+
+        for character in store.list_characters():
+            char_file = store.load_character(character.character_id)
+            if char_file is None:
+                continue
+            memories = list(char_file.data.memories)
+            total = len(memories)
+            if total <= MEMORY_CONSOLIDATION_THRESHOLD:
+                continue
+
+            removable = [
+                memory
+                for memory in memories
+                if memory.importance <= 3 or (memory.is_consolidated and memory.importance <= 5)
+            ]
+            removable.sort(key=lambda item: item.created_at)
+            remove_count = max(0, total - MEMORY_CONSOLIDATION_TARGET)
+            candidates = removable[:remove_count]
+            if not candidates:
+                continue
+
+            prompt_memories = "\n".join(
+                f"- {memory.event} | importance={memory.importance} | tags={','.join(memory.tags)}"
+                for memory in candidates
+            )
+            prompt = self._render_consolidate_prompt(template, char_file.data.name, prompt_memories)
+            previews.append(
+                {
+                    "character_id": char_file.data.character_id,
+                    "character_name": char_file.data.name,
+                    "memory_total": total,
+                    "candidate_count": len(candidates),
+                    "prompt": prompt,
+                }
+            )
+
+        previews.sort(
+            key=lambda item: int(item.get("memory_total", 0)),
+            reverse=True,
+        )
+        if max_items <= 0:
+            return previews
+        return previews[:max_items]
+
     def _find_character_by_name(self, store: LoreStore, name: str) -> CharacterFile | None:
         target = name.strip().lower()
         if not target:
@@ -566,7 +644,7 @@ class LoreUpdater:
         if existing is not None:
             return existing
 
-        now = datetime.utcnow()
+        now = now_local()
         default_form = CharacterForm(form_id=generate_id(), form_name="默认形态", is_default=True)
         data = CharacterData(
             character_id=generate_id(),
@@ -627,7 +705,7 @@ class LoreUpdater:
         changes: list[SyncChange],
     ) -> None:
         category_file = store.load_category_file(category)
-        now = datetime.utcnow()
+        now = now_local()
         for index, entry in enumerate(category_file.entries):
             if entry.name.strip().lower() != name.strip().lower():
                 continue
@@ -820,7 +898,7 @@ class LoreUpdater:
                     if not field_changes:
                         continue
 
-                    data = data.model_copy(update={"updated_at": datetime.utcnow()})
+                    data = data.model_copy(update={"updated_at": now_local()})
                     store.save_character(CharacterFile(data=data, version=char_file.version))
                     updated_entries.append(data.character_id)
                     affected_characters.add(data.character_id)
@@ -881,7 +959,7 @@ class LoreUpdater:
                         known_by=known_by_ids,
                         plot_event_id=plot_event_id,
                         is_consolidated=False,
-                        created_at=datetime.utcnow(),
+                        created_at=now_local(),
                     )
                     store.add_memory(char_file.data.character_id, memory)
                     new_memories += 1
@@ -952,7 +1030,7 @@ class LoreUpdater:
 
             rst_runtime_service.update_session_state(
                 session_name,
-                sync_last_run_at=datetime.utcnow().isoformat(),
+                sync_last_run_at=now_local_iso(),
                 sync_last_result=result.model_dump(mode="json"),
                 sync_interval=sync_interval,
             )
@@ -1040,7 +1118,7 @@ class LoreUpdater:
                     known_by=[],
                     plot_event_id=None,
                     is_consolidated=True,
-                    created_at=datetime.utcnow(),
+                    created_at=now_local(),
                 )
             )
 

@@ -123,5 +123,6 @@ class BaseProvider(ABC):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, Any] | None = None,
     ) -> ProviderChatResult:
         """Return assistant response text or raise ProviderError."""

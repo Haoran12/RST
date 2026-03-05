@@ -1,7 +1,6 @@
 ﻿from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from time import perf_counter
 from typing import Callable
 
@@ -32,6 +31,7 @@ from app.services.session_service import get_session_dir, get_session_storage
 from app.storage.encryption import decrypt_api_key
 from app.storage.lore_store import LoreStore
 from app.storage.message_store import MessageStore
+from app.time_utils import now_local_iso
 
 
 MAX_CANDIDATES_AFTER_EXPANSION = 50
@@ -43,8 +43,8 @@ class LoreScheduler:
     def __init__(self) -> None:
         self._engines: dict[str, LoreNlpEngine] = {}
 
-    def _utc_iso(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+    def _local_iso(self) -> str:
+        return now_local_iso()
 
     def _store(self, session_name: str) -> LoreStore:
         get_session_storage(session_name)
@@ -348,7 +348,7 @@ class LoreScheduler:
         api_config: ApiConfig,
         prompt: str,
     ) -> str:
-        request_time = self._utc_iso()
+        request_time = self._local_iso()
         started_at = perf_counter()
         provider_name = api_config.provider.value
         api_key = decrypt_api_key(api_config.encrypted_key)
@@ -375,7 +375,7 @@ class LoreScheduler:
                 stream=False,
             )
         except ProviderError as exc:
-            response_time = self._utc_iso()
+            response_time = self._local_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
             log_service.add_log(
                 LogEntry(
@@ -398,7 +398,7 @@ class LoreScheduler:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive guard
-            response_time = self._utc_iso()
+            response_time = self._local_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
             log_service.add_log(
                 LogEntry(
@@ -417,7 +417,7 @@ class LoreScheduler:
             )
             raise
 
-        response_time = self._utc_iso()
+        response_time = self._local_iso()
         duration_ms = int((perf_counter() - started_at) * 1000)
         log_service.add_log(
             LogEntry(
@@ -474,7 +474,7 @@ class LoreScheduler:
         rst_runtime_service.update_session_state(
             session_name,
             pre_retrieve_candidates=filtered,
-            pre_retrieve_at=datetime.utcnow().isoformat(),
+            pre_retrieve_at=now_local_iso(),
         )
         return filtered
 
@@ -493,7 +493,7 @@ class LoreScheduler:
             rst_runtime_service.update_session_state(
                 session_name,
                 pre_retrieve_candidates=[],
-                last_schedule_at=datetime.utcnow().isoformat(),
+                last_schedule_at=now_local_iso(),
                 last_injection_block="",
                 last_matched_count=0,
                 last_matched_entry_ids=[],
@@ -507,12 +507,66 @@ class LoreScheduler:
         rst_runtime_service.update_session_state(
             session_name,
             pre_retrieve_candidates=[],
-            last_schedule_at=datetime.utcnow().isoformat(),
+            last_schedule_at=now_local_iso(),
             last_injection_block=injection_block,
             last_matched_count=len(candidate_ids),
             last_matched_entry_ids=candidate_ids,
         )
         return injection_block
+
+    def preview_confirm_prompt(
+        self,
+        session_name: str,
+        messages: list[Message],
+        scan_depth: int,
+        user_input: str,
+        *,
+        has_explicit_input: bool,
+    ) -> tuple[str, list[str], list[str]]:
+        """
+        Build scheduler confirm prompt without calling provider or mutating runtime state.
+        Returns (prompt, matched_entry_ids, notes).
+        """
+        notes: list[str] = []
+        store = self._store(session_name)
+        template = store.load_scheduler_template()
+        selected_messages = self._select_messages(messages, scan_depth)
+        context = self._conversation_text(selected_messages)
+
+        state = rst_runtime_service.get_session_state(session_name)
+        cached = list(state.get("pre_retrieve_candidates", []))
+
+        candidate_ids: list[str] = cached
+        if has_explicit_input:
+            index = store.load_index()
+            enabled_items = [item for item in index.items if not item.disabled]
+            items_by_id = {item.entry_id: item for item in enabled_items}
+            constant_ids = [item.entry_id for item in enabled_items if item.constant]
+            engine = self._engine(session_name, enabled_items)
+            user_ids = engine.retrieve(user_input, top_k=20) if user_input.strip() else []
+            user_expanded_ids = self._expand_related_ids(
+                store,
+                engine,
+                self._merge_ids(constant_ids, cached, user_ids),
+                items_by_id,
+            )
+            present_character_ids = self._present_character_ids(store, context)
+            merged = self._merge_ids(constant_ids, cached, user_ids, user_expanded_ids)
+            capped = self._cap_candidates_after_expansion(constant_ids, merged)
+            candidate_ids = self._filter_memory_candidates(
+                store,
+                items_by_id,
+                capped,
+                present_character_ids,
+            )
+
+        candidate_text = self._build_candidate_text(store, candidate_ids, context)
+        if not candidate_text.strip():
+            notes.append("No candidate entries matched current context.")
+            return "", candidate_ids, notes
+
+        prompt = self._render_confirm_prompt(template, context, candidate_text)
+        return prompt, candidate_ids, notes
 
     async def full_schedule(
         self,
@@ -589,7 +643,7 @@ class LoreScheduler:
                 rst_runtime_service.update_session_state(
                     session_name,
                     pre_retrieve_candidates=[],
-                    last_schedule_at=datetime.utcnow().isoformat(),
+                    last_schedule_at=now_local_iso(),
                     last_injection_block="",
                     last_matched_count=0,
                     last_matched_entry_ids=[],

@@ -12,6 +12,7 @@ class _StubProvider(BaseProvider):
     def __init__(self, texts: list[str]) -> None:
         self.texts = texts
         self.calls: list[list[dict]] = []
+        self.cache_options_calls: list[dict[str, object] | None] = []
 
     async def list_models(self, base_url: str, api_key: str) -> list[str]:
         return []
@@ -26,8 +27,10 @@ class _StubProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, object] | None = None,
     ) -> ProviderChatResult:
         self.calls.append([{"role": msg["role"], "content": msg["content"]} for msg in messages])
+        self.cache_options_calls.append(cache_options)
         index = len(self.calls) - 1
         text = self.texts[index]
         response_payload = {
@@ -74,6 +77,7 @@ class _SlowProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, object] | None = None,
     ) -> ProviderChatResult:
         self.started.set()
         try:
@@ -238,6 +242,27 @@ async def test_logs_include_usage_and_stop_reason(
     assert "provider_request" in latest["raw_request"]
     assert datetime.fromisoformat(latest["request_time"]).tzinfo is not None
     assert datetime.fromisoformat(latest["response_time"]).tzinfo is not None
+
+
+@pytest.mark.asyncio
+async def test_openai_main_chat_passes_prompt_cache_options(
+    async_client, sample_api_config, monkeypatch
+) -> None:
+    provider = _StubProvider(texts=["cache-answer"])
+    monkeypatch.setattr("app.services.chat_service.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    await _create_session(async_client, "ChatFlowCache", config_id, preset_id)
+
+    chat = await async_client.post("/sessions/ChatFlowCache/chat", json={"content": "hello"})
+    assert chat.status_code == 200
+    assert provider.cache_options_calls
+    cache_options = provider.cache_options_calls[-1]
+    assert cache_options is not None
+    assert "prompt_cache_key" in cache_options
+    assert str(cache_options["prompt_cache_key"]).startswith("rstv2:preset:")
+    assert cache_options["prompt_cache_retention"] == "24h"
 
 
 @pytest.mark.asyncio

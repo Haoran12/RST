@@ -13,6 +13,7 @@
 2. Start with `scripts\\release_start.vbs`.
 3. Verify app opens at `http://127.0.0.1:18080/`.
 4. Stop with `scripts\\release_stop.vbs`.
+5. Build distributable quickstart zip with `scripts\\release_package.bat`.
 
 ## GitHub Push
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.models.session import Message
+from app.models.session import ChatAttachment, Message
 from app.storage.file_io import read_json, write_json
 
 PAGE_SIZE = 100
@@ -116,6 +116,8 @@ class MessageStore:
         message_id: str,
         content: str | None = None,
         visible: bool | None = None,
+        attachments: list[ChatAttachment] | None = None,
+        update_attachments: bool = False,
     ) -> Message | None:
         pages = self._list_pages()
         for page in pages:
@@ -129,6 +131,8 @@ class MessageStore:
                     updates["content"] = content
                 if visible is not None:
                     updates["visible"] = visible
+                if update_attachments:
+                    updates["attachments"] = attachments
                 msg = msg.model_copy(update=updates)
                 items[idx] = msg.model_dump(mode="json")
                 write_json(self._page_path(page), items)

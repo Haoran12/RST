@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 import re
 from typing import Optional
@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.models.log import LogEntry
 from app.storage.file_io import read_json, write_json
+from app.time_utils import APP_TIMEZONE, now_local, now_local_iso, to_local_tz
 
 
 class LogService:
@@ -38,13 +39,27 @@ class LogService:
             parsed = datetime.fromisoformat(normalized)
         except ValueError:
             return None
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
+        return to_local_tz(parsed)
+
+    def _normalize_iso_string(self, value: str | None) -> str | None:
+        parsed = self._parse_iso_datetime(value)
+        if parsed is None:
+            return value
+        return parsed.isoformat()
+
+    def _normalize_log_entry(self, log_entry: LogEntry) -> LogEntry:
+        request_time = self._normalize_iso_string(log_entry.request_time) or now_local_iso()
+        response_time = self._normalize_iso_string(log_entry.response_time)
+        return log_entry.model_copy(
+            update={
+                "request_time": request_time,
+                "response_time": response_time,
+            }
+        )
 
     def _request_time_for_filename(self, log_entry: LogEntry) -> datetime:
         parsed = self._parse_iso_datetime(log_entry.request_time)
-        return parsed or datetime.now(timezone.utc)
+        return parsed or now_local()
 
     def _build_filename(self, log_entry: LogEntry) -> str:
         request_time = self._request_time_for_filename(log_entry)
@@ -75,7 +90,7 @@ class LogService:
         if not isinstance(payload, dict):
             return None
         try:
-            return LogEntry.model_validate(payload)
+            return self._normalize_log_entry(LogEntry.model_validate(payload))
         except ValidationError:
             return None
 
@@ -85,13 +100,14 @@ class LogService:
     def _sort_logs_desc(self, logs: list[LogEntry]) -> list[LogEntry]:
         def _sort_key(log_entry: LogEntry) -> datetime:
             parsed = self._parse_iso_datetime(log_entry.request_time)
-            return parsed or datetime.min.replace(tzinfo=timezone.utc)
+            return parsed or datetime.min.replace(tzinfo=APP_TIMEZONE)
 
         return sorted(logs, key=_sort_key, reverse=True)
 
     def add_log(self, log_entry: LogEntry) -> None:
-        path = self._next_available_path(self._build_filename(log_entry))
-        write_json(path, log_entry.model_dump(mode="json"))
+        normalized_entry = self._normalize_log_entry(log_entry)
+        path = self._next_available_path(self._build_filename(normalized_entry))
+        write_json(path, normalized_entry.model_dump(mode="json"))
 
     def get_logs(self) -> list[LogEntry]:
         entries: list[LogEntry] = []
@@ -114,11 +130,11 @@ class LogService:
     def cleanup_expired_logs(self, retention_days: int = 7) -> int:
         if retention_days < 0:
             retention_days = 0
-        threshold = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        threshold = now_local() - timedelta(days=retention_days)
         removed = 0
         for path in self._iter_log_paths():
             try:
-                modified_time = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+                modified_time = datetime.fromtimestamp(path.stat().st_mtime, tz=APP_TIMEZONE)
             except OSError:
                 continue
             if modified_time >= threshold:

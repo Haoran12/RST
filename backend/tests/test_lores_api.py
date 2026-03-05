@@ -1,7 +1,5 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime
-
 import pytest
 
 from app.models import generate_id
@@ -10,7 +8,7 @@ from app.providers.base import BaseProvider, ProviderChatResult
 from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import get_session_dir
 from app.storage.message_store import MessageStore
-
+from app.time_utils import now_local
 
 class _SchedulerStubProvider(BaseProvider):
     async def list_models(self, base_url: str, api_key: str) -> list[str]:
@@ -26,6 +24,7 @@ class _SchedulerStubProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, object] | None = None,
     ) -> ProviderChatResult:
         return ProviderChatResult(
             text="injected lore block",
@@ -51,6 +50,7 @@ class _CaptureSchedulerProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, object] | None = None,
     ) -> ProviderChatResult:
         self.calls.append(
             [{"role": message["role"], "content": message["content"]} for message in messages]
@@ -79,6 +79,7 @@ class _SchedulerSyncProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, object] | None = None,
     ) -> ProviderChatResult:
         return ProviderChatResult(
             text=self.text,
@@ -102,6 +103,7 @@ class _CaptureSchedulerSyncProvider(_SchedulerSyncProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, object] | None = None,
     ) -> ProviderChatResult:
         self.calls.append(
             [{"role": message["role"], "content": message["content"]} for message in messages]
@@ -394,7 +396,7 @@ async def test_schedule_prompt_includes_birth_age_and_birthday(
             id=generate_id(),
             role="user",
             content="scene: 当前日期 神历1218年15月20日",
-            timestamp=datetime.utcnow(),
+            timestamp=now_local(),
             visible=True,
         )
     )
@@ -440,7 +442,7 @@ async def test_sync_tolerates_legacy_character_updates_without_type(
     monkeypatch,
 ) -> None:
     sync_text = """
-```json
+rrrjson
 [
   {
     "character_id": "sq7a0bj08lq9",
@@ -455,7 +457,7 @@ async def test_sync_tolerates_legacy_character_updates_without_type(
     }
   }
 ]
-```
+rrr
 """.strip()
     provider = _SchedulerSyncProvider(sync_text)
     monkeypatch.setattr("app.services.lore_updater.get_provider", lambda _: provider)
@@ -640,3 +642,11 @@ async def test_scene_state_get_and_put(async_client, sample_api_config) -> None:
     assert payload["current_location"] == "泽源·潮汐城·港口"
     assert payload["characters"] == ["柳璃", "小溪"]
     assert payload["updated_at"]
+
+
+
+
+
+
+
+

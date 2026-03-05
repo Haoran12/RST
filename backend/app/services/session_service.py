@@ -1,7 +1,6 @@
 ﻿from __future__ import annotations
 
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 from app.config import settings
@@ -21,6 +20,7 @@ from app.models.lore import (
     SchedulerPromptTemplate,
 )
 from app.storage.file_io import read_json, write_json
+from app.time_utils import now_local, to_local_tz
 
 
 class SessionNotFoundError(RuntimeError):
@@ -102,7 +102,7 @@ def create_session(payload: SessionCreate) -> SessionResponse:
     _sessions_dir().mkdir(parents=True, exist_ok=True)
     _ensure_unique_name(payload.name)
     _validate_lore_sync_interval(payload.mem_length, payload.lore_sync_interval)
-    now = datetime.utcnow()
+    now = now_local()
     meta = SessionMeta(
         name=payload.name,
         mode=payload.mode,
@@ -175,7 +175,9 @@ def list_sessions() -> list[SessionSummary]:
             )
         )
     return sorted(
-        summaries, key=lambda item: (item.updated_at, item.name.lower()), reverse=True
+        summaries,
+        key=lambda item: (to_local_tz(item.updated_at), item.name.lower()),
+        reverse=True,
     )
 
 
@@ -207,7 +209,7 @@ def update_session(name: str, payload: SessionUpdate) -> SessionResponse:
     next_sync_interval = updates.get("lore_sync_interval", meta.lore_sync_interval)
     _validate_lore_sync_interval(next_mem_length, next_sync_interval)
 
-    updates["updated_at"] = datetime.utcnow()
+    updates["updated_at"] = now_local()
     updates["version"] = meta.version + 1
     updated = meta.model_copy(update=updates)
     _write_session(updated)
@@ -216,7 +218,7 @@ def update_session(name: str, payload: SessionUpdate) -> SessionResponse:
 
 def touch_session(name: str) -> None:
     meta = _load_session(name)
-    updated = meta.model_copy(update={"updated_at": datetime.utcnow()})
+    updated = meta.model_copy(update={"updated_at": now_local()})
     _write_session(updated)
 
 
@@ -238,7 +240,7 @@ def rename_session(name: str, payload: SessionRename) -> SessionResponse:
     updated = meta.model_copy(
         update={
             "name": payload.new_name,
-            "updated_at": datetime.utcnow(),
+            "updated_at": now_local(),
             "version": meta.version + 1,
         }
     )

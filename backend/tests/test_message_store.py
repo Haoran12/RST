@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 
-from app.models.session import Message
+from app.models.session import ChatAttachment, Message
 from app.storage.message_store import MessageStore, PAGE_SIZE
+from app.time_utils import now_local
 
 
 def _make_message(message_id: str, content: str) -> Message:
@@ -12,8 +12,7 @@ def _make_message(message_id: str, content: str) -> Message:
         id=message_id,
         role="user",
         content=content,
-        # Use timezone-aware UTC timestamps to avoid deprecation warnings.
-        timestamp=datetime.now(timezone.utc),
+        timestamp=now_local(),
     )
 
 
@@ -76,6 +75,43 @@ def test_update_message_across_pages(tmp_path: Path) -> None:
     assert updated is not None
     assert updated.content == "updated"
     assert updated.visible is False
+
+
+def test_update_message_attachments(tmp_path: Path) -> None:
+    store = MessageStore(tmp_path)
+    message = _make_message("m-attach", "with attachment").model_copy(
+        update={
+            "attachments": [
+                ChatAttachment(
+                    name="a.txt",
+                    size=1,
+                    type="text/plain",
+                    content="a",
+                )
+            ]
+        }
+    )
+    store.append(message)
+
+    updated = store.update_message(
+        "m-attach",
+        attachments=[
+            ChatAttachment(
+                name="b.txt",
+                size=2,
+                type="text/plain",
+                content="bb",
+            )
+        ],
+        update_attachments=True,
+    )
+    assert updated is not None
+    assert updated.attachments is not None
+    assert [item.name for item in updated.attachments] == ["b.txt"]
+
+    reloaded = store.load_recent(1)[0]
+    assert reloaded.attachments is not None
+    assert [item.name for item in reloaded.attachments] == ["b.txt"]
 
 
 def test_delete_message_does_not_repage(tmp_path: Path) -> None:

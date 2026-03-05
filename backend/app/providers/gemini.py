@@ -58,6 +58,7 @@ class GeminiProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, Any] | None = None,
     ) -> ProviderChatResult:
         url = f"{base_url.rstrip('/')}/models/{model}:generateContent"
         headers = build_outbound_headers({"Content-Type": "application/json"})

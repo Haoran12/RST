@@ -58,7 +58,14 @@ def update_message(name: str, message_id: str, payload: MessageUpdate) -> Messag
     try:
         get_session_storage(name)
         store = MessageStore(get_session_dir(name))
-        updated = store.update_message(message_id, payload.content, payload.visible)
+        attachments_provided = "attachments" in payload.model_fields_set
+        updated = store.update_message(
+            message_id,
+            payload.content,
+            payload.visible,
+            payload.attachments,
+            attachments_provided,
+        )
         if updated is None:
             raise HTTPException(status_code=404, detail="Message not found")
         try:

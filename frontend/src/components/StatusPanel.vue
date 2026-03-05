@@ -248,6 +248,7 @@ import { parseApiError } from "@/stores/api-error";
 import { useSessionStore } from "@/stores/session";
 import type { CharacterData, CharacterForm, LoreEntry, SceneState } from "@/types/lore";
 import { message } from "@/utils/message";
+import { timestampToEpochMs } from "@/utils/time";
 
 const CURRENT_TAG_HINTS = [
   "current",
@@ -823,8 +824,8 @@ function pickCurrentEntry(entries: LoreEntry[]): LoreEntry | null {
     return tagged;
   }
   return [...entries].sort((left, right) => {
-    const leftTime = Date.parse(left.updated_at);
-    const rightTime = Date.parse(right.updated_at);
+    const leftTime = timestampToEpochMs(left.updated_at);
+    const rightTime = timestampToEpochMs(right.updated_at);
     return rightTime - leftTime;
   })[0];
 }

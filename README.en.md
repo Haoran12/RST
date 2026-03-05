@@ -72,6 +72,22 @@ Then double-click:
 
 Open app at: `http://127.0.0.1:18080/`
 
+### Quickstart package (distributable zip)
+
+Build a release zip in `release/`:
+
+```bat
+scripts\release_package.bat
+```
+
+This creates:
+- Folder: `release\RST-v0.2-quickstart\`
+- Zip: `release\RST-v0.2-quickstart.zip`
+
+From inside the packaged folder:
+- First run: `scripts\release_quick_start.bat`
+- Or runtime-only setup: `scripts\setup_release.bat`
+
 ## Security Notes
 
 - Do not commit `.env` or `.env.*` (except `.env.example`).

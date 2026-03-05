@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from time import perf_counter
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
@@ -59,13 +58,14 @@ from app.services.session_service import (
     get_session_storage,
 )
 from app.storage.message_store import MessageStore
+from app.time_utils import now_local_iso
 from app.storage.encryption import EncryptionError
 
 router = APIRouter()
 
 
-def _utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _local_iso() -> str:
+    return now_local_iso()
 
 
 def _resolve_category(value: str | None) -> LoreCategory | None:
@@ -486,7 +486,7 @@ def update_scene_state_route(session_name: str, payload: SceneStateUpdate):
             ]
 
         updated_scene = scene.model_copy(update=normalized_updates)
-        updated_scene.updated_at = _utc_iso()
+        updated_scene.updated_at = _local_iso()
         scene_service.save_scene_state(session_name, updated_scene)
         return updated_scene
     except SessionNotFoundError as exc:

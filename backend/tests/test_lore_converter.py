@@ -25,6 +25,7 @@ class _ImportLlmStubProvider(BaseProvider):
         temperature: float,
         max_tokens: int,
         stream: bool = False,
+        cache_options: dict[str, object] | None = None,
     ) -> ProviderChatResult:
         self.calls += 1
         index = min(self.calls - 1, len(self._texts) - 1)
