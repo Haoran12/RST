@@ -1,6 +1,6 @@
-# RST v0.2
+# RST v0.3
 
-RST 是一个面向本地部署的角色扮演/长对话辅助工具，核心目标是提升长对话场景下的上下文一致性与设定稳定性。  
+RST 是一个面向本地部署的角色扮演/长对话辅助工具，核心目标是提升长对话场景下的上下文一致性与设定稳定性。
 项目采用前后端分离架构，支持开发模式与发布模式（无命令行窗口启动）。
 
 ## 主要功能
@@ -32,7 +32,7 @@ RST 是一个面向本地部署的角色扮演/长对话辅助工具，核心目
 
 - 后端：FastAPI + uv
 - 前端：Vue 3 + Vite + pnpm
-- 本地存储：项目本地数据 + SQLite（新建会话的 Lore/运行时数据默认使用 SQLite）
+- 本地存储：项目本地数据 + SQLite（新建会话的 Lore / 运行时数据默认使用 SQLite）
 
 ## 安装（Windows）
 
@@ -100,12 +100,21 @@ scripts\release_package.bat
 ```
 
 会生成：
-- 目录：`release\RST-v0.2-quickstart\`
-- 压缩包：`release\RST-v0.2-quickstart.zip`
+- 目录：`release\RST-v0.3-quickstart\`
+- 压缩包：`release\RST-v0.3-quickstart.zip`
 
-在打包后的目录中：
-- 首次运行：`scripts\release_quick_start.bat`
-- 或仅安装运行时：`scripts\setup_release.bat`
+用户下载 Release 包并解压后，在根目录即可直接看到：
+- `01-安装部署.bat`：首次安装或更新运行环境
+- `02-启动RST.vbs`：后台启动 RST，并自动打开浏览器
+- `03-关闭RST.vbs`：关闭后台运行的 RST
+- `README-快速开始.md`：快速使用说明
+
+推荐顺序：
+1. 先双击 `01-安装部署.bat`
+2. 再双击 `02-启动RST.vbs`
+3. 用完后双击 `03-关闭RST.vbs`
+
+高级脚本仍保留在 `scripts/` 目录中。
 
 ### 发布到 GitHub Release
 
@@ -113,13 +122,13 @@ scripts\release_package.bat
 
 ```powershell
 $env:GITHUB_TOKEN = "<github-token>"
-scripts\release_publish.ps1 -Tag v0.2 -Title "RST v0.2" -NotesFile docs\release-notes-v0.2.md -AssetPath release\RST-v0.2-quickstart.zip
+scripts\release_publish.ps1 -Tag v0.3 -Title "RST v0.3" -NotesFile docs\release-notes-v0.3.md -AssetPath release\RST-v0.3-quickstart.zip
 ```
 
 说明：
 - `GITHUB_TOKEN` 需要具备创建或更新 Release 的权限。
 - 如果同标签的 Release 已存在，脚本会更新说明并替换同名资产。
-- 省略 `-AssetPath` 时，默认使用 `release\RST-v0.2-quickstart.zip`。
+- 省略 `-AssetPath` 时，默认使用 `release\RST-v0.3-quickstart.zip`。
 
 ## 首次使用建议
 

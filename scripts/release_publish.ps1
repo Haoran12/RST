@@ -1,7 +1,7 @@
 param(
-  [string]$Tag = "v0.2",
-  [string]$Title = "RST v0.2",
-  [string]$NotesFile = "docs/release-notes-v0.2.md",
+  [string]$Tag = "v0.3",
+  [string]$Title = "RST v0.3",
+  [string]$NotesFile = "docs/release-notes-v0.3.md",
   [string]$AssetPath,
   [switch]$Draft,
   [switch]$Prerelease

@@ -8,4 +8,4 @@ if errorlevel 1 (
 )
 
 echo [INFO] Starting RST in release mode...
-call "%~dp0release_run.bat"
+wscript.exe "%~dp0release_start.vbs"

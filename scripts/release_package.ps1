@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "v0.2",
+  [string]$Version = "v0.3",
   [switch]$SkipChecks,
   [switch]$BuildFrontend
 )
@@ -14,6 +14,15 @@ function Write-Info([string]$Message) {
 function Fail([string]$Message) {
   Write-Host "[ERROR] $Message" -ForegroundColor Red
   exit 1
+}
+
+function Write-Utf8File([string]$Path, [string]$Content) {
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
+function Join-CodePoints([int[]]$Points) {
+  return (-join ($Points | ForEach-Object { [char]$_ }))
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -40,7 +49,8 @@ if ($BuildFrontend -or -not (Test-Path $distIndex)) {
     if ($LASTEXITCODE -ne 0) {
       Fail "Frontend build failed."
     }
-  } finally {
+  }
+  finally {
     Pop-Location
   }
 }
@@ -53,6 +63,10 @@ $releaseRoot = Join-Path $repoRoot "release"
 $packageName = "RST-$Version-quickstart"
 $packageDir = Join-Path $releaseRoot $packageName
 $zipPath = Join-Path $releaseRoot "$packageName.zip"
+$installEntryName = "01-$(Join-CodePoints @(0x5B89,0x88C5,0x90E8,0x7F72)).bat"
+$startEntryName = "02-$(Join-CodePoints @(0x542F,0x52A8))RST.vbs"
+$stopEntryName = "03-$(Join-CodePoints @(0x5173,0x95ED))RST.vbs"
+$quickstartZhName = "README-$(Join-CodePoints @(0x5FEB,0x901F,0x5F00,0x59CB)).md"
 
 if (-not (Test-Path $releaseRoot)) {
   New-Item -ItemType Directory -Path $releaseRoot | Out-Null
@@ -100,30 +114,97 @@ foreach ($item in $copyItems) {
   Copy-Item -Path $source -Destination $destination -Recurse -Force
 }
 
-# Remove Python cache files from package contents.
 Get-ChildItem -Path $packageDir -Recurse -Directory -Filter "__pycache__" |
   Remove-Item -Recurse -Force
 Get-ChildItem -Path $packageDir -Recurse -File -Filter "*.pyc" |
   Remove-Item -Force
 
-$quickstart = @"
-# RST Quickstart Package
+$rootInstall = @"
+@echo off
+chcp 65001 >nul
+setlocal
+cd /d "%~dp0"
 
-This package is for Windows 10/11.
+echo [INFO] Starting runtime setup/update...
+call "%~dp0scripts\setup_release.bat"
+if errorlevel 1 (
+  echo.
+  echo [ERROR] Setup failed. Please fix the error above and try again.
+  pause
+  exit /b 1
+)
 
-1. Run `scripts\release_quick_start.bat` for first-time setup and launch.
-2. Open http://127.0.0.1:18080/ in your browser.
-3. Stop service with `scripts\release_stop.vbs`.
-
-Manual commands:
-- Setup runtime only: `scripts\setup_release.bat`
-- Run app: `scripts\release_run.bat`
-
-Notes:
-- Runtime creates `.env` from `.env.example` when needed.
-- Runtime data is stored under `data/` and `logs/`.
+echo.
+echo [OK] Runtime setup complete.
+echo [INFO] You can now double-click "$startEntryName" to start RST.
+choice /C YN /N /M "Start RST now? [Y/N]: "
+if errorlevel 2 exit /b 0
+wscript.exe "%~dp0scripts\release_start.vbs"
 "@
-Set-Content -Path (Join-Path $packageDir "QUICKSTART.md") -Value $quickstart -Encoding utf8
+Write-Utf8File -Path (Join-Path $packageDir $installEntryName) -Content $rootInstall
+
+$rootStart = @"
+Option Explicit
+
+Dim fso, shell, root, scriptPath
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set shell = CreateObject("WScript.Shell")
+
+root = fso.GetParentFolderName(WScript.ScriptFullName)
+scriptPath = root & "\scripts\release_start.vbs"
+
+If Not fso.FileExists(scriptPath) Then
+  MsgBox "Missing scripts\release_start.vbs", 48, "RST"
+  WScript.Quit 1
+End If
+
+shell.Run "wscript.exe """ & scriptPath & """", 0, True
+"@
+Write-Utf8File -Path (Join-Path $packageDir $startEntryName) -Content $rootStart
+
+$rootStop = @"
+Option Explicit
+
+Dim fso, shell, root, scriptPath
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set shell = CreateObject("WScript.Shell")
+
+root = fso.GetParentFolderName(WScript.ScriptFullName)
+scriptPath = root & "\scripts\release_stop.vbs"
+
+If Not fso.FileExists(scriptPath) Then
+  MsgBox "Missing scripts\release_stop.vbs", 48, "RST"
+  WScript.Quit 1
+End If
+
+shell.Run "wscript.exe """ & scriptPath & """", 0, True
+"@
+Write-Utf8File -Path (Join-Path $packageDir $stopEntryName) -Content $rootStop
+
+$newline = [Environment]::NewLine
+$quickstartBody = @(
+  ('# RST {0} Quick Start' -f $Version),
+  '',
+  'After extracting the zip, use the 3 entry files in the package root:',
+  '',
+  ('- {0}: install or update the runtime dependencies' -f $installEntryName),
+  ('- {0}: start RST in the background and open the browser' -f $startEntryName),
+  ('- {0}: stop the background RST process' -f $stopEntryName),
+  '',
+  'Recommended order:',
+  '',
+  ('1. Run {0}' -f $installEntryName),
+  ('2. Then run {0}' -f $startEntryName),
+  ('3. When finished, run {0}' -f $stopEntryName),
+  '',
+  'Notes:',
+  '',
+  '- .env is created from .env.example when needed',
+  '- background logs and PID files are stored under logs/',
+  '- advanced helper scripts remain under scripts/'
+) -join $newline
+Write-Utf8File -Path (Join-Path $packageDir $quickstartZhName) -Content $quickstartBody
+Write-Utf8File -Path (Join-Path $packageDir "QUICKSTART.md") -Content $quickstartBody
 
 Write-Info "Creating package archive..."
 Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath -CompressionLevel Optimal

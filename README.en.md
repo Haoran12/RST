@@ -1,4 +1,4 @@
-# RST v0.2
+# RST v0.3
 
 A desktop-oriented local roleplay/long-context assistant focused on stronger context consistency, configurable prompt assembly, and structured lore/state management.
 
@@ -81,12 +81,21 @@ scripts\release_package.bat
 ```
 
 This creates:
-- Folder: `release\RST-v0.2-quickstart\`
-- Zip: `release\RST-v0.2-quickstart.zip`
+- Folder: `release\RST-v0.3-quickstart\`
+- Zip: `release\RST-v0.3-quickstart.zip`
 
-From inside the packaged folder:
-- First run: `scripts\release_quick_start.bat`
-- Or runtime-only setup: `scripts\setup_release.bat`
+After extracting the packaged zip, the package root clearly exposes these entry files:
+- `01-安装部署.bat` — install or update the runtime dependencies
+- `02-启动RST.vbs` — start RST in the background and open the browser
+- `03-关闭RST.vbs` — stop the background RST process
+- `QUICKSTART.md` — quick usage notes
+
+Recommended order for end users:
+1. Run `01-安装部署.bat`
+2. Run `02-启动RST.vbs`
+3. Run `03-关闭RST.vbs` when finished
+
+Advanced scripts remain available under `scripts/`.
 
 ### Publish to GitHub Release
 
@@ -94,13 +103,13 @@ If you want to update the GitHub Release and upload the packaged zip:
 
 ```powershell
 $env:GITHUB_TOKEN = "<github-token>"
-scripts\release_publish.ps1 -Tag v0.2 -Title "RST v0.2" -NotesFile docs\release-notes-v0.2.md -AssetPath release\RST-v0.2-quickstart.zip
+scripts\release_publish.ps1 -Tag v0.3 -Title "RST v0.3" -NotesFile docs\release-notes-v0.3.md -AssetPath release\RST-v0.3-quickstart.zip
 ```
 
 Notes:
 - `GITHUB_TOKEN` must have permission to create or edit releases.
 - The script updates the release notes for the tag if the release already exists.
-- If `-AssetPath` is omitted, the script defaults to `release\RST-v0.2-quickstart.zip`.
+- If `-AssetPath` is omitted, the script defaults to `release\RST-v0.3-quickstart.zip`.
 
 ## Security Notes
 
