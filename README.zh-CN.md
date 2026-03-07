@@ -1,4 +1,4 @@
-﻿# RST v0.3
+# RST v0.3
 
 RST 是一个面向本地部署的角色扮演/长对话辅助工具，核心目标是提升长对话场景下的上下文一致性与设定稳定性。
 项目采用前后端分离架构，支持开发模式与发布模式（无命令行窗口启动）。
@@ -42,7 +42,7 @@ RST 是一个面向本地部署的角色扮演/长对话辅助工具，核心目
 - Python 3.12+
 - Node.js 18+
 
-> `scripts\setup.bat` 会优先检查环境，缺少 Python/Node 时会尝试自动安装，并完成依赖安装。
+> `setup.bat` 会优先检查环境，缺少 Python/Node 时会尝试自动安装，并完成依赖安装。
 
 ### 安装步骤
 
@@ -54,7 +54,7 @@ cd RST
 
 2. 一键安装依赖
 ```bat
-scripts\setup.bat
+setup.bat
 ```
 
 3. 首次会自动生成 `.env`（来自 `.env.example`）。
@@ -138,7 +138,7 @@ scripts\release_publish.ps1 -Tag v0.3 -Title "RST v0.3" -NotesFile docs\release-
 
 ## 常用脚本
 
-- `scripts\setup.bat`：安装或更新依赖
+- `setup.bat`：安装或更新依赖
 - `scripts\dev.bat`：开发模式启动
 - `scripts\test.bat`：运行测试
 - `scripts\lint.bat`：代码检查
@@ -166,4 +166,5 @@ scripts\release_check.bat
 - `RST_BACKEND_RELOAD`：是否热重载，开发建议 `1`，发布建议 `0`
 - `RST_SERVE_FRONTEND`：后端是否托管前端静态资源，发布模式建议 `1`
 - `RST_FRONTEND_DIST`：前端构建目录，默认 `./frontend/dist`
+
 

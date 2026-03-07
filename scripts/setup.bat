@@ -42,6 +42,7 @@ if errorlevel 1 (
 where uv >nul 2>&1
 if errorlevel 1 (
   echo [INFO] uv not found. Installing via pip...
+  python -m pip install --upgrade pip
   python -m pip install uv
   if errorlevel 1 (
     echo [ERROR] Failed to install uv.
@@ -51,13 +52,33 @@ if errorlevel 1 (
 
 where pnpm >nul 2>&1
 if errorlevel 1 (
-  echo [INFO] pnpm not found. Installing via corepack...
-  corepack enable
-  corepack prepare pnpm@latest --activate
+  where corepack >nul 2>&1
   if errorlevel 1 (
-    echo [ERROR] Failed to install pnpm via corepack.
-    exit /b 1
+    echo [WARN] corepack not found. Trying npm install -g pnpm...
+    npm install -g pnpm
+    if errorlevel 1 (
+      echo [ERROR] Failed to install pnpm via npm.
+      exit /b 1
+    )
+  ) else (
+    echo [INFO] pnpm not found. Installing via corepack...
+    corepack enable
+    corepack prepare pnpm@latest --activate
+    if errorlevel 1 (
+      echo [WARN] Failed to install pnpm via corepack. Trying npm install -g pnpm...
+      npm install -g pnpm
+      if errorlevel 1 (
+        echo [ERROR] Failed to install pnpm.
+        exit /b 1
+      )
+    )
   )
+)
+
+where pnpm >nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] pnpm is still unavailable after installation attempts.
+  exit /b 1
 )
 
 echo [INFO] Installing backend dependencies (locked)...
@@ -83,5 +104,9 @@ if not exist ".env" (
 )
 
 echo [INFO] Setup complete.
+echo [INFO] Next steps:
+echo [INFO] - Start dev mode: scripts\dev.bat
+echo [INFO] - Run tests: scripts\test.bat
+echo [INFO] - Build release package: scripts\release_package.bat -Version v0.3 -BuildFrontend
 pause
 

@@ -1,4 +1,4 @@
-﻿# RST v0.3
+# RST v0.3
 
 A desktop-oriented local roleplay/long-context assistant focused on stronger context consistency, configurable prompt assembly, and structured lore/state management.
 
@@ -38,14 +38,14 @@ A desktop-oriented local roleplay/long-context assistant focused on stronger con
 - Python 3.12+
 - Node.js 18+
 
-> `scripts\\setup.bat` checks required tools, tries to bootstrap missing dependencies, and installs project dependencies.
+> `setup.bat` checks required tools, tries to bootstrap missing dependencies, and installs project dependencies.
 
 ### Steps
 
 ```bat
 git clone https://github.com/Haoran12/RST.git
 cd RST
-scripts\setup.bat
+setup.bat
 ```
 
 ## Run
@@ -116,3 +116,4 @@ Notes:
 - Do not commit `.env` or `.env.*` (except `.env.example`).
 - Do not commit runtime or local data (`data/`, `_tmp_llm_import_data/`, `release/`).
 - Run `scripts\\release_check.bat` before packaging or publishing.
+

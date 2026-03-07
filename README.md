@@ -7,7 +7,7 @@ Language / 语言
 
 Quick links:
 
-- Setup: `scripts\\setup.bat`
+- Setup: `setup.bat`
 - Release runtime setup: `scripts\\setup_release.bat`
 - Dev run: `scripts\\dev.bat`
 - Release check: `scripts\\release_check.bat`
