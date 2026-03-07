@@ -39,6 +39,23 @@ function Read-Manifest([string]$ManifestPath) {
   return Get-Content $ManifestPath -Raw | ConvertFrom-Json
 }
 
+function Get-ManifestStringValue($Manifest, [string]$PropertyName) {
+  if ($null -eq $Manifest) {
+    return ""
+  }
+
+  $property = $Manifest.PSObject.Properties[$PropertyName]
+  if ($null -eq $property) {
+    return ""
+  }
+
+  if ($null -eq $property.Value) {
+    return ""
+  }
+
+  return [string]$property.Value
+}
+
 function Copy-DirectoryContent([string]$SourceDir, [string]$DestinationDir, [string[]]$ExcludedFiles) {
   if (-not (Test-Path $SourceDir)) {
     return
@@ -77,13 +94,13 @@ $manifestPath = Join-Path $installRoot "release-manifest.json"
 $manifest = Read-Manifest -ManifestPath $manifestPath
 
 if (-not $Repo) {
-  $Repo = [string]($manifest.repo ?? "")
+  $Repo = Get-ManifestStringValue -Manifest $manifest -PropertyName "repo"
 }
 if (-not $Repo) {
   Fail "Missing GitHub repo. Set it in release-manifest.json or pass -Repo owner/repo."
 }
 
-$currentVersion = [string]($manifest.version ?? "")
+$currentVersion = Get-ManifestStringValue -Manifest $manifest -PropertyName "version"
 $headers = Get-Headers
 $apiBase = "https://api.github.com/repos/$Repo"
 
@@ -144,7 +161,7 @@ if (Test-Path $stopScript) {
 Write-Info "Applying update files..."
 Copy-DirectoryContent -SourceDir (Join-Path $extractRoot "backend") -DestinationDir (Join-Path $installRoot "backend") -ExcludedFiles @()
 Copy-DirectoryContent -SourceDir (Join-Path $extractRoot "frontend") -DestinationDir (Join-Path $installRoot "frontend") -ExcludedFiles @()
-Copy-DirectoryContent -SourceDir (Join-Path $extractRoot "scripts") -DestinationDir (Join-Path $installRoot "scripts") -ExcludedFiles @("release_update_from_github.ps1", "release_update_from_github.bat")
+Copy-DirectoryContent -SourceDir (Join-Path $extractRoot "scripts") -DestinationDir (Join-Path $installRoot "scripts") -ExcludedFiles @()
 
 $rootFiles = @(
   ".env.example",
