@@ -42,7 +42,8 @@ if (-not $repoSlug) {
   Fail "Cannot parse owner/repo from origin URL: $originUrl"
 }
 
-$notes = Get-Content -Path $NotesFile -Raw -Encoding utf8
+$resolvedNotesFile = (Resolve-Path $NotesFile).Path
+$notes = [System.IO.File]::ReadAllText($resolvedNotesFile, [System.Text.UTF8Encoding]::new($false))
 $apiBase = "https://api.github.com/repos/$repoSlug"
 $headers = @{
   Authorization = "Bearer $($env:GITHUB_TOKEN)"
