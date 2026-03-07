@@ -18,7 +18,8 @@ function Fail([string]$Message) {
 
 function Write-Utf8File([string]$Path, [string]$Content) {
   $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-  [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+  $normalized = $Content -replace "`r?`n", "`r`n"
+  [System.IO.File]::WriteAllText($Path, $normalized, $utf8NoBom)
 }
 
 function Join-CodePoints([int[]]$Points) {
@@ -137,7 +138,7 @@ if errorlevel 1 (
 echo.
 echo [OK] Runtime setup complete.
 echo [INFO] You can now double-click "$startEntryName" to start RST.
-choice /C YN /N /M "Start RST now? [Y/N]: "
+choice /C YN /N /T 5 /D N /M "Start RST now? [Y/N]: "
 if errorlevel 2 exit /b 0
 wscript.exe "%~dp0scripts\release_start.vbs"
 "@
