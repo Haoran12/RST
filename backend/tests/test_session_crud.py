@@ -31,7 +31,7 @@ async def _create_session(async_client, name: str, config_id: str, preset_id: st
 
 
 @pytest.mark.asyncio
-async def test_create_session_creates_files(async_client, sample_api_config, tmp_data_dir: Path) -> None:
+async def test_create_session_creates_sqlite_storage(async_client, sample_api_config, tmp_data_dir: Path) -> None:
     config_id = await _create_api_config(async_client, sample_api_config)
     preset_id = await _create_preset(async_client)
 
@@ -41,8 +41,13 @@ async def test_create_session_creates_files(async_client, sample_api_config, tmp
     session_dir = tmp_data_dir / "sessions" / "Session One"
     assert (session_dir / "session.json").exists()
     assert (session_dir / "messages.json").exists()
-    assert (session_dir / "rst_data" / "characters").is_dir()
-    assert (session_dir / "rst_data" / ".index").is_dir()
+    assert (session_dir / "rst_data").is_dir()
+    assert (session_dir / "rst_data" / "lore.db").exists()
+    assert not (session_dir / "rst_data" / "characters").exists()
+    assert not (session_dir / "rst_data" / ".index").exists()
+    assert not (session_dir / "rst_data" / "default").exists()
+    assert not (session_dir / "rst_data" / "scene_state.json").exists()
+    assert not (session_dir / "rst_data" / "scheduler_template.json").exists()
 
 
 @pytest.mark.asyncio

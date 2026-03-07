@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from time import perf_counter
+from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 
@@ -141,6 +142,56 @@ async def import_lore_route(
     try:
         return await converter.convert()
     except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/sessions/{session_name}/lores/import-json", status_code=status.HTTP_204_NO_CONTENT)
+async def import_lore_json_route(
+    session_name: str,
+    file: UploadFile = File(...),
+):
+    try:
+        session = get_session_storage(session_name)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if session.is_closed:
+        raise HTTPException(status_code=400, detail="Session is closed")
+
+    raw = await file.read()
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large")
+
+    try:
+        source_data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON file") from exc
+
+    if not isinstance(source_data, dict):
+        raise HTTPException(status_code=400, detail="Invalid lore snapshot payload")
+
+    try:
+        lore_service.import_json_bundle(session_name, source_data)
+        rst_runtime_service.clear_session_state(session_name)
+        scene = scene_service.load_scene_state(session_name)
+        rst_runtime_service.update_session_state(
+            session_name,
+            scene_state=scene.model_dump(mode="json"),
+            last_matched_entry_ids=[],
+        )
+        lore_scheduler.release_session(session_name)
+    except LoreValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/sessions/{session_name}/lores/export")
+def export_lore_json_route(session_name: str) -> dict[str, Any]:
+    try:
+        return lore_service.export_json_bundle(session_name)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except LoreValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

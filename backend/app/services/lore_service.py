@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+from typing import Any
+
 from app.models import generate_id
 from app.models.lore import (
     ActiveFormUpdate,
@@ -513,6 +515,20 @@ class LoreService:
         updated = template.model_copy(update=updates)
         store.save_scheduler_template(updated)
         return updated
+
+    def export_json_bundle(self, session_name: str) -> dict[str, Any]:
+        store = self._store(session_name)
+        if not hasattr(store, "export_json_bundle"):
+            raise LoreValidationError("Current lore store does not support JSON export")
+        return store.export_json_bundle()
+
+    def import_json_bundle(self, session_name: str, payload: dict[str, Any]) -> None:
+        store = self._store(session_name)
+        if payload.get("format") != "rst-lore-snapshot-v1":
+            raise LoreValidationError("Invalid lore snapshot format")
+        if not hasattr(store, "import_json_bundle"):
+            raise LoreValidationError("Current lore store does not support JSON import")
+        store.import_json_bundle(payload, replace=True)
 
 
 lore_service = LoreService()

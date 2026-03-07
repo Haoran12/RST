@@ -12,6 +12,7 @@ import type {
   ConsolidateResult,
   FormCreate,
   FormUpdate,
+  LoreSnapshotBundle,
   LoreBatchUpdate,
   LoreEntry,
   LoreEntryCreate,
@@ -48,6 +49,22 @@ export async function importLore(
       split_faction_characters: splitFactionCharacters,
       llm_fallback: llmFallback,
     },
+  });
+  return data;
+}
+
+export async function importLoreJson(sessionName: string, file: File): Promise<void> {
+  const formData = new FormData();
+  formData.append("file", file);
+  await apiClient.post(`${BASE(sessionName)}/import-json`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: API_TIMEOUT_MS,
+  });
+}
+
+export async function exportLoreJson(sessionName: string): Promise<LoreSnapshotBundle> {
+  const { data } = await apiClient.get<LoreSnapshotBundle>(`${BASE(sessionName)}/export`, {
+    timeout: API_TIMEOUT_MS,
   });
   return data;
 }

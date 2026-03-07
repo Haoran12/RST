@@ -104,11 +104,18 @@ async def _create_preset(async_client) -> str:
     return response.json()["id"]
 
 
-async def _create_session(async_client, name: str, config_id: str, preset_id: str) -> None:
+async def _create_session(
+    async_client,
+    name: str,
+    config_id: str,
+    preset_id: str,
+    scheduler_config_id: str | None = None,
+) -> None:
     payload = {
         "name": name,
         "mode": "RST",
         "main_api_config_id": config_id,
+        "scheduler_api_config_id": scheduler_config_id,
         "preset_id": preset_id,
     }
     response = await async_client.post("/sessions", json=payload)
@@ -263,6 +270,79 @@ async def test_openai_main_chat_passes_prompt_cache_options(
     assert "prompt_cache_key" in cache_options
     assert str(cache_options["prompt_cache_key"]).startswith("rstv2:preset:")
     assert cache_options["prompt_cache_retention"] == "24h"
+
+
+@pytest.mark.asyncio
+async def test_regenerate_deletes_latest_assistant_and_reuses_last_scheduler_lores(
+    async_client, sample_api_config, monkeypatch
+) -> None:
+    from app.services.rst_runtime_service import rst_runtime_service
+
+    provider = _StubProvider(texts=["first-answer", "regen-answer"])
+    monkeypatch.setattr("app.services.chat_service.get_provider", lambda _: provider)
+
+    schedule_calls = {"full_schedule": 0, "full_schedule_from_cache": 0}
+
+    async def _fake_full_schedule(*args, **kwargs) -> str:  # noqa: ANN002, ANN003
+        schedule_calls["full_schedule"] += 1
+        return "first-lores"
+
+    async def _fake_full_schedule_from_cache(*args, **kwargs) -> str:  # noqa: ANN002, ANN003
+        schedule_calls["full_schedule_from_cache"] += 1
+        raise AssertionError("full_schedule_from_cache should not be called for regenerate")
+
+    monkeypatch.setattr("app.services.chat_service.lore_scheduler.full_schedule", _fake_full_schedule)
+    monkeypatch.setattr(
+        "app.services.chat_service.lore_scheduler.full_schedule_from_cache",
+        _fake_full_schedule_from_cache,
+    )
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "ChatFlowRegenerate"
+    await _create_session(async_client, session_name, config_id, preset_id, scheduler_config_id=config_id)
+
+    first = await async_client.post(f"/sessions/{session_name}/chat", json={"content": "hello user"})
+    assert first.status_code == 200
+    first_assistant_id = first.json()["assistant_message"]["id"]
+    rounds_before_regenerate = int(
+        rst_runtime_service.get_session_state(session_name).get("rounds_since_sync", 0)
+    )
+
+    rst_runtime_service.update_session_state(session_name, last_injection_block="reused-lores")
+
+    regenerate = await async_client.post(
+        f"/sessions/{session_name}/chat",
+        json={"content": "", "regenerate": True},
+    )
+    assert regenerate.status_code == 200
+    assert regenerate.json()["user_message"] is None
+
+    assert len(provider.calls) == 2
+    second_prompt = provider.calls[1]
+    user_entries = [item for item in second_prompt if item["role"] == "user"]
+    assert user_entries == [{"role": "user", "content": "hello user"}]
+    assert any(
+        item["role"] == "system" and item["content"] == "reused-lores"
+        for item in second_prompt
+    )
+
+    assert schedule_calls["full_schedule"] == 1
+    assert schedule_calls["full_schedule_from_cache"] == 0
+    rounds_after_regenerate = int(
+        rst_runtime_service.get_session_state(session_name).get("rounds_since_sync", 0)
+    )
+    assert rounds_after_regenerate == rounds_before_regenerate
+
+    messages = await async_client.get(f"/sessions/{session_name}/messages")
+    assert messages.status_code == 200
+    payload = messages.json()["messages"]
+    message_ids = [item["id"] for item in payload]
+    roles = [item["role"] for item in payload]
+    assert first_assistant_id not in message_ids
+    assert roles.count("user") == 1
+    assert roles.count("assistant") == 1
+    assert payload[-1]["content"] == "regen-answer"
 
 
 @pytest.mark.asyncio

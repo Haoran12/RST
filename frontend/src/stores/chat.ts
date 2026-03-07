@@ -63,6 +63,16 @@ export const useChatStore = defineStore("chat", () => {
   const hasRunningWork = computed(
     () => isSending.value || isRstDataUpdating.value || pendingMessageMutations.value > 0,
   );
+  const canRegenerate = computed(() => {
+    if (!activeSession.value || hasRunningWork.value) {
+      return false;
+    }
+    const current = currentMessages.value;
+    if (!current.length) {
+      return false;
+    }
+    return current[current.length - 1].role === "assistant";
+  });
 
   function enqueueMessageMutation<T>(task: () => Promise<T>): Promise<T> {
     const nextTask = messageMutationQueue
@@ -216,6 +226,66 @@ export const useChatStore = defineStore("chat", () => {
       const hasAssistant = current.some((item) => item.id === assistantMessage.id);
       if (!hasAssistant) {
         setMessages(sessionName, [...current, assistantMessage]);
+      }
+      emitLoreDataChanged(sessionName);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.code === "ERR_CANCELED") {
+        message.info("Request stopped.");
+        return;
+      }
+      message.error(parseApiError(error));
+    } finally {
+      if (requestController.value === controller) {
+        requestController.value = null;
+      }
+      isSending.value = false;
+      isRstDataUpdating.value = false;
+    }
+  }
+
+  async function regenerateLatestAssistant(): Promise<void> {
+    if (!activeSession.value) {
+      message.error("Select a session first.");
+      return;
+    }
+    await waitForMessageMutations();
+    if (!activeSession.value) {
+      return;
+    }
+    if (isSending.value) {
+      return;
+    }
+
+    const sessionName = activeSession.value;
+    const current = messagesBySession.value[sessionName] ?? [];
+    const latest = current[current.length - 1];
+    if (!latest || latest.role !== "assistant") {
+      message.info("Latest message must be assistant to regenerate.");
+      return;
+    }
+
+    const next = current.slice(0, -1);
+    setMessages(sessionName, next);
+
+    const controller = new AbortController();
+    requestController.value = controller;
+    isSending.value = true;
+    isRstDataUpdating.value = true;
+
+    try {
+      const response = await sendChatMessage(
+        sessionName,
+        {
+          content: "",
+          regenerate: true,
+        },
+        { signal: controller.signal },
+      );
+      const assistantMessage = response.assistant_message;
+      const latestMessages = messagesBySession.value[sessionName] ?? next;
+      const hasAssistant = latestMessages.some((item) => item.id === assistantMessage.id);
+      if (!hasAssistant) {
+        setMessages(sessionName, [...latestMessages, assistantMessage]);
       }
       emitLoreDataChanged(sessionName);
     } catch (error) {
@@ -471,6 +541,7 @@ export const useChatStore = defineStore("chat", () => {
     selectedIds,
     hasActiveSession,
     hasMessages,
+    canRegenerate,
     isBatchMode,
     isSending,
     isRstDataUpdating,
@@ -478,6 +549,7 @@ export const useChatStore = defineStore("chat", () => {
     setActiveSession,
     addMessage,
     sendMessage,
+    regenerateLatestAssistant,
     cancelSending,
     cancelInFlightOperations,
     clearSessionRuntime,

@@ -32,10 +32,12 @@ from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import get_session_dir, get_session_storage
 from app.storage.encryption import decrypt_api_key
 from app.storage.lore_store import LoreStore
+from app.storage.sqlite_lore_store import OptimisticLockError
 from app.time_utils import now_local, now_local_iso
 
 MEMORY_CONSOLIDATION_THRESHOLD = 30
 MEMORY_CONSOLIDATION_TARGET = 20
+OPTIMISTIC_LOCK_RETRIES = 2
 
 CHARACTER_UPDATE_CHAR_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "objective": ("goal", "target", "purpose", "目标", "目的"),
@@ -102,6 +104,14 @@ class LoreUpdater:
 
     def _local_iso(self) -> str:
         return now_local_iso()
+
+    def _retry_on_optimistic_lock(self, operation: Any) -> Any:
+        for attempt in range(OPTIMISTIC_LOCK_RETRIES + 1):
+            try:
+                return operation()
+            except OptimisticLockError:
+                if attempt >= OPTIMISTIC_LOCK_RETRIES:
+                    raise
 
     def _select_messages(self, messages: list[Message], scan_depth: int) -> list[Message]:
         visible = [msg for msg in messages if msg.visible]
@@ -704,6 +714,47 @@ class LoreUpdater:
         updated_entries: list[str],
         changes: list[SyncChange],
     ) -> None:
+        if getattr(store, "backend_name", "json") == "sqlite" and hasattr(
+            store, "append_or_create_lore_update"
+        ):
+            action, entry, merged_content, tags_added, before_content = store.append_or_create_lore_update(
+                category,
+                name,
+                content_append,
+                tags,
+            )
+            if action == "updated":
+                updated_entries.append(entry.id)
+                changes.append(
+                    SyncChange(
+                        entry_id=entry.id,
+                        name=entry.name,
+                        category=category.value,
+                        action="updated",
+                        summary="Lore content appended",
+                        before_content=before_content,
+                        after_content=merged_content or None,
+                        content_append=content_append.strip() or None,
+                        tags_added=tags_added,
+                    )
+                )
+                return
+
+            created_entries.append(entry.id)
+            changes.append(
+                SyncChange(
+                    entry_id=entry.id,
+                    name=entry.name,
+                    category=category.value,
+                    action="created",
+                    summary="Lore entry created",
+                    after_content=entry.content or None,
+                    content_append=content_append.strip() or None,
+                    tags_added=tags_added,
+                )
+            )
+            return
+
         category_file = store.load_category_file(category)
         now = now_local()
         for index, entry in enumerate(category_file.entries):
@@ -832,74 +883,91 @@ class LoreUpdater:
                     if not name or not isinstance(updates, dict):
                         continue
 
-                    char_file = self._ensure_character(store, name)
-                    old_data = char_file.data
                     char_updates, form_updates = self._split_character_form_updates(updates)
                     if not char_updates and not form_updates:
                         continue
 
-                    data = old_data
-                    if char_updates:
-                        data = data.model_copy(update=char_updates)
-                    if form_updates and data.forms:
-                        active_id = data.active_form_id or data.forms[0].form_id
-                        forms = [
-                            form.model_copy(update=form_updates) if form.form_id == active_id else form
-                            for form in data.forms
-                        ]
-                        data = data.model_copy(update={"forms": forms})
+                    def _update_character() -> tuple[CharacterData, list[SyncFieldChange]]:
+                        char_file = self._ensure_character(store, name)
+                        old_data = char_file.data
 
-                    field_changes: list[SyncFieldChange] = []
-                    for key in char_updates:
-                        before_text = self._format_change_value(getattr(old_data, key, None))
-                        after_text = self._format_change_value(getattr(data, key, None))
-                        if before_text == after_text:
-                            continue
-                        field_changes.append(
-                            SyncFieldChange(
-                                field=key,
-                                before=before_text,
-                                after=after_text,
+                        data = old_data
+                        if char_updates:
+                            data = data.model_copy(update=char_updates)
+                        if form_updates and data.forms:
+                            active_id = data.active_form_id or data.forms[0].form_id
+                            forms = [
+                                form.model_copy(update=form_updates) if form.form_id == active_id else form
+                                for form in data.forms
+                            ]
+                            data = data.model_copy(update={"forms": forms})
+
+                        field_changes: list[SyncFieldChange] = []
+                        for key in char_updates:
+                            before_text = self._format_change_value(getattr(old_data, key, None))
+                            after_text = self._format_change_value(getattr(data, key, None))
+                            if before_text == after_text:
+                                continue
+                            field_changes.append(
+                                SyncFieldChange(field=key, before=before_text, after=after_text)
                             )
-                        )
 
-                    old_active_form = None
-                    if old_data.forms:
-                        old_active_id = old_data.active_form_id or old_data.forms[0].form_id
-                        old_active_form = next(
-                            (form for form in old_data.forms if form.form_id == old_active_id),
-                            old_data.forms[0],
-                        )
-                    new_active_form = None
-                    if data.forms:
-                        new_active_id = data.active_form_id or data.forms[0].form_id
-                        new_active_form = next(
-                            (form for form in data.forms if form.form_id == new_active_id),
-                            data.forms[0],
-                        )
-
-                    for key in form_updates:
-                        before_text = self._format_change_value(
-                            getattr(old_active_form, key, None) if old_active_form else None
-                        )
-                        after_text = self._format_change_value(
-                            getattr(new_active_form, key, None) if new_active_form else None
-                        )
-                        if before_text == after_text:
-                            continue
-                        field_changes.append(
-                            SyncFieldChange(
-                                field=f"active_form.{key}",
-                                before=before_text,
-                                after=after_text,
+                        old_active_form = None
+                        if old_data.forms:
+                            old_active_id = old_data.active_form_id or old_data.forms[0].form_id
+                            old_active_form = next(
+                                (form for form in old_data.forms if form.form_id == old_active_id),
+                                old_data.forms[0],
                             )
-                        )
+                        new_active_form = None
+                        if data.forms:
+                            new_active_id = data.active_form_id or data.forms[0].form_id
+                            new_active_form = next(
+                                (form for form in data.forms if form.form_id == new_active_id),
+                                data.forms[0],
+                            )
 
+                        for key in form_updates:
+                            before_text = self._format_change_value(
+                                getattr(old_active_form, key, None) if old_active_form else None
+                            )
+                            after_text = self._format_change_value(
+                                getattr(new_active_form, key, None) if new_active_form else None
+                            )
+                            if before_text == after_text:
+                                continue
+                            field_changes.append(
+                                SyncFieldChange(
+                                    field=f"active_form.{key}",
+                                    before=before_text,
+                                    after=after_text,
+                                )
+                            )
+
+                        if not field_changes:
+                            return old_data, []
+
+                        if getattr(store, "backend_name", "json") == "sqlite" and hasattr(
+                            store, "update_character_fields"
+                        ):
+                            updated_file = store.update_character_fields(
+                                old_data.character_id,
+                                char_updates,
+                                form_updates,
+                                expected_updated_at=old_data.updated_at,
+                            )
+                            if updated_file is None:
+                                return old_data, []
+                            return updated_file.data, field_changes
+
+                        data = data.model_copy(update={"updated_at": now_local()})
+                        store.save_character(CharacterFile(data=data, version=char_file.version))
+                        return data, field_changes
+
+                    data, field_changes = self._retry_on_optimistic_lock(_update_character)
                     if not field_changes:
                         continue
 
-                    data = data.model_copy(update={"updated_at": now_local()})
-                    store.save_character(CharacterFile(data=data, version=char_file.version))
                     updated_entries.append(data.character_id)
                     affected_characters.add(data.character_id)
                     changes.append(
@@ -939,7 +1007,6 @@ class LoreUpdater:
                     if not char_name or not event:
                         continue
 
-                    char_file = self._ensure_character(store, char_name)
                     importance_raw = item.get("importance", 5)
                     try:
                         importance = int(importance_raw)
@@ -948,20 +1015,32 @@ class LoreUpdater:
                     importance = max(1, min(10, importance))
                     tags = self._normalize_string_list(item.get("tags"))
                     known_by_names = self._normalize_string_list(item.get("known_by"))
-                    known_by_ids = self._resolve_known_by_ids(store, known_by_names)
-                    plot_event_id = self._resolve_plot_event_id(store, item.get("plot_event_name"))
 
-                    memory = CharacterMemory(
-                        memory_id=generate_id(),
-                        event=event,
-                        importance=importance,
-                        tags=list(dict.fromkeys(tags)),
-                        known_by=known_by_ids,
-                        plot_event_id=plot_event_id,
-                        is_consolidated=False,
-                        created_at=now_local(),
-                    )
-                    store.add_memory(char_file.data.character_id, memory)
+                    def _add_memory() -> tuple[CharacterFile, CharacterMemory]:
+                        char_file = self._ensure_character(store, char_name)
+                        known_by_ids = self._resolve_known_by_ids(store, known_by_names)
+                        plot_event_id = self._resolve_plot_event_id(store, item.get("plot_event_name"))
+                        memory = CharacterMemory(
+                            memory_id=generate_id(),
+                            event=event,
+                            importance=importance,
+                            tags=list(dict.fromkeys(tags)),
+                            known_by=known_by_ids,
+                            plot_event_id=plot_event_id,
+                            is_consolidated=False,
+                            created_at=now_local(),
+                        )
+                        if getattr(store, "backend_name", "json") == "sqlite":
+                            store.add_memory(
+                                char_file.data.character_id,
+                                memory,
+                                expected_updated_at=char_file.data.updated_at,
+                            )
+                        else:
+                            store.add_memory(char_file.data.character_id, memory)
+                        return char_file, memory
+
+                    char_file, memory = self._retry_on_optimistic_lock(_add_memory)
                     new_memories += 1
                     affected_characters.add(char_file.data.character_id)
                     changes.append(
@@ -1133,7 +1212,22 @@ class LoreUpdater:
         removed_ids = {memory.memory_id for memory in candidates}
         remained = [memory for memory in memories if memory.memory_id not in removed_ids]
         final_memories = [*remained, *new_memories]
-        store.replace_memories(character_id, final_memories)
+        try:
+            if getattr(store, "backend_name", "json") == "sqlite":
+                store.replace_memories(
+                    character_id,
+                    final_memories,
+                    expected_updated_at=char_file.data.updated_at,
+                )
+            else:
+                store.replace_memories(character_id, final_memories)
+        except OptimisticLockError:
+            return ConsolidateResult(
+                character_id=character_id,
+                removed_count=0,
+                created_count=0,
+                duration_ms=0,
+            )
         store.rebuild_index()
 
         duration_ms = int((perf_counter() - started_at) * 1000)

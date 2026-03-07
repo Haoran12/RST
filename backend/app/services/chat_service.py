@@ -518,53 +518,82 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
     provider = get_provider(api_config.provider)
     store = MessageStore(get_session_dir(session_name))
 
-    history = _load_history(store, session.mem_length)
     has_explicit_input = bool(payload.content.strip()) or bool(payload.attachments)
-    prompt_history = history
+    prompt_history: list[Message]
     user_message: Message | None = None
 
-    if has_explicit_input:
-        user_input = _compose_user_input(payload.content, payload.attachments)
-        user_message = Message(
-            id=payload.message_id or generate_id(),
-            role="user",
-            content=payload.content,
-            timestamp=now_local(),
-            visible=True,
-            attachments=payload.attachments,
-        )
-        store.append(user_message)
+    if payload.regenerate:
+        if has_explicit_input:
+            raise ChatConfigError("Regenerate request does not accept content or attachments")
+        latest_messages = store.load_recent(1)
+        latest_message = latest_messages[0] if latest_messages else None
+        if latest_message is None or latest_message.role != "assistant":
+            raise ChatConfigError("Regenerate requires latest message to be assistant")
+        if not store.delete_message(latest_message.id):
+            raise ChatConfigError("Failed to delete latest assistant message")
         touch_session(session_name)
-    else:
-        latest_visible = store.find_latest_visible()
-        if latest_visible is not None and latest_visible.role == "user":
+
+        history = _load_history(store, session.mem_length)
+        prompt_history = history
+        previous_messages = store.load_recent(1)
+        previous_message = previous_messages[0] if previous_messages else None
+        if previous_message is not None and previous_message.role == "user":
             user_input = _compose_user_input(
-                latest_visible.content,
-                latest_visible.attachments,
+                previous_message.content,
+                previous_message.attachments,
             )
-            prompt_history = [msg for msg in history if msg.id != latest_visible.id]
+            prompt_history = [msg for msg in history if msg.id != previous_message.id]
         else:
             user_input = "continue"
+    else:
+        history = _load_history(store, session.mem_length)
+        prompt_history = history
+        if has_explicit_input:
+            user_input = _compose_user_input(payload.content, payload.attachments)
+            user_message = Message(
+                id=payload.message_id or generate_id(),
+                role="user",
+                content=payload.content,
+                timestamp=now_local(),
+                visible=True,
+                attachments=payload.attachments,
+            )
+            store.append(user_message)
+            touch_session(session_name)
+        else:
+            latest_visible = store.find_latest_visible()
+            if latest_visible is not None and latest_visible.role == "user":
+                user_input = _compose_user_input(
+                    latest_visible.content,
+                    latest_visible.attachments,
+                )
+                prompt_history = [msg for msg in history if msg.id != latest_visible.id]
+            else:
+                user_input = "continue"
 
     lores_block = ""
     if session.mode == "RST" and session.scheduler_api_config_id:
-        schedule_messages = _load_history(store, session.scan_depth)
-        try:
-            if has_explicit_input:
-                lores_block = await lore_scheduler.full_schedule(
-                    session_name=session_name,
-                    messages=schedule_messages,
-                    scan_depth=session.scan_depth,
-                    user_input=user_input,
-                    scheduler_api_config_id=session.scheduler_api_config_id,
-                )
-            else:
-                lores_block = await lore_scheduler.full_schedule_from_cache(
-                    session_name=session_name,
-                    scheduler_api_config_id=session.scheduler_api_config_id,
-                )
-        except Exception:
-            lores_block = ""
+        if payload.regenerate:
+            state = rst_runtime_service.get_session_state(session_name)
+            lores_block = str(state.get("last_injection_block", "") or "")
+        else:
+            schedule_messages = _load_history(store, session.scan_depth)
+            try:
+                if has_explicit_input:
+                    lores_block = await lore_scheduler.full_schedule(
+                        session_name=session_name,
+                        messages=schedule_messages,
+                        scan_depth=session.scan_depth,
+                        user_input=user_input,
+                        scheduler_api_config_id=session.scheduler_api_config_id,
+                    )
+                else:
+                    lores_block = await lore_scheduler.full_schedule_from_cache(
+                        session_name=session_name,
+                        scheduler_api_config_id=session.scheduler_api_config_id,
+                    )
+            except Exception:
+                lores_block = ""
     elif session.mode == "ST":
         lore_store = LoreStore(get_session_dir(session_name))
         st_messages = _load_history(store, session.scan_depth)
@@ -745,8 +774,11 @@ async def run_chat(session_name: str, payload: ChatRequest) -> ChatResponse:
         rst_runtime_service.register_task(session_name, pre_retrieve_task)
 
         state = rst_runtime_service.get_session_state(session_name)
-        rounds = int(state.get("rounds_since_sync", 0)) + 1
-        if rounds >= session.lore_sync_interval:
+        rounds = int(state.get("rounds_since_sync", 0))
+        if not payload.regenerate:
+            rounds += 1
+
+        if not payload.regenerate and rounds >= session.lore_sync_interval:
 
             async def _safe_sync() -> None:
                 try:

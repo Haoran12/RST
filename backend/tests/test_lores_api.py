@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.models import generate_id
@@ -642,6 +644,77 @@ async def test_scene_state_get_and_put(async_client, sample_api_config) -> None:
     assert payload["current_location"] == "泽源·潮汐城·港口"
     assert payload["characters"] == ["柳璃", "小溪"]
     assert payload["updated_at"]
+
+
+@pytest.mark.asyncio
+async def test_lore_snapshot_export_and_import(async_client, sample_api_config) -> None:
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    source_session = "LoreSnapshotSource"
+    target_session = "LoreSnapshotTarget"
+    await _create_session(async_client, source_session, config_id, preset_id, config_id)
+    await _create_session(async_client, target_session, config_id, preset_id, config_id)
+
+    created_entry = await async_client.post(
+        f"/sessions/{source_session}/lores/entries",
+        json={
+            "name": "北境高塔",
+            "category": "place",
+            "content": "守望北境的高塔。",
+            "tags": ["高塔"],
+        },
+    )
+    assert created_entry.status_code == 201
+
+    created_character = await async_client.post(
+        f"/sessions/{source_session}/lores/characters",
+        json={
+            "name": "艾丝特",
+            "race": "Human",
+            "role": "Scout",
+        },
+    )
+    assert created_character.status_code == 201
+
+    updated_scene = await async_client.put(
+        f"/sessions/{source_session}/lores/scene",
+        json={
+            "current_time": "黎明",
+            "current_location": "北境高塔",
+            "characters": ["艾丝特"],
+        },
+    )
+    assert updated_scene.status_code == 200
+
+    exported = await async_client.get(f"/sessions/{source_session}/lores/export")
+    assert exported.status_code == 200
+    snapshot = exported.json()
+    assert snapshot["format"] == "rst-lore-snapshot-v1"
+    assert len(snapshot["entries"]) == 1
+    assert len(snapshot["characters"]) == 1
+
+    imported = await async_client.post(
+        f"/sessions/{target_session}/lores/import-json",
+        files={"file": ("snapshot.json", json.dumps(snapshot), "application/json")},
+    )
+    assert imported.status_code == 204
+
+    target_entries = await async_client.get(
+        f"/sessions/{target_session}/lores/entries",
+        params={"category": "place"},
+    )
+    assert target_entries.status_code == 200
+    assert target_entries.json()["total"] == 1
+    assert target_entries.json()["entries"][0]["name"] == "北境高塔"
+
+    target_characters = await async_client.get(f"/sessions/{target_session}/lores/characters")
+    assert target_characters.status_code == 200
+    assert target_characters.json()["total"] == 1
+    assert target_characters.json()["characters"][0]["name"] == "艾丝特"
+
+    target_scene = await async_client.get(f"/sessions/{target_session}/lores/scene")
+    assert target_scene.status_code == 200
+    assert target_scene.json()["current_location"] == "北境高塔"
 
 
 

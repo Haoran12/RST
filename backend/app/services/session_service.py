@@ -12,14 +12,8 @@ from app.models.session import (
     SessionSummary,
     SessionUpdate,
 )
-from app.models.lore import (
-    LoreCategory,
-    LoreFile,
-    LoreIndex,
-    SceneStateFile,
-    SchedulerPromptTemplate,
-)
 from app.storage.file_io import read_json, write_json
+from app.storage.sqlite_lore_store import SQLiteLoreStore
 from app.time_utils import now_local, to_local_tz
 
 
@@ -123,32 +117,9 @@ def create_session(payload: SessionCreate) -> SessionResponse:
     session_dir.mkdir(parents=True, exist_ok=True)
     _write_session(meta)
     write_json(_messages_path(payload.name), [])
-    rst_data = session_dir / "rst_data"
-    (rst_data / "characters").mkdir(parents=True, exist_ok=True)
-    (rst_data / ".index").mkdir(parents=True, exist_ok=True)
-    default_world = rst_data / "default"
-    default_world.mkdir(parents=True, exist_ok=True)
 
-    for category in (
-        LoreCategory.WORLD_BASE,
-        LoreCategory.SOCIETY,
-        LoreCategory.PLACE,
-        LoreCategory.FACTION,
-        LoreCategory.SKILLS,
-        LoreCategory.OTHERS,
-        LoreCategory.PLOT,
-    ):
-        lore_file = LoreFile(world_id="default", category=category, entries=[])
-        write_json(default_world / f"{category.value}.json", lore_file.model_dump(mode="json"))
-
-    empty_index = LoreIndex(items=[], updated_at=now)
-    write_json(rst_data / ".index" / "index.json", empty_index.model_dump(mode="json"))
-
-    empty_scene_state = SceneStateFile()
-    write_json(rst_data / "scene_state.json", empty_scene_state.model_dump(mode="json"))
-
-    default_template = SchedulerPromptTemplate()
-    write_json(rst_data / "scheduler_template.json", default_template.model_dump(mode="json"))
+    # New sessions use SQLite as the canonical lore store.
+    SQLiteLoreStore(session_dir)
     return _to_response(meta)
 
 

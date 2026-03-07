@@ -102,6 +102,11 @@ export interface CharacterData {
   updated_at: string;
 }
 
+export interface CharacterFilePayload {
+  data: CharacterData;
+  version: number;
+}
+
 export interface LoreEntry {
   id: string;
   name: string;
@@ -337,4 +342,12 @@ export interface ConsolidateResult {
   removed_count: number;
   created_count: number;
   duration_ms: number;
+}
+
+export interface LoreSnapshotBundle {
+  format: "rst-lore-snapshot-v1";
+  entries: LoreEntry[];
+  characters: CharacterFilePayload[];
+  scene_state: SceneState;
+  scheduler_template: SchedulerPromptTemplate;
 }

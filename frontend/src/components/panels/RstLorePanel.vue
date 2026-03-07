@@ -3,6 +3,9 @@
     <header class="panel-header">
       <div class="panel-title">{{ t("rstPanel.title") }}</div>
       <div class="header-actions">
+        <n-tag size="small" :bordered="false" type="info">
+          {{ currentSession?.name ?? t("rstPanel.session.unselected") }}
+        </n-tag>
         <n-button
           size="small"
           secondary
@@ -11,9 +14,14 @@
         >
           {{ t("rstPanel.import.open") }}
         </n-button>
-        <n-tag size="small" :bordered="false" type="info">
-          {{ currentSession?.name ?? t("rstPanel.session.unselected") }}
-        </n-tag>
+        <n-button
+          size="small"
+          secondary
+          :disabled="!currentSession || loreStore.loading"
+          @click="handleExportJson"
+        >
+          {{ t("rstPanel.export.open") }}
+        </n-button>
       </div>
     </header>
 
@@ -886,7 +894,9 @@ import {
   createEntry,
   deleteCharacter,
   deleteMemory,
+  exportLoreJson,
   getEntry,
+  importLoreJson,
   listCharacters,
   listEntries,
   setActiveForm,
@@ -908,6 +918,7 @@ import type {
   ConversionReport,
   LoreCategory,
   LoreEntry,
+  LoreSnapshotBundle,
   Relationship,
   SyncChange,
 } from "@/types/lore";
@@ -3145,18 +3156,95 @@ function openImportPicker() {
   importInputRef.value?.click();
 }
 
-function handleFileChange(event: Event) {
+function buildExportFilename(sessionName: string): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeSessionName = sessionName.replace(/[\\/:*?"<>|\s]+/g, "-");
+  return `${safeSessionName}-rst-lores-${stamp}.json`;
+}
+
+function downloadSnapshotBundle(bundle: LoreSnapshotBundle, sessionName: string) {
+  const payload = JSON.stringify(bundle, null, 2);
+  const blob = new Blob([payload], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = buildExportFilename(sessionName);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function isSnapshotBundlePayload(payload: unknown): payload is LoreSnapshotBundle {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+  const candidate = payload as Partial<LoreSnapshotBundle>;
+  return (
+    candidate.format === "rst-lore-snapshot-v1"
+    && Array.isArray(candidate.entries)
+    && Array.isArray(candidate.characters)
+    && typeof candidate.scene_state === "object"
+    && typeof candidate.scheduler_template === "object"
+  );
+}
+
+async function importSnapshotBundle(sessionName: string, file: File) {
+  await importLoreJson(sessionName, file);
+  await refreshLorePanelData(sessionName);
+  await loreStore.refreshSchedulerState(sessionName);
+  notifyLoreDataChanged(sessionName, "rst-lore-panel");
+  message.success(t("rstPanel.messages.snapshot_import_done"));
+}
+
+async function handleExportJson() {
+  if (!currentSession.value?.name) {
+    return;
+  }
+  const sessionName = currentSession.value.name;
+  try {
+    const bundle = await exportLoreJson(sessionName);
+    downloadSnapshotBundle(bundle, sessionName);
+    message.success(t("rstPanel.messages.export_done"));
+  } catch (error) {
+    message.error(parseApiError(error));
+  }
+}
+
+async function handleFileChange(event: Event) {
   const target = event.target as HTMLInputElement;
   const files = target.files ? Array.from(target.files) : [];
   if (files.length === 0) {
     return;
   }
-  importingFile.value = files[0];
+  const selectedFile = files[0];
+  const sessionName = currentSession.value?.name;
+  target.value = "";
+  if (!sessionName) {
+    return;
+  }
+
+  let parsed: unknown = null;
+  try {
+    const raw = await selectedFile.text();
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    // Fall back to legacy static lore import flow.
+  }
+
+  if (isSnapshotBundlePayload(parsed)) {
+    try {
+      await importSnapshotBundle(sessionName, selectedFile);
+    } catch (error) {
+      message.error(parseApiError(error));
+    }
+    return;
+  }
+
+  importingFile.value = selectedFile;
   splitFactionCharacters.value = false;
   importLlmFallback.value = true;
   importModalVisible.value = true;
-  // Reset input value so selecting the same file triggers change again.
-  target.value = "";
 }
 
 function closeImportModal() {
@@ -3327,6 +3415,8 @@ function actionLabel(action: string): string {
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 

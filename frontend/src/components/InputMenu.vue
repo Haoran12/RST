@@ -40,7 +40,7 @@ import { useChatStore } from "@/stores/chat";
 
 const chatStore = useChatStore();
 const { t } = useI18n();
-const { hasMessages } = storeToRefs(chatStore);
+const { hasMessages, canRegenerate } = storeToRefs(chatStore);
 
 const isMenuOpen = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -53,7 +53,7 @@ const menuItems = computed(() => [
     disabled: !hasMessages.value,
   },
   { label: t("inputMenu.action.batch_hide"), action: "batch-hide", disabled: !hasMessages.value },
-  { label: t("inputMenu.action.regenerate_soon"), action: "regenerate", disabled: true },
+  { label: t("inputMenu.action.regenerate"), action: "regenerate", disabled: !canRegenerate.value },
   { label: t("inputMenu.action.preview_prompt_soon"), action: "preview", disabled: true },
   { label: t("inputMenu.action.ai_assist_soon"), action: "assist", disabled: true },
 ]);
@@ -80,6 +80,9 @@ const handleAction = (action: string) => {
       break;
     case "batch-hide":
       chatStore.enterBatchMode("hide");
+      break;
+    case "regenerate":
+      void chatStore.regenerateLatestAssistant();
       break;
     default:
       message.info(t("inputMenu.info.unavailable"));

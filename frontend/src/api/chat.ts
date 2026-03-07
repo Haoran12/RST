@@ -10,6 +10,7 @@ export interface ChatRequest {
   content: string;
   attachments?: ChatAttachment[];
   message_id?: string;
+  regenerate?: boolean;
 }
 
 export interface ChatResponse {

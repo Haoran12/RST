@@ -35,6 +35,16 @@ from app.time_utils import now_local_iso
 
 
 MAX_CANDIDATES_AFTER_EXPANSION = 50
+CHARACTER_CANDIDATE_QUOTA = 8
+PLOT_MEMORY_CANDIDATE_QUOTA = 15
+OTHER_CANDIDATE_QUOTA = 15
+NLP_RETRIEVE_TOP_K = (
+    CHARACTER_CANDIDATE_QUOTA
+    + PLOT_MEMORY_CANDIDATE_QUOTA
+    + OTHER_CANDIDATE_QUOTA
+)
+NLP_RETRIEVE_POOL_SIZE = 80
+SQLITE_RETRIEVE_POOL_SIZE = 80
 
 
 class LoreScheduler:
@@ -80,7 +90,28 @@ class LoreScheduler:
                 continue
             if character.name and character.name.lower() in text:
                 present.add(character.character_id)
+                continue
+            if any(alias.strip() and alias.strip().lower() in text for alias in character.aliases):
+                present.add(character.character_id)
         return present
+
+    def _explicit_character_ids(self, store: LoreStore, text: str) -> list[str]:
+        lowered = text.lower()
+        matched: list[str] = []
+        seen: set[str] = set()
+        for character in store.list_characters():
+            keys = [
+                character.character_id,
+                character.name,
+                *character.aliases,
+            ]
+            if not any(key and key.strip() and key.strip().lower() in lowered for key in keys):
+                continue
+            if character.character_id in seen:
+                continue
+            seen.add(character.character_id)
+            matched.append(character.character_id)
+        return matched
 
     def _memory_visible(
         self,
@@ -129,6 +160,100 @@ class LoreScheduler:
                 seen.add(entry_id)
                 merged.append(entry_id)
         return merged
+
+    def _prioritize_candidate_ids(
+        self,
+        candidate_ids: list[str],
+        items_by_id: dict[str, LoreIndexEntry],
+        explicit_character_ids: list[str],
+    ) -> list[str]:
+        explicit_set = set(explicit_character_ids)
+
+        explicit_characters: list[str] = []
+        regular_characters: list[str] = []
+        plot_memory: list[str] = []
+        others: list[str] = []
+
+        for entry_id in candidate_ids:
+            item = items_by_id.get(entry_id)
+            if item is None:
+                continue
+            if item.category == LoreCategory.CHARACTER:
+                if entry_id in explicit_set:
+                    explicit_characters.append(entry_id)
+                else:
+                    regular_characters.append(entry_id)
+                continue
+            if item.category in {LoreCategory.PLOT, LoreCategory.MEMORY}:
+                plot_memory.append(entry_id)
+                continue
+            others.append(entry_id)
+
+        selected_characters = self._merge_ids(explicit_characters, regular_characters)[
+            :CHARACTER_CANDIDATE_QUOTA
+        ]
+        selected_plot_memory = plot_memory[:PLOT_MEMORY_CANDIDATE_QUOTA]
+        selected_others = others[:OTHER_CANDIDATE_QUOTA]
+        selected = self._merge_ids(selected_characters, selected_plot_memory, selected_others)
+
+        # Backfill when any bucket is under-filled to avoid returning too few candidates.
+        remaining_characters = [entry_id for entry_id in regular_characters if entry_id not in selected]
+        remaining_plot_memory = [entry_id for entry_id in plot_memory if entry_id not in selected]
+        remaining_others = [entry_id for entry_id in others if entry_id not in selected]
+        backfill = self._merge_ids(remaining_characters, remaining_plot_memory, remaining_others)
+        return self._merge_ids(selected, backfill)
+
+    def _retrieve_ranked_ids(
+        self,
+        query_text: str,
+        store: LoreStore,
+        engine: LoreNlpEngine,
+        items_by_id: dict[str, LoreIndexEntry],
+    ) -> tuple[list[str], list[str]]:
+        if not query_text.strip():
+            return [], []
+
+        explicit_character_ids = self._explicit_character_ids(store, query_text)
+        pool_size = max(NLP_RETRIEVE_TOP_K, NLP_RETRIEVE_POOL_SIZE)
+        sqlite_ids: list[str] = []
+        if getattr(store, "backend_name", "json") == "sqlite":
+            sqlite_ids = self._retrieve_sqlite_ranked_ids(
+                query_text,
+                store,
+                items_by_id,
+                limit=max(NLP_RETRIEVE_TOP_K, SQLITE_RETRIEVE_POOL_SIZE),
+            )
+        pool_ids = engine.retrieve(query_text, top_k=pool_size)
+        merged = self._merge_ids(explicit_character_ids, sqlite_ids, pool_ids)
+        ranked = self._prioritize_candidate_ids(merged, items_by_id, explicit_character_ids)
+        return ranked[:NLP_RETRIEVE_TOP_K], explicit_character_ids
+
+    def _retrieve_sqlite_ranked_ids(
+        self,
+        query_text: str,
+        store: LoreStore,
+        items_by_id: dict[str, LoreIndexEntry],
+        limit: int,
+    ) -> list[str]:
+        scored: list[tuple[str, float]] = []
+        if hasattr(store, "search_characters"):
+            scored.extend(store.search_characters(query_text, limit=limit))
+        if hasattr(store, "search_entries"):
+            scored.extend(store.search_entries(query_text, limit=limit))
+
+        if not scored:
+            return []
+
+        best_scores: dict[str, float] = {}
+        for entry_id, score in scored:
+            if entry_id not in items_by_id:
+                continue
+            current = best_scores.get(entry_id)
+            if current is None or score < current:
+                best_scores[entry_id] = score
+
+        ranked_ids = sorted(best_scores, key=lambda entry_id: best_scores[entry_id])
+        return ranked_ids[:limit]
 
     def _build_alias_index(self, store: LoreStore) -> dict[str, list[str]]:
         alias_to_ids: dict[str, list[str]] = {}
@@ -462,12 +587,18 @@ class LoreScheduler:
         items_by_id = {item.entry_id: item for item in enabled_items}
         constant_ids = [item.entry_id for item in enabled_items if item.constant]
         engine = self._engine(session_name, enabled_items)
-        nlp_ids = engine.retrieve(context, top_k=20)
+        nlp_ids, explicit_character_ids = self._retrieve_ranked_ids(
+            context,
+            store,
+            engine,
+            items_by_id,
+        )
         first_round_ids = self._merge_ids(constant_ids, nlp_ids)
         expanded_ids = self._expand_related_ids(store, engine, first_round_ids, items_by_id)
 
         present_character_ids = self._present_character_ids(store, context)
         merged = self._merge_ids(constant_ids, nlp_ids, expanded_ids)
+        merged = self._prioritize_candidate_ids(merged, items_by_id, explicit_character_ids)
         capped = self._cap_candidates_after_expansion(constant_ids, merged)
         filtered = self._filter_memory_candidates(store, items_by_id, capped, present_character_ids)
 
@@ -543,7 +674,12 @@ class LoreScheduler:
             items_by_id = {item.entry_id: item for item in enabled_items}
             constant_ids = [item.entry_id for item in enabled_items if item.constant]
             engine = self._engine(session_name, enabled_items)
-            user_ids = engine.retrieve(user_input, top_k=20) if user_input.strip() else []
+            user_ids, explicit_user_ids = self._retrieve_ranked_ids(
+                user_input,
+                store,
+                engine,
+                items_by_id,
+            )
             user_expanded_ids = self._expand_related_ids(
                 store,
                 engine,
@@ -551,7 +687,13 @@ class LoreScheduler:
                 items_by_id,
             )
             present_character_ids = self._present_character_ids(store, context)
+            explicit_context_ids = self._explicit_character_ids(store, context)
             merged = self._merge_ids(constant_ids, cached, user_ids, user_expanded_ids)
+            merged = self._prioritize_candidate_ids(
+                merged,
+                items_by_id,
+                self._merge_ids(explicit_context_ids, explicit_user_ids),
+            )
             capped = self._cap_candidates_after_expansion(constant_ids, merged)
             candidate_ids = self._filter_memory_candidates(
                 store,
@@ -588,7 +730,12 @@ class LoreScheduler:
 
         constant_ids = [item.entry_id for item in enabled_items if item.constant]
         engine = self._engine(session_name, enabled_items)
-        user_ids = engine.retrieve(user_input, top_k=20) if user_input.strip() else []
+        user_ids, explicit_user_ids = self._retrieve_ranked_ids(
+            user_input,
+            store,
+            engine,
+            items_by_id,
+        )
         user_expanded_ids = self._expand_related_ids(
             store,
             engine,
@@ -599,8 +746,14 @@ class LoreScheduler:
         selected_messages = self._select_messages(messages, scan_depth)
         context = self._conversation_text(selected_messages)
         present_character_ids = self._present_character_ids(store, context)
+        explicit_context_ids = self._explicit_character_ids(store, context)
 
         merged = self._merge_ids(constant_ids, cached, user_ids, user_expanded_ids)
+        merged = self._prioritize_candidate_ids(
+            merged,
+            items_by_id,
+            self._merge_ids(explicit_context_ids, explicit_user_ids),
+        )
         capped = self._cap_candidates_after_expansion(constant_ids, merged)
         filtered = self._filter_memory_candidates(store, items_by_id, capped, present_character_ids)
         try:

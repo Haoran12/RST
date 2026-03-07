@@ -9,6 +9,7 @@ class ChatRequest(BaseModel):
     content: str = ""
     attachments: list[ChatAttachment] | None = None
     message_id: str | None = None
+    regenerate: bool = False
 
 
 class ChatResponse(BaseModel):

@@ -43,6 +43,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "inputMenu.action.attach_file": "Attach file",
     "inputMenu.action.batch_delete": "Batch delete",
     "inputMenu.action.batch_hide": "Batch hide",
+    "inputMenu.action.regenerate": "Regenerate",
     "contentArea.batch.selected": "selected",
     "contentArea.batch.confirm_delete": "Confirm Delete",
     "contentArea.batch.confirm_hide": "Confirm Hide",
@@ -180,6 +181,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "contentOverlay.section.no_match": "No matching fields.",
     "rstPanel.title": "RST Lore",
     "rstPanel.import.open": "Import Static Lore",
+    "rstPanel.export.open": "Export JSON",
     "rstPanel.session.unselected": "No Session Selected",
     "rstPanel.empty.hint": "Select a session in Session panel first.",
     "rstPanel.tabs.entries": "Entries",
@@ -445,6 +447,9 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "Background import detected and synced. RST panel has been refreshed.",
     "rstPanel.messages.import_timeout_refresh_done":
       "Background check finished. RST panel has been refreshed to latest data.",
+    "rstPanel.messages.snapshot_import_done":
+      "JSON snapshot imported. RST panel has been refreshed.",
+    "rstPanel.messages.export_done": "JSON snapshot exported.",
     "rstPanel.messages.scheduler_hits_load_failed":
       "Failed to resolve matched entry names. Showing raw IDs.",
     "rstPanel.report.action_type.generic_entry_created": "Generic entry imported",
@@ -506,6 +511,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "inputMenu.action.attach_file": "\u9644\u52a0\u6587\u4ef6",
     "inputMenu.action.batch_delete": "\u6279\u91cf\u5220\u9664",
     "inputMenu.action.batch_hide": "\u6279\u91cf\u9690\u85cf",
+    "inputMenu.action.regenerate": "\u91cd\u65b0\u751f\u6210",
     "contentArea.batch.selected": "\u5df2\u9009",
     "contentArea.batch.confirm_delete": "\u786e\u8ba4\u5220\u9664",
     "contentArea.batch.confirm_hide": "\u786e\u8ba4\u9690\u85cf",
@@ -651,6 +657,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "contentOverlay.section.no_match": "\u6ca1\u6709\u5339\u914d\u7684\u5b57\u6bb5",
     "rstPanel.title": "RST \u8bbe\u5b9a",
     "rstPanel.import.open": "\u5bfc\u5165\u9759\u6001\u8bbe\u5b9a",
+    "rstPanel.export.open": "\u5bfc\u51fa JSON",
     "rstPanel.session.unselected": "\u672a\u9009\u62e9\u4f1a\u8bdd",
     "rstPanel.empty.hint": "\u8bf7\u5148\u5728\u4f1a\u8bdd\u9762\u677f\u4e2d\u9009\u62e9\u4f1a\u8bdd",
     "rstPanel.tabs.entries": "\u8bcd\u6761",
@@ -926,6 +933,9 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "\u5df2\u68c0\u6d4b\u5230\u540e\u53f0\u5bfc\u5165\u5e76\u5b8c\u6210\u540c\u6b65\uff0cRST \u9762\u677f\u5df2\u5237\u65b0",
     "rstPanel.messages.import_timeout_refresh_done":
       "\u540e\u53f0\u8ddf\u8e2a\u5df2\u5b8c\u6210\uff0cRST \u9762\u677f\u5df2\u5237\u65b0\u5230\u6700\u65b0\u6570\u636e",
+    "rstPanel.messages.snapshot_import_done":
+      "\u5df2\u5bfc\u5165 JSON \u5feb\u7167\uff0cRST \u9762\u677f\u5df2\u5237\u65b0",
+    "rstPanel.messages.export_done": "\u5df2\u5bfc\u51fa JSON \u5feb\u7167",
     "rstPanel.messages.scheduler_hits_load_failed":
       "\u65e0\u6cd5\u89e3\u6790\u547d\u4e2d\u6761\u76ee\u540d\u79f0\uff0c\u5c06\u663e\u793a\u539f\u59cb ID",
     "rstPanel.report.action_type.generic_entry_created": "\u5df2\u5bfc\u5165\u901a\u7528\u8bcd\u6761",
