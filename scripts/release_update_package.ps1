@@ -22,10 +22,6 @@ function Write-Utf8File([string]$Path, [string]$Content) {
   [System.IO.File]::WriteAllText($Path, $normalized, $utf8NoBom)
 }
 
-function Join-CodePoints([int[]]$Points) {
-  return (-join ($Points | ForEach-Object { [char]$_ }))
-}
-
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
 
@@ -61,13 +57,9 @@ if (-not (Test-Path $distIndex)) {
 }
 
 $releaseRoot = Join-Path $repoRoot "release"
-$packageName = "RST-$Version-quickstart"
+$packageName = "RST-$Version-update"
 $packageDir = Join-Path $releaseRoot $packageName
 $zipPath = Join-Path $releaseRoot "$packageName.zip"
-$installEntryName = "setup.bat"
-$startEntryName = "start.vbs"
-$stopEntryName = "stop.vbs"
-$quickstartZhName = "README-quickstart.md"
 $manifestName = "release-manifest.json"
 
 if (-not (Test-Path $releaseRoot)) {
@@ -83,9 +75,6 @@ New-Item -ItemType Directory -Path $packageDir | Out-Null
 
 $copyItems = @(
   ".env.example",
-  "README.md",
-  "README.en.md",
-  "README.zh-CN.md",
   "backend/app",
   "backend/pyproject.toml",
   "backend/uv.lock",
@@ -96,11 +85,7 @@ $copyItems = @(
   "scripts/release_stop.vbs",
   "scripts/release_update_from_github.ps1",
   "scripts/release_update_from_github.bat",
-  "scripts/release_check.ps1",
-  "scripts/release_check.bat",
-  "scripts/release_build.bat",
-  "scripts/setup_release.bat",
-  "scripts/release_quick_start.bat"
+  "scripts/setup_release.bat"
 )
 
 foreach ($item in $copyItems) {
@@ -123,69 +108,58 @@ Get-ChildItem -Path $packageDir -Recurse -Directory -Filter "__pycache__" |
 Get-ChildItem -Path $packageDir -Recurse -File -Filter "*.pyc" |
   Remove-Item -Force
 
-$rootInstall = @"
+$updateEntryName = "apply-update.bat"
+$readmeName = "UPDATE.md"
+
+$rootUpdate = @"
 @echo off
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
-echo [INFO] Starting runtime setup/update...
+echo [INFO] RST update mode
+echo [INFO] This package updates app files only.
+echo [INFO] Existing .env, data\ and logs\ are preserved.
+echo.
+
+if not exist "scripts\setup_release.bat" (
+  echo [ERROR] Missing scripts\setup_release.bat
+  pause
+  exit /b 1
+)
+
+if not exist "backend\pyproject.toml" (
+  echo [ERROR] Missing backend\pyproject.toml
+  pause
+  exit /b 1
+)
+
+if exist "scripts\release_stop.vbs" (
+  echo [INFO] Stopping running RST process...
+  wscript.exe "%~dp0scripts\release_stop.vbs"
+)
+
+echo.
+echo [INFO] Refreshing runtime dependencies...
 call "%~dp0scripts\setup_release.bat"
 if errorlevel 1 (
   echo.
-  echo [ERROR] Setup failed. Please fix the error above and try again.
+  echo [ERROR] Update failed during runtime setup.
+  echo [ERROR] Existing user data was not removed.
   pause
   exit /b 1
 )
 
 echo.
-echo [OK] Runtime setup complete.
-echo [INFO] You can now double-click "$startEntryName" to start RST.
+echo [OK] Update complete.
+echo [INFO] Existing .env, data\ and logs\ remain untouched.
 choice /C YN /N /T 5 /D N /M "Start RST now? [Y/N]: "
 if errorlevel 2 exit /b 0
 wscript.exe "%~dp0scripts\release_start.vbs"
 "@
-Write-Utf8File -Path (Join-Path $packageDir $installEntryName) -Content $rootInstall
+Write-Utf8File -Path (Join-Path $packageDir $updateEntryName) -Content $rootUpdate
 
-$rootStart = @"
-Option Explicit
-
-Dim fso, shell, root, scriptPath
-Set fso = CreateObject("Scripting.FileSystemObject")
-Set shell = CreateObject("WScript.Shell")
-
-root = fso.GetParentFolderName(WScript.ScriptFullName)
-scriptPath = root & "\scripts\release_start.vbs"
-
-If Not fso.FileExists(scriptPath) Then
-  MsgBox "Missing scripts\release_start.vbs", 48, "RST"
-  WScript.Quit 1
-End If
-
-shell.Run "wscript.exe """ & scriptPath & """", 0, False
-"@
-Write-Utf8File -Path (Join-Path $packageDir $startEntryName) -Content $rootStart
-
-$rootStop = @"
-Option Explicit
-
-Dim fso, shell, root, scriptPath
-Set fso = CreateObject("Scripting.FileSystemObject")
-Set shell = CreateObject("WScript.Shell")
-
-root = fso.GetParentFolderName(WScript.ScriptFullName)
-scriptPath = root & "\scripts\release_stop.vbs"
-
-If Not fso.FileExists(scriptPath) Then
-  MsgBox "Missing scripts\release_stop.vbs", 48, "RST"
-  WScript.Quit 1
-End If
-
-shell.Run "wscript.exe """ & scriptPath & """", 0, False
-"@
-Write-Utf8File -Path (Join-Path $packageDir $stopEntryName) -Content $rootStop
-
-$rootUpdate = @"
+$rootGithubUpdate = @"
 @echo off
 chcp 65001 >nul
 setlocal
@@ -200,7 +174,7 @@ if errorlevel 1 (
   exit /b 1
 )
 "@
-Write-Utf8File -Path (Join-Path $packageDir "update.bat") -Content $rootUpdate
+Write-Utf8File -Path (Join-Path $packageDir "update.bat") -Content $rootGithubUpdate
 
 $manifest = @{
   app_name = "RST"
@@ -211,35 +185,43 @@ $manifest = @{
 } | ConvertTo-Json
 Write-Utf8File -Path (Join-Path $packageDir $manifestName) -Content $manifest
 
-$newline = [Environment]::NewLine
-$quickstartBody = @(
-  ('# RST {0} Quick Start' -f $Version),
-  '',
-  'After extracting the zip, use the 3 entry files in the package root:',
-  '',
-  ('- {0}: install or update the runtime dependencies' -f $installEntryName),
-  ('- {0}: start RST in the background and open the browser' -f $startEntryName),
-  ('- {0}: stop the background RST process' -f $stopEntryName),
-  ('- update.bat: fetch and apply the latest GitHub Release update package'),
-  '',
-  'Recommended order:',
-  '',
-  ('1. Run {0}' -f $installEntryName),
-  ('2. Then run {0}' -f $startEntryName),
-  ('3. When finished, run {0}' -f $stopEntryName),
-  ('4. For future fixes, run update.bat'),
-  '',
-  'Notes:',
-  '',
-  '- .env is created from .env.example when needed',
-  '- background logs and PID files are stored under logs/',
-  '- advanced helper scripts remain under scripts/'
-) -join $newline
-Write-Utf8File -Path (Join-Path $packageDir $quickstartZhName) -Content $quickstartBody
-Write-Utf8File -Path (Join-Path $packageDir "QUICKSTART.md") -Content $quickstartBody
+$updateReadme = @'
+# RST __VERSION__ Update Package
 
-Write-Info "Creating package archive..."
+This update package is designed for existing release users.
+
+What it updates:
+- `backend/app`
+- `backend/pyproject.toml`
+- `backend/uv.lock`
+- `frontend/dist`
+- release runtime scripts
+
+What it does not include:
+- `.env`
+- `data/`
+- `logs/`
+- `backend/.venv/`
+
+Recommended user steps:
+1. Stop RST if it is running.
+2. Extract this zip directly into the existing RST install folder.
+3. Allow Windows to overwrite the packaged app files.
+4. Run `apply-update.bat`.
+5. Start RST again.
+
+After this update is installed, users can also run `update.bat` to fetch future fixes directly from GitHub Release.
+
+Notes:
+- User data stays in place because the update zip does not ship `data/`.
+- `.env` is preserved because the update zip does not ship `.env`.
+- `apply-update.bat` reruns `scripts\setup_release.bat` so locked backend deps stay in sync.
+'@
+$updateReadme = $updateReadme.Replace("__VERSION__", $Version)
+Write-Utf8File -Path (Join-Path $packageDir $readmeName) -Content $updateReadme
+
+Write-Info "Creating update archive..."
 Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath -CompressionLevel Optimal
 
-Write-Host "[OK] Package folder: $packageDir" -ForegroundColor Green
-Write-Host "[OK] Package zip: $zipPath" -ForegroundColor Green
+Write-Host "[OK] Update folder: $packageDir" -ForegroundColor Green
+Write-Host "[OK] Update zip: $zipPath" -ForegroundColor Green

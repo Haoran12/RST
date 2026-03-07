@@ -2,7 +2,7 @@ param(
   [string]$Tag = "v0.3",
   [string]$Title = "RST v0.3",
   [string]$NotesFile = "docs/release-notes-v0.3.md",
-  [string]$AssetPath,
+  [string[]]$AssetPath,
   [switch]$Draft,
   [switch]$Prerelease
 )
@@ -16,6 +16,16 @@ function Fail([string]$Message) {
 
 function Write-Info([string]$Message) {
   Write-Host "[INFO] $Message" -ForegroundColor Cyan
+}
+
+function Resolve-AssetPath([string]$Path, [string]$RepoRoot) {
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    Fail "Asset path cannot be empty."
+  }
+  if ([System.IO.Path]::IsPathRooted($Path)) {
+    return $Path
+  }
+  return (Join-Path $RepoRoot $Path)
 }
 
 if (-not $env:GITHUB_TOKEN) {
@@ -86,20 +96,8 @@ if ($existing) {
   Write-Info "Created release: $($release.html_url)"
 }
 
-if (-not $AssetPath) {
-  $AssetPath = "release/RST-$Tag-quickstart.zip"
-}
-
-$resolvedAsset = Join-Path $repoRoot $AssetPath
-if (-not (Test-Path $resolvedAsset)) {
-  Fail "Release asset not found: $AssetPath"
-}
-
-$assetName = Split-Path -Path $resolvedAsset -Leaf
-$currentAsset = $release.assets | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
-if ($currentAsset) {
-  Write-Info "Deleting existing asset: $assetName"
-  Invoke-RestMethod -Method Delete -Uri "$apiBase/releases/assets/$($currentAsset.id)" -Headers $headers | Out-Null
+if (-not $AssetPath -or $AssetPath.Count -eq 0) {
+  $AssetPath = @("release/RST-$Tag-quickstart.zip")
 }
 
 $uploadUrl = $release.upload_url
@@ -115,13 +113,29 @@ $uploadHeaders = @{
   "X-GitHub-Api-Version" = "2022-11-28"
 }
 
-Write-Info "Uploading asset: $assetName"
-$uploadedAsset = Invoke-RestMethod `
-  -Method Post `
-  -Uri "${uploadBase}?name=$escapedAssetName" `
-  -Headers $uploadHeaders `
-  -InFile $resolvedAsset `
-  -ContentType "application/zip"
+foreach ($asset in $AssetPath) {
+  $resolvedAsset = Resolve-AssetPath -Path $asset -RepoRoot $repoRoot
+  if (-not (Test-Path $resolvedAsset)) {
+    Fail "Release asset not found: $asset"
+  }
+
+  $assetName = Split-Path -Path $resolvedAsset -Leaf
+  $currentAsset = $release.assets | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
+  if ($currentAsset) {
+    Write-Info "Deleting existing asset: $assetName"
+    Invoke-RestMethod -Method Delete -Uri "$apiBase/releases/assets/$($currentAsset.id)" -Headers $headers | Out-Null
+  }
+
+  $escapedAssetName = [System.Uri]::EscapeDataString($assetName)
+  Write-Info "Uploading asset: $assetName"
+  $uploadedAsset = Invoke-RestMethod `
+    -Method Post `
+    -Uri "${uploadBase}?name=$escapedAssetName" `
+    -Headers $uploadHeaders `
+    -InFile $resolvedAsset `
+    -ContentType "application/zip"
+
+  Write-Host "[OK] Asset URL: $($uploadedAsset.browser_download_url)" -ForegroundColor Green
+}
 
 Write-Host "[OK] Release URL: $($release.html_url)" -ForegroundColor Green
-Write-Host "[OK] Asset URL: $($uploadedAsset.browser_download_url)" -ForegroundColor Green

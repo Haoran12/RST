@@ -272,6 +272,21 @@ async def test_character_and_memory_crud(async_client, sample_api_config) -> Non
     assert updated_character.status_code == 200
     assert updated_character.json()["gender"] == "女性"
 
+    updated_relationship = await async_client.put(
+        f"/sessions/LoreCharSession/lores/characters/{character_id}",
+        json={
+            "relationship": [
+                {"target": "莱恩", "relation": "同伴"},
+                {"target": "黑森林", "relation": "熟悉地形"},
+            ]
+        },
+    )
+    assert updated_relationship.status_code == 200
+    relationship_payload = updated_relationship.json()["relationship"]
+    assert len(relationship_payload) == 2
+    assert relationship_payload[0]["target"] == "莱恩"
+    assert relationship_payload[0]["relation"] == "同伴"
+
     created_memory = await async_client.post(
         f"/sessions/LoreCharSession/lores/characters/{character_id}/memories",
         json={"event": "在黑森林受伤", "importance": 7, "tags": ["黑森林", "受伤"]},

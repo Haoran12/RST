@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from pydantic import ValidationError
+
 from app.models import generate_id
 from app.models.lore import (
     ActiveFormUpdate,
@@ -82,6 +84,18 @@ class LoreService:
 
     def _rebuild_index(self, store: LoreStore) -> None:
         store.rebuild_index()
+
+    def _merge_character_updates(
+        self,
+        character: CharacterData,
+        updates: dict[str, Any],
+    ) -> CharacterData:
+        payload = character.model_dump(mode="json")
+        payload.update(updates)
+        try:
+            return CharacterData.model_validate(payload)
+        except ValidationError as exc:
+            raise LoreValidationError(str(exc)) from exc
 
     def create_entry(self, session_name: str, payload: LoreEntryCreate) -> LoreEntry:
         if payload.category in {LoreCategory.CHARACTER, LoreCategory.MEMORY}:
@@ -296,7 +310,7 @@ class LoreService:
             updates["tags"] = self._normalize_tags(updates.get("tags"))
         updates["updated_at"] = now_local()
 
-        updated_data = char_file.data.model_copy(update=updates)
+        updated_data = self._merge_character_updates(char_file.data, updates)
         store.save_character(CharacterFile(data=updated_data, version=char_file.version))
         self._rebuild_index(store)
         return updated_data

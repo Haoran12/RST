@@ -357,6 +357,8 @@ def update_character_route(session_name: str, character_id: str, payload: Charac
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except CharacterNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except LoreValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.delete(
