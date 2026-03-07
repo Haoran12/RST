@@ -20,16 +20,10 @@ function Fail([string]$Message) {
   exit 1
 }
 
-function Get-Headers {
-  $headers = @{
-    Accept = "application/vnd.github+json"
-    "X-GitHub-Api-Version" = "2022-11-28"
+function Get-WebHeaders {
+  return @{
     "User-Agent" = "RST-Updater"
   }
-  if ($env:GITHUB_TOKEN) {
-    $headers.Authorization = "Bearer $($env:GITHUB_TOKEN)"
-  }
-  return $headers
 }
 
 function Read-Manifest([string]$ManifestPath) {
@@ -54,6 +48,30 @@ function Get-ManifestStringValue($Manifest, [string]$PropertyName) {
   }
 
   return [string]$property.Value
+}
+
+function Resolve-LatestTagFromWeb([string]$Repo) {
+  $headers = Get-WebHeaders
+  $latestUri = "https://github.com/$Repo/releases/latest"
+
+  try {
+    $response = Invoke-WebRequest -Uri $latestUri -Headers $headers -MaximumRedirection 5
+  } catch {
+    Fail "Failed to query GitHub Release: $($_.Exception.Message)"
+  }
+
+  $finalUri = $response.BaseResponse.ResponseUri
+  if ($null -eq $finalUri) {
+    Fail "Failed to resolve latest GitHub Release URL."
+  }
+
+  $absoluteUri = [string]$finalUri.AbsoluteUri
+  $match = [regex]::Match($absoluteUri, "/releases/tag/([^/?#]+)")
+  if (-not $match.Success) {
+    Fail "Failed to resolve latest GitHub Release tag from $absoluteUri"
+  }
+
+  return $match.Groups[1].Value
 }
 
 function Copy-DirectoryContent([string]$SourceDir, [string]$DestinationDir, [string[]]$ExcludedFiles) {
@@ -101,26 +119,9 @@ if (-not $Repo) {
 }
 
 $currentVersion = Get-ManifestStringValue -Manifest $manifest -PropertyName "version"
-$headers = Get-Headers
-$apiBase = "https://api.github.com/repos/$Repo"
-
-if ($Tag) {
-  $releaseUri = "$apiBase/releases/tags/$Tag"
-} else {
-  $releaseUri = "$apiBase/releases/latest"
-}
 
 Write-Info "Checking GitHub Release..."
-try {
-  $release = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
-} catch {
-  Fail "Failed to query GitHub Release: $($_.Exception.Message)"
-}
-
-$targetTag = [string]$release.tag_name
-if (-not $targetTag) {
-  Fail "GitHub Release response did not contain a tag name."
-}
+$targetTag = if ($Tag) { $Tag } else { Resolve-LatestTagFromWeb -Repo $Repo }
 
 if (-not $Tag -and $currentVersion -and $currentVersion -eq $targetTag) {
   Write-Ok "Already on latest version: $currentVersion"
@@ -128,22 +129,16 @@ if (-not $Tag -and $currentVersion -and $currentVersion -eq $targetTag) {
 }
 
 $expectedAssetName = "RST-$targetTag-update.zip"
-$asset = $release.assets | Where-Object { $_.name -eq $expectedAssetName } | Select-Object -First 1
-if (-not $asset) {
-  $asset = $release.assets | Where-Object { $_.name -like "RST-*-update.zip" } | Select-Object -First 1
-}
-if (-not $asset) {
-  Fail "No update asset matching '*-update.zip' was found on GitHub Release $targetTag."
-}
+$assetDownloadUrl = "https://github.com/$Repo/releases/download/$targetTag/$expectedAssetName"
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("rst-update-" + [guid]::NewGuid().ToString("N"))
 $extractRoot = Join-Path $tempRoot "extract"
-$zipPath = Join-Path $tempRoot $asset.name
+$zipPath = Join-Path $tempRoot $expectedAssetName
 New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
 
-Write-Info "Downloading $($asset.name)..."
+Write-Info "Downloading $expectedAssetName..."
 try {
-  Invoke-WebRequest -Uri $asset.browser_download_url -Headers $headers -OutFile $zipPath
+  Invoke-WebRequest -Uri $assetDownloadUrl -Headers (Get-WebHeaders) -OutFile $zipPath
 } catch {
   Fail "Failed to download update asset: $($_.Exception.Message)"
 }
