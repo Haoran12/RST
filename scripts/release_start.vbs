@@ -2,7 +2,7 @@ Option Explicit
 
 Dim fso, shell, root, backendDir, distIndex, envFile, envExample
 Dim logsDir, pidFile, stdoutLog, stderrLog, processClass, startupConfig
-Dim cmd, url, processId, returnCode, existingPid
+Dim cmd, url, processId, returnCode, existingPid, backendPort
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
@@ -16,6 +16,7 @@ logsDir = root & "\logs"
 pidFile = logsDir & "\rst-release.pid"
 stdoutLog = logsDir & "\release-stdout.log"
 stderrLog = logsDir & "\release-stderr.log"
+backendPort = ReadEnvValue(envFile, "RST_BACKEND_PORT", "18080")
 
 If Not fso.FileExists(distIndex) Then
   MsgBox "Missing frontend build. Run the package install script or scripts\release_build.bat first.", 48, "RST"
@@ -60,13 +61,42 @@ End If
 WriteTextFile pidFile, CStr(processId)
 
 WScript.Sleep 2500
-url = "http://127.0.0.1:18080/"
+url = "http://127.0.0.1:" & backendPort & "/"
 shell.Run url, 1, False
 
 Function ReadTextFile(path)
   Dim stream
   Set stream = fso.OpenTextFile(path, 1, False)
   ReadTextFile = stream.ReadAll
+  stream.Close
+End Function
+
+Function ReadEnvValue(path, keyName, defaultValue)
+  Dim stream, line, pairPos, currentKey, currentValue
+  ReadEnvValue = defaultValue
+  If Not fso.FileExists(path) Then
+    Exit Function
+  End If
+
+  Set stream = fso.OpenTextFile(path, 1, False)
+  Do While Not stream.AtEndOfStream
+    line = Trim(stream.ReadLine)
+    If line <> "" Then
+      If Left(line, 1) <> "#" Then
+        pairPos = InStr(line, "=")
+        If pairPos > 1 Then
+          currentKey = Trim(Left(line, pairPos - 1))
+          If StrComp(currentKey, keyName, 1) = 0 Then
+            currentValue = Trim(Mid(line, pairPos + 1))
+            If currentValue <> "" Then
+              ReadEnvValue = currentValue
+            End If
+            Exit Do
+          End If
+        End If
+      End If
+    End If
+  Loop
   stream.Close
 End Function
 
@@ -79,10 +109,10 @@ End Sub
 
 Function IsProcessRunning(pid)
   Dim exec, output
-  Set exec = shell.Exec("cmd /c tasklist /FI ""PID eq " & pid & "" | findstr /R /C:"" " & pid & " """)
+  Set exec = shell.Exec("cmd /c tasklist /FI ""PID eq " & pid & """")
   output = ""
   Do While Not exec.StdOut.AtEndOfStream
     output = output & exec.StdOut.ReadAll
   Loop
-  IsProcessRunning = (Trim(output) <> "")
+  IsProcessRunning = (InStr(1, output, "No tasks are running", 1) = 0 And Trim(output) <> "")
 End Function

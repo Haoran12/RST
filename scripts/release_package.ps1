@@ -64,10 +64,10 @@ $releaseRoot = Join-Path $repoRoot "release"
 $packageName = "RST-$Version-quickstart"
 $packageDir = Join-Path $releaseRoot $packageName
 $zipPath = Join-Path $releaseRoot "$packageName.zip"
-$installEntryName = "01-$(Join-CodePoints @(0x5B89,0x88C5,0x90E8,0x7F72)).bat"
-$startEntryName = "02-$(Join-CodePoints @(0x542F,0x52A8))RST.vbs"
-$stopEntryName = "03-$(Join-CodePoints @(0x5173,0x95ED))RST.vbs"
-$quickstartZhName = "README-$(Join-CodePoints @(0x5FEB,0x901F,0x5F00,0x59CB)).md"
+$installEntryName = "setup.bat"
+$startEntryName = "start.vbs"
+$stopEntryName = "stop.vbs"
+$quickstartZhName = "README-quickstart.md"
 
 if (-not (Test-Path $releaseRoot)) {
   New-Item -ItemType Directory -Path $releaseRoot | Out-Null
@@ -159,7 +159,7 @@ If Not fso.FileExists(scriptPath) Then
   WScript.Quit 1
 End If
 
-shell.Run "wscript.exe """ & scriptPath & """", 0, True
+shell.Run "wscript.exe """ & scriptPath & """", 0, False
 "@
 Write-Utf8File -Path (Join-Path $packageDir $startEntryName) -Content $rootStart
 
@@ -178,7 +178,7 @@ If Not fso.FileExists(scriptPath) Then
   WScript.Quit 1
 End If
 
-shell.Run "wscript.exe """ & scriptPath & """", 0, True
+shell.Run "wscript.exe """ & scriptPath & """", 0, False
 "@
 Write-Utf8File -Path (Join-Path $packageDir $stopEntryName) -Content $rootStop
 

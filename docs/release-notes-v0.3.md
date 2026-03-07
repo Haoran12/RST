@@ -1,8 +1,8 @@
-# RST v0.3
+﻿# RST v0.3
 
 ## Highlights
 - Improved the release package UX with clear package-root entry scripts after unzip.
-- Added `01-安装部署.bat`, `02-启动RST.vbs`, and `03-关闭RST.vbs` to the packaged release root.
+- Added `setup.bat`, `start.vbs`, and `stop.vbs` to the packaged release root.
 - Kept advanced runtime helpers under `scripts/` while exposing a simpler end-user path.
 
 ## Runtime Improvements

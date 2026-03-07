@@ -1,4 +1,4 @@
-# RST v0.3
+﻿# RST v0.3
 
 RST 是一个面向本地部署的角色扮演/长对话辅助工具，核心目标是提升长对话场景下的上下文一致性与设定稳定性。
 项目采用前后端分离架构，支持开发模式与发布模式（无命令行窗口启动）。
@@ -104,15 +104,15 @@ scripts\release_package.bat
 - 压缩包：`release\RST-v0.3-quickstart.zip`
 
 用户下载 Release 包并解压后，在根目录即可直接看到：
-- `01-安装部署.bat`：首次安装或更新运行环境
-- `02-启动RST.vbs`：后台启动 RST，并自动打开浏览器
-- `03-关闭RST.vbs`：关闭后台运行的 RST
-- `README-快速开始.md`：快速使用说明
+- `setup.bat`：首次安装或更新运行环境
+- `start.vbs`：后台启动 RST，并自动打开浏览器
+- `stop.vbs`：关闭后台运行的 RST
+- `README-quickstart.md`：快速使用说明
 
 推荐顺序：
-1. 先双击 `01-安装部署.bat`
-2. 再双击 `02-启动RST.vbs`
-3. 用完后双击 `03-关闭RST.vbs`
+1. 先双击 `setup.bat`
+2. 再双击 `start.vbs`
+3. 用完后双击 `stop.vbs`
 
 高级脚本仍保留在 `scripts/` 目录中。
 
@@ -166,3 +166,4 @@ scripts\release_check.bat
 - `RST_BACKEND_RELOAD`：是否热重载，开发建议 `1`，发布建议 `0`
 - `RST_SERVE_FRONTEND`：后端是否托管前端静态资源，发布模式建议 `1`
 - `RST_FRONTEND_DIST`：前端构建目录，默认 `./frontend/dist`
+

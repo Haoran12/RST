@@ -1,4 +1,4 @@
-# RST v0.3
+﻿# RST v0.3
 
 A desktop-oriented local roleplay/long-context assistant focused on stronger context consistency, configurable prompt assembly, and structured lore/state management.
 
@@ -85,15 +85,15 @@ This creates:
 - Zip: `release\RST-v0.3-quickstart.zip`
 
 After extracting the packaged zip, the package root clearly exposes these entry files:
-- `01-安装部署.bat` — install or update the runtime dependencies
-- `02-启动RST.vbs` — start RST in the background and open the browser
-- `03-关闭RST.vbs` — stop the background RST process
+- `setup.bat` — install or update the runtime dependencies
+- `start.vbs` — start RST in the background and open the browser
+- `stop.vbs` — stop the background RST process
 - `QUICKSTART.md` — quick usage notes
 
 Recommended order for end users:
-1. Run `01-安装部署.bat`
-2. Run `02-启动RST.vbs`
-3. Run `03-关闭RST.vbs` when finished
+1. Run `setup.bat`
+2. Run `start.vbs`
+3. Run `stop.vbs` when finished
 
 Advanced scripts remain available under `scripts/`.
 
