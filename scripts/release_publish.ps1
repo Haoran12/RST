@@ -1,5 +1,3 @@
-$ErrorActionPreference = "Stop"
-
 param(
   [string]$Tag = "v0.2",
   [string]$Title = "RST v0.2",
@@ -8,6 +6,8 @@ param(
   [switch]$Draft,
   [switch]$Prerelease
 )
+
+$ErrorActionPreference = "Stop"
 
 function Fail([string]$Message) {
   Write-Host "[ERROR] $Message" -ForegroundColor Red
