@@ -2,7 +2,7 @@ Option Explicit
 
 Dim fso, shell, root, backendDir, distIndex, envFile, envExample
 Dim logsDir, pidFile, stdoutLog, stderrLog, processClass, startupConfig
-Dim cmd, url, processId, returnCode, existingPid, backendPort
+Dim cmd, url, processId, returnCode, existingPid, backendPort, healthOk
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
@@ -60,9 +60,14 @@ End If
 
 WriteTextFile pidFile, CStr(processId)
 
-WScript.Sleep 2500
 url = "http://127.0.0.1:" & backendPort & "/"
-shell.Run url, 1, False
+healthOk = WaitForBackend("http://127.0.0.1:" & backendPort & "/health", 30000)
+
+If healthOk Then
+  shell.Run url, 1, False
+Else
+  MsgBox "RST started, but the backend did not become ready in time. Check logs\\release-stderr.log for details.", 48, "RST"
+End If
 
 Function ReadTextFile(path)
   Dim stream
@@ -115,4 +120,31 @@ Function IsProcessRunning(pid)
     output = output & exec.StdOut.ReadAll
   Loop
   IsProcessRunning = (InStr(1, output, "No tasks are running", 1) = 0 And Trim(output) <> "")
+End Function
+
+Function WaitForBackend(healthUrl, timeoutMs)
+  Dim startedAt, http
+  startedAt = Timer
+  WaitForBackend = False
+
+  Do
+    On Error Resume Next
+    Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+    http.Open "GET", healthUrl, False
+    http.SetTimeouts 1000, 1000, 1000, 1000
+    http.Send
+    If Err.Number = 0 Then
+      If http.Status = 200 Then
+        WaitForBackend = True
+        Exit Function
+      End If
+    End If
+    Err.Clear
+    On Error GoTo 0
+
+    WScript.Sleep 500
+    If ((Timer - startedAt) * 1000) >= timeoutMs Then
+      Exit Do
+    End If
+  Loop
 End Function
