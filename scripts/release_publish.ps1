@@ -117,7 +117,7 @@ $uploadHeaders = @{
 Write-Info "Uploading asset: $assetName"
 $uploadedAsset = Invoke-RestMethod `
   -Method Post `
-  -Uri "$uploadBase?name=$escapedAssetName" `
+  -Uri "${uploadBase}?name=$escapedAssetName" `
   -Headers $uploadHeaders `
   -InFile $resolvedAsset `
   -ContentType "application/zip"
