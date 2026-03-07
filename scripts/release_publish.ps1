@@ -4,6 +4,7 @@ param(
   [string]$Tag = "v0.2",
   [string]$Title = "RST v0.2",
   [string]$NotesFile = "docs/release-notes-v0.2.md",
+  [string]$AssetPath,
   [switch]$Draft,
   [switch]$Prerelease
 )
@@ -11,6 +12,10 @@ param(
 function Fail([string]$Message) {
   Write-Host "[ERROR] $Message" -ForegroundColor Red
   exit 1
+}
+
+function Write-Info([string]$Message) {
+  Write-Host "[INFO] $Message" -ForegroundColor Cyan
 }
 
 if (-not $env:GITHUB_TOKEN) {
@@ -64,18 +69,58 @@ if ($existing) {
   } | ConvertTo-Json
 
   $updated = Invoke-RestMethod -Method Patch -Uri "$apiBase/releases/$($existing.id)" -Headers $headers -Body $body
-  Write-Host "[INFO] Updated release: $($updated.html_url)" -ForegroundColor Green
-  exit 0
+  $release = $updated
+  Write-Info "Updated release: $($release.html_url)"
+} else {
+  $createBody = @{
+    tag_name = $Tag
+    target_commitish = (git rev-parse --abbrev-ref HEAD)
+    name = $Title
+    body = $notes
+    draft = [bool]$Draft
+    prerelease = [bool]$Prerelease
+  } | ConvertTo-Json
+
+  $release = Invoke-RestMethod -Method Post -Uri "$apiBase/releases" -Headers $headers -Body $createBody
+  Write-Info "Created release: $($release.html_url)"
 }
 
-$createBody = @{
-  tag_name = $Tag
-  target_commitish = (git rev-parse --abbrev-ref HEAD)
-  name = $Title
-  body = $notes
-  draft = [bool]$Draft
-  prerelease = [bool]$Prerelease
-} | ConvertTo-Json
+if (-not $AssetPath) {
+  $AssetPath = "release/RST-$Tag-quickstart.zip"
+}
 
-$created = Invoke-RestMethod -Method Post -Uri "$apiBase/releases" -Headers $headers -Body $createBody
-Write-Host "[INFO] Created release: $($created.html_url)" -ForegroundColor Green
+$resolvedAsset = Join-Path $repoRoot $AssetPath
+if (-not (Test-Path $resolvedAsset)) {
+  Fail "Release asset not found: $AssetPath"
+}
+
+$assetName = Split-Path -Path $resolvedAsset -Leaf
+$currentAsset = $release.assets | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
+if ($currentAsset) {
+  Write-Info "Deleting existing asset: $assetName"
+  Invoke-RestMethod -Method Delete -Uri "$apiBase/releases/assets/$($currentAsset.id)" -Headers $headers | Out-Null
+}
+
+$uploadUrl = $release.upload_url
+if (-not $uploadUrl) {
+  Fail "Release upload URL missing from GitHub API response."
+}
+
+$uploadBase = $uploadUrl -replace "\{\?name,label\}$", ""
+$escapedAssetName = [System.Uri]::EscapeDataString($assetName)
+$uploadHeaders = @{
+  Authorization = "Bearer $($env:GITHUB_TOKEN)"
+  Accept = "application/vnd.github+json"
+  "X-GitHub-Api-Version" = "2022-11-28"
+}
+
+Write-Info "Uploading asset: $assetName"
+$uploadedAsset = Invoke-RestMethod `
+  -Method Post `
+  -Uri "$uploadBase?name=$escapedAssetName" `
+  -Headers $uploadHeaders `
+  -InFile $resolvedAsset `
+  -ContentType "application/zip"
+
+Write-Host "[OK] Release URL: $($release.html_url)" -ForegroundColor Green
+Write-Host "[OK] Asset URL: $($uploadedAsset.browser_download_url)" -ForegroundColor Green
