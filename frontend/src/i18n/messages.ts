@@ -30,8 +30,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "input.send.send": "Send",
     "input.command.errors.unknown": "Invalid command format. Use /del, /goto, /hide, or /show.",
     "input.command.errors.unknown_with_name": "Unknown command: /{command}.",
-    "input.command.errors.target_required":
-      "Target floor is required. Use N, N-M, cur, or all.",
+    "input.command.errors.target_required": "Target floor is required. Use N, N-M, cur, or all.",
     "input.command.errors.no_messages": "No messages available for command execution.",
     "input.command.errors.target_invalid": "Invalid floor target. Use N, N-M, cur, or all.",
     "input.command.errors.goto_single": "/goto only accepts a single floor.",
@@ -227,6 +226,23 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.scheduler.prompt.confirm": "Confirm Prompt",
     "rstPanel.scheduler.prompt.extract": "Extract Prompt",
     "rstPanel.scheduler.prompt.consolidate": "Consolidate Prompt",
+    "rstPanel.scheduler.prompt_overlay_title": "Prompt Template Details",
+    "rstPanel.scheduler.prompt_overlay_close": "Close",
+    "rstPanel.scheduler.summary.configured": "Configured",
+    "rstPanel.scheduler.summary.empty": "Empty",
+    "rstPanel.scheduler.summary.chars": "{count} chars",
+    "rstPanel.scheduler.summary.lines": "{count} lines",
+    "rstPanel.scheduler.summary.preview_empty": "No prompt content yet.",
+    "rstPanel.scheduler.summary.click_hint":
+      "Click to open overlay for full prompt and constraints.",
+    "rstPanel.scheduler.detail.runtime_variables": "Runtime Variables",
+    "rstPanel.scheduler.detail.format_constraints": "Format Constraints",
+    "rstPanel.scheduler.constraint.confirm_prompt":
+      "The final runtime prompt also appends retrieved lore, character, and memory blocks. Keep this template focused on confirmation logic.",
+    "rstPanel.scheduler.constraint.extract_prompt":
+      "Backend appends OUTPUT CONTRACT (STRICT) automatically. Do not rewrite or weaken the required output format in this template.",
+    "rstPanel.scheduler.constraint.consolidate_prompt":
+      "Triggered only when a character's memories exceed the consolidation threshold, so the template should focus on merge and summarization behavior.",
     "rstPanel.scheduler.expand_all": "Expand All",
     "rstPanel.scheduler.collapse_all": "Collapse All",
     "rstPanel.scheduler.hit_overlay_title": "Matched Entries",
@@ -367,14 +383,11 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "One relation per line, e.g. Alice: Ally",
     "rstPanel.overlay.character.description.strength":
       "Physical power value (opposed to Mana / spiritual power).",
-    "rstPanel.overlay.character.description.form_name":
-      "Name of the currently edited active form.",
-    "rstPanel.overlay.character.description.vitality_max":
-      "Maximum vitality / stamina value.",
+    "rstPanel.overlay.character.description.form_name": "Name of the currently edited active form.",
+    "rstPanel.overlay.character.description.vitality_max": "Maximum vitality / stamina value.",
     "rstPanel.overlay.character.description.mana_potency": "Mana potency value.",
     "rstPanel.overlay.character.description.toughness": "Defense / toughness value.",
-    "rstPanel.overlay.character.description.vitality_cur":
-      "Current vitality / stamina value.",
+    "rstPanel.overlay.character.description.vitality_cur": "Current vitality / stamina value.",
     "rstPanel.overlay.character.description.element":
       "Store skills entry IDs, comma or newline separated.",
     "rstPanel.overlay.character.description.skills":
@@ -393,8 +406,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.overlay.character.section.status.description":
       "Combat attributes, resistances and current condition",
     "rstPanel.overlay.character.section.runtime.title": "Runtime",
-    "rstPanel.overlay.character.section.runtime.description":
-      "Trigger mode and runtime state",
+    "rstPanel.overlay.character.section.runtime.description": "Trigger mode and runtime state",
     "rstPanel.overlay.character.form.summary": "Forms: {count} · Active: {active}",
     "rstPanel.overlay.character.form.select_placeholder": "Select form",
     "rstPanel.overlay.character.form.switch": "Switch Form",
@@ -430,8 +442,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.overlay.character.memory.placeholder.known_by": "Known by (comma-separated)",
     "rstPanel.overlay.character.memory.updated": "Memory updated.",
     "rstPanel.overlay.character.memory.deleted": "Memory deleted.",
-    "rstPanel.overlay.character.memory.validation.event_required":
-      "Memory event is required.",
+    "rstPanel.overlay.character.memory.validation.event_required": "Memory event is required.",
     "rstPanel.overlay.character.create_title": "+ New Character",
     "rstPanel.overlay.character.edit_title": "Edit: {name}",
     "rstPanel.messages.character_required_fields": "Character name and race are required.",
@@ -450,6 +461,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.messages.snapshot_import_done":
       "JSON snapshot imported. RST panel has been refreshed.",
     "rstPanel.messages.export_done": "JSON snapshot exported.",
+    "rstPanel.messages.scheduler_template_saved": "Scheduler prompt template saved.",
     "rstPanel.messages.scheduler_hits_load_failed":
       "Failed to resolve matched entry names. Showing raw IDs.",
     "rstPanel.report.action_type.generic_entry_created": "Generic entry imported",
@@ -515,7 +527,8 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "contentArea.batch.selected": "\u5df2\u9009",
     "contentArea.batch.confirm_delete": "\u786e\u8ba4\u5220\u9664",
     "contentArea.batch.confirm_hide": "\u786e\u8ba4\u9690\u85cf",
-    "contentArea.batch.delete_prompt": "\u786e\u8ba4\u5220\u9664\u9009\u4e2d\u7684\u6d88\u606f\uff1f",
+    "contentArea.batch.delete_prompt":
+      "\u786e\u8ba4\u5220\u9664\u9009\u4e2d\u7684\u6d88\u606f\uff1f",
     "contentArea.closed.title": "\u4f1a\u8bdd\u5df2\u5173\u95ed",
     "contentArea.closed.subtitle":
       "\u8bf7\u5728\u9876\u90e8 Session \u9009\u62e9\u5668\u9009\u62e9\u4f1a\u8bdd\u4ee5\u5f00\u542f\u7ee7\u7eed\u3002",
@@ -550,10 +563,12 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "statusPanel.placeholder.story_time": "\u65f6\u95f4",
     "statusPanel.placeholder.story_place": "\u5730\u70b9",
     "statusPanel.state.loading": "\u6b63\u5728\u52a0\u8f7d\u72b6\u6001...",
-    "statusPanel.state.no_session": "\u8bf7\u5148\u9009\u62e9\u4f1a\u8bdd\u4ee5\u67e5\u770b\u72b6\u6001",
+    "statusPanel.state.no_session":
+      "\u8bf7\u5148\u9009\u62e9\u4f1a\u8bdd\u4ee5\u67e5\u770b\u72b6\u6001",
     "statusPanel.state.no_character": "\u6682\u65e0\u5728\u573a\u4eba\u7269",
     "statusPanel.state.present_characters_saved": "\u5df2\u66f4\u65b0\u5728\u573a\u4eba\u7269",
-    "statusPanel.state.story_required": "\u8bf7\u81f3\u5c11\u586b\u5199\u65f6\u95f4\u6216\u5730\u70b9",
+    "statusPanel.state.story_required":
+      "\u8bf7\u81f3\u5c11\u586b\u5199\u65f6\u95f4\u6216\u5730\u70b9",
     "statusPanel.state.story_saved": "\u5df2\u66f4\u65b0\u6545\u4e8b\u65f6\u95f4/\u5730\u70b9",
     "statusPanel.value.unselected": "\u672a\u9009\u62e9\u4f1a\u8bdd",
     "statusPanel.value.unknown": "-",
@@ -578,7 +593,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "appearancePanel.typography.font_preset_label": "\u5b57\u4f53\u9884\u8bbe",
     "appearancePanel.typography.font_family_label": "\u5b57\u4f53\u7ec4",
     "appearancePanel.typography.font_family_placeholder":
-      "\u793a\u4f8b\uff1a\"Segoe UI\", \"PingFang SC\", sans-serif",
+      '\u793a\u4f8b\uff1a"Segoe UI", "PingFang SC", sans-serif',
     "appearancePanel.typography.font_scale_label": "\u5b57\u53f7\u7f29\u653e",
     "appearancePanel.typography.hint":
       "\u4f1a\u540c\u65f6\u5f71\u54cd UI \u4e0e\u6d88\u606f\u6e32\u67d3\uff0c100% \u4e3a\u57fa\u51c6\u5927\u5c0f\u3002",
@@ -594,7 +609,7 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "appearancePanel.markdown.italic_label": "\u659c\u4f53\u989c\u8272",
     "appearancePanel.markdown.quoted_label": "\u5f15\u53f7\u6587\u672c\u989c\u8272",
     "appearancePanel.markdown.hint":
-      "\u4f5c\u7528\u4e8e\u6bb5\u843d\u3001\u6807\u9898\u3001\u659c\u4f53\u53ca\u88ab \"...\" \u6216 \u201c...\u201d \u5305\u88f9\u7684\u6587\u672c\u3002",
+      '\u4f5c\u7528\u4e8e\u6bb5\u843d\u3001\u6807\u9898\u3001\u659c\u4f53\u53ca\u88ab "..." \u6216 \u201c...\u201d \u5305\u88f9\u7684\u6587\u672c\u3002',
     "sessionPanel.title": "\u4f1a\u8bdd",
     "sessionPanel.selector.placeholder": "\u9009\u62e9\u4f1a\u8bdd...",
     "sessionPanel.create.title": "\u65b0\u5efa\u4f1a\u8bdd",
@@ -659,7 +674,8 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.import.open": "\u5bfc\u5165\u9759\u6001\u8bbe\u5b9a",
     "rstPanel.export.open": "\u5bfc\u51fa JSON",
     "rstPanel.session.unselected": "\u672a\u9009\u62e9\u4f1a\u8bdd",
-    "rstPanel.empty.hint": "\u8bf7\u5148\u5728\u4f1a\u8bdd\u9762\u677f\u4e2d\u9009\u62e9\u4f1a\u8bdd",
+    "rstPanel.empty.hint":
+      "\u8bf7\u5148\u5728\u4f1a\u8bdd\u9762\u677f\u4e2d\u9009\u62e9\u4f1a\u8bdd",
     "rstPanel.tabs.entries": "\u8bcd\u6761",
     "rstPanel.tabs.characters": "\u4eba\u7269",
     "rstPanel.tabs.scheduler": "\u8c03\u5ea6",
@@ -707,12 +723,30 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.scheduler.prompt.confirm": "\u786e\u8ba4\u63d0\u793a\u8bcd",
     "rstPanel.scheduler.prompt.extract": "\u63d0\u53d6\u63d0\u793a\u8bcd",
     "rstPanel.scheduler.prompt.consolidate": "\u6574\u5408\u63d0\u793a\u8bcd",
+    "rstPanel.scheduler.prompt_overlay_title": "\u63d0\u793a\u8bcd\u6a21\u677f\u8be6\u60c5",
+    "rstPanel.scheduler.prompt_overlay_close": "\u5173\u95ed",
+    "rstPanel.scheduler.summary.configured": "\u5df2\u914d\u7f6e",
+    "rstPanel.scheduler.summary.empty": "\u672a\u914d\u7f6e",
+    "rstPanel.scheduler.summary.chars": "{count} \u5b57\u7b26",
+    "rstPanel.scheduler.summary.lines": "{count} \u884c",
+    "rstPanel.scheduler.summary.preview_empty": "\u6682\u65e0\u63d0\u793a\u8bcd\u5185\u5bb9",
+    "rstPanel.scheduler.summary.click_hint":
+      "\u70b9\u51fb\u6253\u5f00 Overlay \u67e5\u770b\u5b8c\u6574\u63d0\u793a\u8bcd\u4e0e\u683c\u5f0f\u7ea6\u675f",
+    "rstPanel.scheduler.detail.runtime_variables": "\u8fd0\u884c\u65f6\u53d8\u91cf",
+    "rstPanel.scheduler.detail.format_constraints": "\u683c\u5f0f\u7ea6\u675f",
+    "rstPanel.scheduler.constraint.confirm_prompt":
+      "\u6700\u7ec8\u8fd0\u884c\u63d0\u793a\u8bcd\u8fd8\u4f1a\u62fc\u4e0a\u68c0\u7d22\u5230\u7684\u8bbe\u5b9a/\u4eba\u7269/\u8bb0\u5fc6\u5757\uff0c\u8fd9\u4e2a\u6a21\u677f\u5e94\u91cd\u70b9\u5199\u786e\u8ba4\u903b\u8f91\u3002",
+    "rstPanel.scheduler.constraint.extract_prompt":
+      "\u540e\u7aef\u4f1a\u81ea\u52a8\u8ffd\u52a0 OUTPUT CONTRACT (STRICT)\uff0c\u8bf7\u4e0d\u8981\u5728\u8fd9\u4e2a\u6a21\u677f\u91cc\u6539\u5199\u6216\u5f31\u5316\u5fc5\u8981\u7684\u8f93\u51fa\u683c\u5f0f\u8981\u6c42\u3002",
+    "rstPanel.scheduler.constraint.consolidate_prompt":
+      "\u53ea\u4f1a\u5728\u5355\u4e2a\u89d2\u8272\u7684\u8bb0\u5fc6\u6570\u8d85\u8fc7\u6574\u5408\u9608\u503c\u65f6\u89e6\u53d1\uff0c\u6a21\u677f\u5e94\u91cd\u70b9\u63cf\u8ff0\u5408\u5e76\u4e0e\u6982\u62ec\u884c\u4e3a\u3002",
     "rstPanel.scheduler.expand_all": "\u5168\u90e8\u5c55\u5f00",
     "rstPanel.scheduler.collapse_all": "\u5168\u90e8\u6298\u53e0",
     "rstPanel.scheduler.hit_overlay_title": "\u547d\u4e2d\u6761\u76ee",
     "rstPanel.scheduler.hit_overlay_summary": "\u5171 {count} \u6761\u547d\u4e2d\u9879",
     "rstPanel.scheduler.hit_overlay_loading": "\u6b63\u5728\u52a0\u8f7d\u547d\u4e2d\u6761\u76ee...",
-    "rstPanel.scheduler.hit_overlay_empty": "\u6682\u65e0\u53ef\u663e\u793a\u7684\u547d\u4e2d\u6761\u76ee",
+    "rstPanel.scheduler.hit_overlay_empty":
+      "\u6682\u65e0\u53ef\u663e\u793a\u7684\u547d\u4e2d\u6761\u76ee",
     "rstPanel.scheduler.hit_overlay_close": "\u5173\u95ed",
     "rstPanel.scheduler.hit_type.entry": "\u8bcd\u6761",
     "rstPanel.scheduler.hit_type.character": "\u4eba\u7269",
@@ -722,7 +756,8 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.scheduler.sync_overlay_title": "\u6700\u8fd1\u4e00\u6b21\u540c\u6b65\u53d8\u66f4",
     "rstPanel.scheduler.sync_overlay_summary":
       "\u65b0\u5efa {created} \u9879\uff0c\u66f4\u65b0 {updated} \u9879\uff0c\u65b0\u589e\u8bb0\u5fc6 {memories} \u6761\uff0c\u65b0\u589e\u5267\u60c5 {events} \u6761\uff0c\u53d8\u66f4\u603b\u6570 {changes}",
-    "rstPanel.scheduler.sync_overlay_empty": "\u6682\u65e0\u53ef\u663e\u793a\u7684\u540c\u6b65\u53d8\u66f4",
+    "rstPanel.scheduler.sync_overlay_empty":
+      "\u6682\u65e0\u53ef\u663e\u793a\u7684\u540c\u6b65\u53d8\u66f4",
     "rstPanel.scheduler.sync_overlay_close": "\u5173\u95ed",
     "rstPanel.scheduler.sync_change.action.created": "\u65b0\u5efa",
     "rstPanel.scheduler.sync_change.action.updated": "\u66f4\u65b0",
@@ -851,12 +886,10 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "\u4eba\u7269\u7269\u7406\u529b\u91cf\u503c\uff08\u4e0e\u6cd5\u529b/\u7075\u529b Mana \u76f8\u5bf9\uff09",
     "rstPanel.overlay.character.description.form_name":
       "\u5f53\u524d\u7f16\u8f91\u7684\u6fc0\u6d3b\u5f62\u6001\u540d\u79f0",
-    "rstPanel.overlay.character.description.vitality_max":
-      "\u7cbe\u529b/\u4e0a\u9650\u6570\u503c",
+    "rstPanel.overlay.character.description.vitality_max": "\u7cbe\u529b/\u4e0a\u9650\u6570\u503c",
     "rstPanel.overlay.character.description.mana_potency": "\u6cd5\u529b\u6c34\u5e73\u6570\u503c",
     "rstPanel.overlay.character.description.toughness": "\u9632\u5fa1\u6570\u503c",
-    "rstPanel.overlay.character.description.vitality_cur":
-      "\u5f53\u524d\u7cbe\u529b/\u6570\u503c",
+    "rstPanel.overlay.character.description.vitality_cur": "\u5f53\u524d\u7cbe\u529b/\u6570\u503c",
     "rstPanel.overlay.character.description.element":
       "\u5b58\u50a8\u5df2\u719f\u6089\u5143\u7d20\u7684 skills entry_id\uff0c\u53ef\u9017\u53f7/\u6362\u884c\u5206\u9694",
     "rstPanel.overlay.character.description.skills":
@@ -867,16 +900,19 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.overlay.character.description.relationship":
       "\u683c\u5f0f\uff1a\u76ee\u6807: \u5173\u7cfb\uff08\u652f\u6301 : \u548c \uff1a\uff09",
     "rstPanel.overlay.character.section.identity.title": "\u57fa\u672c\u4fe1\u606f",
-    "rstPanel.overlay.character.section.identity.description": "\u6838\u5fc3\u8eab\u4efd\u5b57\u6bb5",
+    "rstPanel.overlay.character.section.identity.description":
+      "\u6838\u5fc3\u8eab\u4efd\u5b57\u6bb5",
     "rstPanel.overlay.character.section.profile.title": "\u4eba\u7269\u753b\u50cf",
-    "rstPanel.overlay.character.section.profile.description": "\u80cc\u666f\u3001\u76ee\u6807\u4e0e\u5173\u7cfb",
+    "rstPanel.overlay.character.section.profile.description":
+      "\u80cc\u666f\u3001\u76ee\u6807\u4e0e\u5173\u7cfb",
     "rstPanel.overlay.character.section.status.title": "\u5c5e\u6027 / \u72b6\u6001",
     "rstPanel.overlay.character.section.status.description":
       "\u6218\u6597\u5c5e\u6027\u3001\u6297\u6027\u4e0e\u5f53\u524d\u72b6\u6001",
     "rstPanel.overlay.character.section.runtime.title": "\u8fd0\u884c\u8bbe\u7f6e",
     "rstPanel.overlay.character.section.runtime.description":
       "\u89e6\u53d1\u6a21\u5f0f\u4e0e\u8fd0\u884c\u72b6\u6001",
-    "rstPanel.overlay.character.form.summary": "\u5f62\u6001\u6570\uff1a{count} \u00b7 \u5f53\u524d\uff1a{active}",
+    "rstPanel.overlay.character.form.summary":
+      "\u5f62\u6001\u6570\uff1a{count} \u00b7 \u5f53\u524d\uff1a{active}",
     "rstPanel.overlay.character.form.select_placeholder": "\u9009\u62e9\u5f62\u6001",
     "rstPanel.overlay.character.form.switch": "\u5207\u6362\u5f62\u6001",
     "rstPanel.overlay.character.form.switch_confirm":
@@ -918,7 +954,8 @@ export const messages: Record<LocaleCode, TranslationMap> = {
       "\u8bb0\u5fc6\u4e8b\u4ef6\u4e0d\u80fd\u4e3a\u7a7a",
     "rstPanel.overlay.character.create_title": "+ \u65b0\u5efa\u4eba\u7269",
     "rstPanel.overlay.character.edit_title": "\u7f16\u8f91\uff1a{name}",
-    "rstPanel.messages.character_required_fields": "\u4eba\u7269\u540d\u79f0\u548c\u79cd\u65cf\u4e3a\u5fc5\u586b\u9879",
+    "rstPanel.messages.character_required_fields":
+      "\u4eba\u7269\u540d\u79f0\u548c\u79cd\u65cf\u4e3a\u5fc5\u586b\u9879",
     "rstPanel.messages.copy_entries_done":
       "\u5df2\u590d\u5236 {count} \u6761\u8bcd\u6761\u5230\u76ee\u6807\u4f1a\u8bdd",
     "rstPanel.messages.copy_characters_done":
@@ -936,10 +973,14 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.messages.snapshot_import_done":
       "\u5df2\u5bfc\u5165 JSON \u5feb\u7167\uff0cRST \u9762\u677f\u5df2\u5237\u65b0",
     "rstPanel.messages.export_done": "\u5df2\u5bfc\u51fa JSON \u5feb\u7167",
+    "rstPanel.messages.scheduler_template_saved":
+      "\u8c03\u5ea6\u63d0\u793a\u8bcd\u6a21\u677f\u5df2\u4fdd\u5b58",
     "rstPanel.messages.scheduler_hits_load_failed":
       "\u65e0\u6cd5\u89e3\u6790\u547d\u4e2d\u6761\u76ee\u540d\u79f0\uff0c\u5c06\u663e\u793a\u539f\u59cb ID",
-    "rstPanel.report.action_type.generic_entry_created": "\u5df2\u5bfc\u5165\u901a\u7528\u8bcd\u6761",
-    "rstPanel.report.action_type.faction_entry_created": "\u5df2\u5bfc\u5165\u9635\u8425\u8bcd\u6761",
+    "rstPanel.report.action_type.generic_entry_created":
+      "\u5df2\u5bfc\u5165\u901a\u7528\u8bcd\u6761",
+    "rstPanel.report.action_type.faction_entry_created":
+      "\u5df2\u5bfc\u5165\u9635\u8425\u8bcd\u6761",
     "rstPanel.report.action_type.faction_kept_with_embedded_characters":
       "\u9635\u8425\u4fdd\u7559\u5d4c\u5165\u4eba\u7269",
     "rstPanel.report.action_type.faction_split_into_characters":

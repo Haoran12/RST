@@ -39,7 +39,7 @@
     </div>
 
     <n-spin v-else :show="loreStore.loading" class="panel-body">
-      <n-tabs v-model:value="activeTab" type="line" animated>
+      <n-tabs :value="activeTab" type="line" animated @update:value="handleActiveTabChange">
         <n-tab-pane name="entries" :tab="t('rstPanel.tabs.entries')">
           <div class="tab-content-wrapper">
             <div class="entries-filter-row">
@@ -52,278 +52,300 @@
             </div>
 
             <div class="entries-panel">
-            <div class="entries-actions-row">
-              <div class="entries-title">{{ t("rstPanel.entries.title") }}</div>
-              <div class="entries-actions">
-                <n-button size="small" type="primary" @click="openNewEntryOverlay">
-                  {{ t("rstPanel.entries.new") }}
-                </n-button>
-                <n-popconfirm
-                  :show-icon="false"
-                  :positive-text="t('common.confirm')"
-                  :positive-button-props="{ type: 'error' }"
-                  @positive-click="handleBulkDeleteEntries"
+              <div class="entries-actions-row">
+                <div class="entries-title">{{ t("rstPanel.entries.title") }}</div>
+                <div class="entries-actions">
+                  <n-button size="small" type="primary" @click="openNewEntryOverlay">
+                    {{ t("rstPanel.entries.new") }}
+                  </n-button>
+                  <n-popconfirm
+                    :show-icon="false"
+                    :positive-text="t('common.confirm')"
+                    :positive-button-props="{ type: 'error' }"
+                    @positive-click="handleBulkDeleteEntries"
+                  >
+                    <template #trigger>
+                      <n-button
+                        size="small"
+                        secondary
+                        class="entries-action entries-action--danger"
+                        :disabled="!hasSelection"
+                        :aria-label="t('rstPanel.entries.delete_selected_aria')"
+                        :title="t('rstPanel.actions.delete')"
+                      >
+                        <svg class="icon-trash" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </n-button>
+                    </template>
+                    {{ t("rstPanel.entries.delete_selected_confirm") }}
+                  </n-popconfirm>
+                  <n-button
+                    size="small"
+                    secondary
+                    class="entries-action"
+                    :disabled="copyDisabled"
+                    :aria-label="t('rstPanel.entries.copy_selected_aria')"
+                    :title="t('rstPanel.actions.copy')"
+                    @click="openCopyModal"
+                  >
+                    &#x29C9;
+                  </n-button>
+                </div>
+              </div>
+              <div class="entries-scroll-area">
+                <Draggable
+                  v-if="entryRows.length > 0"
+                  v-model="entryRows"
+                  item-key="id"
+                  handle=".drag-handle"
+                  class="entry-list"
+                  @end="handleEntryReorder"
                 >
-                  <template #trigger>
-                    <n-button
-                      size="small"
-                      secondary
-                      class="entries-action entries-action--danger"
-                      :disabled="!hasSelection"
-                      :aria-label="t('rstPanel.entries.delete_selected_aria')"
-                      :title="t('rstPanel.actions.delete')"
+                  <template #item="{ element }">
+                    <div
+                      class="entry-row"
+                      :class="{ active: element.id === activeEntryId }"
+                      @click="openEntryOverlay(element.id)"
                     >
-                      <svg class="icon-trash" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"
-                          fill="currentColor"
+                      <div class="drag-handle" @click.stop>&#8942;&#8942;</div>
+                      <div class="entry-checkbox" @click.stop>
+                        <n-checkbox
+                          size="small"
+                          :checked="selectedEntryIds.includes(element.id)"
+                          @update:checked="(checked) => toggleEntrySelected(element.id, checked)"
                         />
-                      </svg>
-                    </n-button>
+                      </div>
+                      <div class="entry-main">
+                        <span class="entry-name">{{ element.name }}</span>
+                      </div>
+                      <div class="entry-mode">{{ entryTriggerLabel(element) }}</div>
+                      <div class="entry-toggle" @click.stop>
+                        <n-switch
+                          :value="!element.disabled"
+                          @update:value="(enabled) => handleEntryToggle(element.id, enabled)"
+                        />
+                      </div>
+                    </div>
                   </template>
-                  {{ t("rstPanel.entries.delete_selected_confirm") }}
-                </n-popconfirm>
-                <n-button
-                  size="small"
-                  secondary
-                  class="entries-action"
-                  :disabled="copyDisabled"
-                  :aria-label="t('rstPanel.entries.copy_selected_aria')"
-                  :title="t('rstPanel.actions.copy')"
-                  @click="openCopyModal"
-                >
-                  &#x29C9;
-                </n-button>
+                </Draggable>
+
+                <div v-else class="entry-list-empty">{{ t("rstPanel.entries.empty") }}</div>
               </div>
             </div>
-            <div class="entries-scroll-area">
-              <Draggable
-                v-if="entryRows.length > 0"
-                v-model="entryRows"
-                item-key="id"
-                handle=".drag-handle"
-                class="entry-list"
-                @end="handleEntryReorder"
-              >
-                <template #item="{ element }">
-                  <div
-                    class="entry-row"
-                    :class="{ active: element.id === activeEntryId }"
-                    @click="openEntryOverlay(element.id)"
-                  >
-                    <div class="drag-handle" @click.stop>&#8942;&#8942;</div>
-                    <div class="entry-checkbox" @click.stop>
-                      <n-checkbox
-                        size="small"
-                        :checked="selectedEntryIds.includes(element.id)"
-                        @update:checked="(checked) => toggleEntrySelected(element.id, checked)"
-                      />
-                    </div>
-                    <div class="entry-main">
-                      <span class="entry-name">{{ element.name }}</span>
-                    </div>
-                    <div class="entry-mode">{{ entryTriggerLabel(element) }}</div>
-                    <div class="entry-toggle" @click.stop>
-                      <n-switch
-                        :value="!element.disabled"
-                        @update:value="(enabled) => handleEntryToggle(element.id, enabled)"
-                      />
-                    </div>
-                  </div>
-                </template>
-              </Draggable>
-
-            <div v-else class="entry-list-empty">{{ t("rstPanel.entries.empty") }}</div>
-            </div>
-          </div>
           </div>
         </n-tab-pane>
 
         <n-tab-pane name="characters" :tab="t('rstPanel.tabs.characters')">
           <div class="tab-content-wrapper">
-          <div class="entries-panel">
-            <div class="entries-actions-row">
-              <div class="entries-title">{{ t("rstPanel.characters.title") }}</div>
-              <div class="entries-actions">
-                <n-button size="small" type="primary" @click="openNewCharacterOverlay">
-                  {{ t("rstPanel.characters.new") }}
-                </n-button>
-                <n-popconfirm
-                  :show-icon="false"
-                  :positive-text="t('common.confirm')"
-                  :positive-button-props="{ type: 'error' }"
-                  @positive-click="handleBulkDeleteCharacters"
+            <div class="entries-panel">
+              <div class="entries-actions-row">
+                <div class="entries-title">{{ t("rstPanel.characters.title") }}</div>
+                <div class="entries-actions">
+                  <n-button size="small" type="primary" @click="openNewCharacterOverlay">
+                    {{ t("rstPanel.characters.new") }}
+                  </n-button>
+                  <n-popconfirm
+                    :show-icon="false"
+                    :positive-text="t('common.confirm')"
+                    :positive-button-props="{ type: 'error' }"
+                    @positive-click="handleBulkDeleteCharacters"
+                  >
+                    <template #trigger>
+                      <n-button
+                        size="small"
+                        secondary
+                        class="entries-action entries-action--danger"
+                        :disabled="!hasCharacterSelection"
+                        :aria-label="t('rstPanel.characters.delete_selected_aria')"
+                        :title="t('rstPanel.actions.delete')"
+                      >
+                        <svg class="icon-trash" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </n-button>
+                    </template>
+                    {{ t("rstPanel.characters.delete_selected_confirm") }}
+                  </n-popconfirm>
+                  <n-button
+                    size="small"
+                    secondary
+                    class="entries-action"
+                    :disabled="!hasCharacterSelection"
+                    :aria-label="t('rstPanel.characters.copy_selected_aria')"
+                    :title="t('rstPanel.actions.copy')"
+                    @click="openCharacterCopyModal"
+                  >
+                    &#x29C9;
+                  </n-button>
+                </div>
+              </div>
+              <div class="entries-scroll-area">
+                <Draggable
+                  v-if="characterRows.length > 0"
+                  v-model="characterRows"
+                  item-key="character_id"
+                  handle=".drag-handle"
+                  class="entry-list"
+                  @end="handleCharacterReorder"
                 >
-                  <template #trigger>
-                    <n-button
-                      size="small"
-                      secondary
-                      class="entries-action entries-action--danger"
-                      :disabled="!hasCharacterSelection"
-                      :aria-label="t('rstPanel.characters.delete_selected_aria')"
-                      :title="t('rstPanel.actions.delete')"
+                  <template #item="{ element }">
+                    <div
+                      class="character-row"
+                      :class="{ active: element.character_id === activeCharacterId }"
+                      @click="openCharacterOverlay(element.character_id)"
                     >
-                      <svg class="icon-trash" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"
-                          fill="currentColor"
+                      <div class="drag-handle" @click.stop>&#8942;&#8942;</div>
+                      <div class="entry-checkbox" @click.stop>
+                        <n-checkbox
+                          size="small"
+                          :checked="selectedCharacterIds.includes(element.character_id)"
+                          @update:checked="
+                            (checked) => toggleCharacterSelected(element.character_id, checked)
+                          "
                         />
-                      </svg>
-                    </n-button>
+                      </div>
+                      <div class="entry-main">
+                        <span class="entry-name">{{ element.name }}</span>
+                        <span class="character-form-meta">{{ characterFormMeta(element) }}</span>
+                      </div>
+                      <div class="entry-mode">{{ characterModeLabel(element) }}</div>
+                      <div class="entry-toggle" @click.stop>
+                        <n-switch
+                          :value="!element.disabled"
+                          @update:value="
+                            (enabled) => handleCharacterToggle(element.character_id, enabled)
+                          "
+                        />
+                      </div>
+                    </div>
                   </template>
-                  {{ t("rstPanel.characters.delete_selected_confirm") }}
-                </n-popconfirm>
-                <n-button
-                  size="small"
-                  secondary
-                  class="entries-action"
-                  :disabled="!hasCharacterSelection"
-                  :aria-label="t('rstPanel.characters.copy_selected_aria')"
-                  :title="t('rstPanel.actions.copy')"
-                  @click="openCharacterCopyModal"
-                >
-                  &#x29C9;
-                </n-button>
+                </Draggable>
+
+                <div v-else class="entry-list-empty">{{ t("rstPanel.characters.empty") }}</div>
               </div>
             </div>
-            <div class="entries-scroll-area">
-              <Draggable
-                v-if="characterRows.length > 0"
-                v-model="characterRows"
-                item-key="character_id"
-                handle=".drag-handle"
-                class="entry-list"
-                @end="handleCharacterReorder"
-              >
-                <template #item="{ element }">
-                  <div
-                    class="character-row"
-                    :class="{ active: element.character_id === activeCharacterId }"
-                    @click="openCharacterOverlay(element.character_id)"
-                  >
-                    <div class="drag-handle" @click.stop>&#8942;&#8942;</div>
-                    <div class="entry-checkbox" @click.stop>
-                      <n-checkbox
-                        size="small"
-                        :checked="selectedCharacterIds.includes(element.character_id)"
-                        @update:checked="(checked) => toggleCharacterSelected(element.character_id, checked)"
-                      />
-                    </div>
-                    <div class="entry-main">
-                      <span class="entry-name">{{ element.name }}</span>
-                      <span class="character-form-meta">{{ characterFormMeta(element) }}</span>
-                    </div>
-                    <div class="entry-mode">{{ characterModeLabel(element) }}</div>
-                    <div class="entry-toggle" @click.stop>
-                      <n-switch
-                        :value="!element.disabled"
-                        @update:value="(enabled) => handleCharacterToggle(element.character_id, enabled)"
-                      />
-                    </div>
-                  </div>
-                </template>
-              </Draggable>
-
-            <div v-else class="entry-list-empty">{{ t("rstPanel.characters.empty") }}</div>
-            </div>
-          </div>
           </div>
         </n-tab-pane>
 
         <n-tab-pane name="scheduler" :tab="t('rstPanel.tabs.scheduler')">
           <div class="tab-content-wrapper">
-          <div class="scheduler-card">
-            <div class="status-grid">
-              <div>
-                <div class="status-label">{{ t("rstPanel.scheduler.schedule") }}</div>
-                <div class="status-value">
-                  {{ runtimeStateLabel(Boolean(loreStore.scheduleStatus?.running)) }}
-                </div>
-                <button class="status-meta status-meta--interactive" type="button" @click="openSchedulerHitsOverlay">
-                  <span>
-                    {{ t("rstPanel.scheduler.match_count") }}:
-                    {{ loreStore.scheduleStatus?.last_matched_count ?? 0 }}
-                  </span>
-                  <span class="status-meta-hint">{{ t("rstPanel.scheduler.view_hits") }}</span>
-                </button>
-              </div>
-              <div>
-                <div class="status-label">{{ t("rstPanel.scheduler.sync") }}</div>
-                <div class="status-value">
-                  {{ runtimeStateLabel(Boolean(loreStore.syncStatus?.running)) }}
-                </div>
-                <button class="status-meta status-meta--interactive" type="button" @click="openSyncChangesOverlay">
-                  <span>
-                    {{ t("rstPanel.scheduler.round") }}:
-                    {{ loreStore.syncStatus?.rounds_since_last_sync ?? 0 }} /
-                    {{ loreStore.syncStatus?.sync_interval ?? 0 }}
-                  </span>
-                  <span class="status-meta-hint">{{ t("rstPanel.scheduler.view_sync_changes") }}</span>
-                </button>
-              </div>
-            </div>
-
-            <div class="scheduler-actions-row">
-              <n-space>
-                <n-button size="small" @click="refreshSchedulerState">
-                  {{ t("rstPanel.scheduler.refresh") }}
-                </n-button>
-                <n-button size="small" type="primary" @click="triggerScheduleNow">
-                  {{ t("rstPanel.scheduler.run_schedule") }}
-                </n-button>
-                <n-button size="small" type="warning" @click="triggerSyncNow">
-                  {{ t("rstPanel.scheduler.run_sync") }}
-                </n-button>
-              </n-space>
-              <n-button size="small" type="primary" @click="saveTemplate">
-                {{ t("rstPanel.scheduler.save_template") }}
-              </n-button>
-            </div>
-
-            <div class="scheduler-prompts-panel">
-              <div class="scheduler-prompts-header">
-                <div class="scheduler-prompts-title">{{ t("rstPanel.scheduler.prompt_templates") }}</div>
-                <n-button text size="tiny" @click="toggleAllSchedulerPrompts">
-                  {{
-                    allSchedulerPromptsCollapsed
-                      ? t("rstPanel.scheduler.expand_all")
-                      : t("rstPanel.scheduler.collapse_all")
-                  }}
-                </n-button>
-              </div>
-              <div class="scheduler-prompts-scroll">
-                <section
-                  v-for="prompt in schedulerPromptConfigs"
-                  :key="prompt.key"
-                  class="scheduler-prompt-section"
-                >
-                  <button
-                    type="button"
-                    class="scheduler-prompt-toggle"
-                    @click="toggleSchedulerPrompt(prompt.key)"
-                  >
-                    <span class="scheduler-prompt-label">{{ prompt.label }}</span>
-                    <span
-                      class="scheduler-prompt-arrow"
-                      :class="{ collapsed: collapsedSchedulerPrompts[prompt.key] }"
-                    >
-                      &#x2304;
-                    </span>
-                  </button>
-                  <div v-show="!collapsedSchedulerPrompts[prompt.key]" class="scheduler-prompt-input">
-                    <n-input
-                      v-model:value="templateForm[prompt.key]"
-                      class="scheduler-prompt-editor"
-                      type="textarea"
-                      :rows="10"
-                      :placeholder="prompt.placeholder"
-                    />
-                    <div class="scheduler-prompt-hint">{{ prompt.hint }}</div>
+            <div class="scheduler-card">
+              <div class="status-grid">
+                <div>
+                  <div class="status-label">{{ t("rstPanel.scheduler.schedule") }}</div>
+                  <div class="status-value">
+                    {{ runtimeStateLabel(Boolean(loreStore.scheduleStatus?.running)) }}
                   </div>
-                </section>
+                  <button
+                    class="status-meta status-meta--interactive"
+                    type="button"
+                    @click="openSchedulerHitsOverlay"
+                  >
+                    <span>
+                      {{ t("rstPanel.scheduler.match_count") }}:
+                      {{ loreStore.scheduleStatus?.last_matched_count ?? 0 }}
+                    </span>
+                    <span class="status-meta-hint">{{ t("rstPanel.scheduler.view_hits") }}</span>
+                  </button>
+                </div>
+                <div>
+                  <div class="status-label">{{ t("rstPanel.scheduler.sync") }}</div>
+                  <div class="status-value">
+                    {{ runtimeStateLabel(Boolean(loreStore.syncStatus?.running)) }}
+                  </div>
+                  <button
+                    class="status-meta status-meta--interactive"
+                    type="button"
+                    @click="openSyncChangesOverlay"
+                  >
+                    <span>
+                      {{ t("rstPanel.scheduler.round") }}:
+                      {{ loreStore.syncStatus?.rounds_since_last_sync ?? 0 }} /
+                      {{ loreStore.syncStatus?.sync_interval ?? 0 }}
+                    </span>
+                    <span class="status-meta-hint">{{
+                      t("rstPanel.scheduler.view_sync_changes")
+                    }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="scheduler-actions-row">
+                <n-space>
+                  <n-button size="small" @click="refreshSchedulerState">
+                    {{ t("rstPanel.scheduler.refresh") }}
+                  </n-button>
+                  <n-button size="small" type="primary" @click="triggerScheduleNow">
+                    {{ t("rstPanel.scheduler.run_schedule") }}
+                  </n-button>
+                  <n-button size="small" type="warning" @click="triggerSyncNow">
+                    {{ t("rstPanel.scheduler.run_sync") }}
+                  </n-button>
+                </n-space>
+                <n-button size="small" type="primary" @click="saveTemplate">
+                  {{ t("rstPanel.scheduler.save_template") }}
+                </n-button>
+              </div>
+
+              <div class="scheduler-prompts-panel">
+                <div class="scheduler-prompts-header">
+                  <div class="scheduler-prompts-title">
+                    {{ t("rstPanel.scheduler.prompt_templates") }}
+                  </div>
+                </div>
+                <div class="scheduler-prompts-scroll">
+                  <button
+                    v-for="prompt in schedulerPromptConfigs"
+                    :key="prompt.key"
+                    type="button"
+                    class="scheduler-prompt-summary-card"
+                    @click="openSchedulerPromptOverlay(prompt.key)"
+                  >
+                    <div class="scheduler-prompt-summary-head">
+                      <span class="scheduler-prompt-label">{{ prompt.label }}</span>
+                      <n-tag
+                        size="small"
+                        :bordered="false"
+                        :type="prompt.configured ? 'success' : 'default'"
+                      >
+                        {{
+                          prompt.configured
+                            ? t("rstPanel.scheduler.summary.configured")
+                            : t("rstPanel.scheduler.summary.empty")
+                        }}
+                      </n-tag>
+                    </div>
+                    <div class="scheduler-prompt-summary-meta">
+                      <span>
+                        {{
+                          formatText("rstPanel.scheduler.summary.chars", {
+                            count: prompt.charCount,
+                          })
+                        }}
+                      </span>
+                      <span>
+                        {{
+                          formatText("rstPanel.scheduler.summary.lines", {
+                            count: prompt.lineCount,
+                          })
+                        }}
+                      </span>
+                    </div>
+                    <div class="scheduler-prompt-summary-preview">{{ prompt.preview }}</div>
+                    <div class="scheduler-prompt-summary-hint">
+                      {{ t("rstPanel.scheduler.summary.click_hint") }}
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
           </div>
         </n-tab-pane>
       </n-tabs>
@@ -376,21 +398,13 @@
               @positive-click="switchCharacterForm"
             >
               <template #trigger>
-                <n-button
-                  size="small"
-                  secondary
-                  :disabled="!canSwitchCharacterForm"
-                >
+                <n-button size="small" secondary :disabled="!canSwitchCharacterForm">
                   {{ t("rstPanel.overlay.character.form.switch") }}
                 </n-button>
               </template>
               {{ t("rstPanel.overlay.character.form.switch_confirm") }}
             </n-popconfirm>
-            <n-button
-              size="small"
-              tertiary
-              @click="createCharacterForm"
-            >
+            <n-button size="small" tertiary @click="createCharacterForm">
               {{ t("rstPanel.overlay.character.form.add") }}
             </n-button>
             <n-popconfirm
@@ -400,12 +414,7 @@
               @positive-click="deleteCharacterForm"
             >
               <template #trigger>
-                <n-button
-                  size="small"
-                  tertiary
-                  type="error"
-                  :disabled="!canDeleteCharacterForm"
-                >
+                <n-button size="small" tertiary type="error" :disabled="!canDeleteCharacterForm">
                   {{ t("rstPanel.overlay.character.form.delete") }}
                 </n-button>
               </template>
@@ -417,7 +426,9 @@
       <template #body-suffix>
         <div v-if="showCharacterMemoryPanel" class="character-memory-panel">
           <button type="button" class="character-memory-toggle" @click="toggleMemoryPanelCollapsed">
-            <span class="character-memory-title">{{ t("rstPanel.overlay.character.memory.title") }}</span>
+            <span class="character-memory-title">{{
+              t("rstPanel.overlay.character.memory.title")
+            }}</span>
             <span class="character-memory-toggle-meta">
               <span class="character-memory-count">
                 {{
@@ -472,7 +483,9 @@
                 <template v-if="editingMemoryId === memory.memory_id">
                   <div class="memory-edit-grid">
                     <div class="memory-edit-item memory-edit-item--full">
-                      <label class="memory-edit-label">{{ t("rstPanel.overlay.character.memory.field.event") }}</label>
+                      <label class="memory-edit-label">{{
+                        t("rstPanel.overlay.character.memory.field.event")
+                      }}</label>
                       <n-input
                         v-model:value="memoryEditDraft.event"
                         type="textarea"
@@ -482,7 +495,9 @@
                       />
                     </div>
                     <div class="memory-edit-item">
-                      <label class="memory-edit-label">{{ t("rstPanel.overlay.character.memory.field.importance") }}</label>
+                      <label class="memory-edit-label">{{
+                        t("rstPanel.overlay.character.memory.field.importance")
+                      }}</label>
                       <n-input-number
                         v-model:value="memoryEditDraft.importance"
                         size="small"
@@ -492,7 +507,9 @@
                       />
                     </div>
                     <div class="memory-edit-item memory-edit-item--full">
-                      <label class="memory-edit-label">{{ t("rstPanel.overlay.character.memory.field.tags") }}</label>
+                      <label class="memory-edit-label">{{
+                        t("rstPanel.overlay.character.memory.field.tags")
+                      }}</label>
                       <n-input
                         v-model:value="memoryEditDraft.tags"
                         size="small"
@@ -500,7 +517,9 @@
                       />
                     </div>
                     <div class="memory-edit-item memory-edit-item--full">
-                      <label class="memory-edit-label">{{ t("rstPanel.overlay.character.memory.field.known_by") }}</label>
+                      <label class="memory-edit-label">{{
+                        t("rstPanel.overlay.character.memory.field.known_by")
+                      }}</label>
                       <n-input
                         v-model:value="memoryEditDraft.known_by"
                         size="small"
@@ -530,10 +549,12 @@
                 <template v-else>
                   <div class="character-memory-meta">
                     <span>
-                      {{ t("rstPanel.overlay.character.memory.importance") }}: {{ memory.importance }}
+                      {{ t("rstPanel.overlay.character.memory.importance") }}:
+                      {{ memory.importance }}
                     </span>
                     <span v-if="memory.plot_event_id">
-                      {{ t("rstPanel.overlay.character.memory.plot_event") }}: {{ memory.plot_event_id }}
+                      {{ t("rstPanel.overlay.character.memory.plot_event") }}:
+                      {{ memory.plot_event_id }}
                     </span>
                     <span>
                       {{ t("rstPanel.overlay.character.memory.created_at") }}:
@@ -547,7 +568,8 @@
                     {{ t("rstPanel.overlay.character.memory.tags") }}: {{ memory.tags.join(", ") }}
                   </div>
                   <div v-if="memory.known_by.length > 0" class="character-memory-extra">
-                    {{ t("rstPanel.overlay.character.memory.known_by") }}: {{ memory.known_by.join(", ") }}
+                    {{ t("rstPanel.overlay.character.memory.known_by") }}:
+                    {{ memory.known_by.join(", ") }}
                   </div>
                 </template>
               </div>
@@ -556,6 +578,134 @@
         </div>
       </template>
     </ContentOverlay>
+
+    <n-modal
+      v-model:show="schedulerPromptOverlayVisible"
+      preset="card"
+      :title="t('rstPanel.scheduler.prompt_overlay_title')"
+      size="huge"
+      :closable="false"
+      :mask-closable="false"
+      :close-on-esc="false"
+    >
+      <div class="scheduler-prompt-overlay-body">
+        <div class="scheduler-prompt-overlay-switcher">
+          <button
+            v-for="prompt in schedulerPromptConfigs"
+            :key="`overlay-${prompt.key}`"
+            type="button"
+            class="scheduler-prompt-switcher-item"
+            :class="{ active: prompt.key === activeSchedulerPromptKey }"
+            @click="openSchedulerPromptOverlay(prompt.key)"
+          >
+            <span>{{ prompt.label }}</span>
+            <span class="scheduler-prompt-switcher-stats">
+              {{ formatText("rstPanel.scheduler.summary.lines", { count: prompt.lineCount }) }}
+            </span>
+          </button>
+        </div>
+
+        <template v-if="activeSchedulerPromptConfig">
+          <div class="scheduler-prompt-overlay-main">
+            <div class="scheduler-prompt-overlay-header">
+              <div>
+                <div class="scheduler-prompt-overlay-label">
+                  {{ activeSchedulerPromptConfig.label }}
+                </div>
+                <div class="scheduler-prompt-overlay-subtitle">
+                  {{ activeSchedulerPromptConfig.placeholder }}
+                </div>
+              </div>
+              <n-tag
+                size="small"
+                :bordered="false"
+                :type="activeSchedulerPromptConfig.configured ? 'success' : 'default'"
+              >
+                {{
+                  activeSchedulerPromptConfig.configured
+                    ? t("rstPanel.scheduler.summary.configured")
+                    : t("rstPanel.scheduler.summary.empty")
+                }}
+              </n-tag>
+            </div>
+
+            <n-input
+              v-model:value="activeSchedulerPromptValue"
+              class="scheduler-prompt-editor scheduler-prompt-overlay-editor"
+              type="textarea"
+              :rows="18"
+              :placeholder="activeSchedulerPromptConfig.placeholder"
+            />
+
+            <div class="scheduler-prompt-overlay-sections">
+              <section class="scheduler-prompt-detail-card">
+                <div class="scheduler-prompt-detail-title">
+                  {{ t("rstPanel.scheduler.detail.runtime_variables") }}
+                </div>
+                <div class="scheduler-prompt-detail-tags">
+                  <n-tag
+                    v-for="placeholder in activeSchedulerPromptConfig.runtimeVariables"
+                    :key="placeholder"
+                    size="small"
+                    :bordered="false"
+                  >
+                    {{ placeholder }}
+                  </n-tag>
+                </div>
+              </section>
+
+              <section class="scheduler-prompt-detail-card">
+                <div class="scheduler-prompt-detail-title">
+                  {{ t("rstPanel.scheduler.detail.format_constraints") }}
+                </div>
+                <div class="scheduler-prompt-detail-text">
+                  {{ activeSchedulerPromptConfig.formatConstraints }}
+                </div>
+                <div class="scheduler-prompt-detail-note">
+                  {{ activeSchedulerPromptConfig.hint }}
+                </div>
+              </section>
+            </div>
+          </div>
+        </template>
+      </div>
+      <template #footer>
+        <div class="copy-modal-actions">
+          <n-button secondary @click="attemptCloseSchedulerPromptOverlay">
+            {{ t("rstPanel.scheduler.prompt_overlay_close") }}
+          </n-button>
+          <n-button type="primary" @click="saveTemplate">
+            {{ t("rstPanel.scheduler.save_template") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
+
+    <n-modal
+      v-model:show="schedulerPromptUnsavedVisible"
+      preset="card"
+      :title="t('contentOverlay.unsaved.title')"
+      size="small"
+      :mask-closable="false"
+      :style="{ width: '420px', maxWidth: 'calc(100vw - 32px)' }"
+    >
+      <div class="unsaved-body">
+        {{ t("contentOverlay.unsaved.body") }}
+      </div>
+      <template #footer>
+        <div class="unsaved-actions">
+          <n-button secondary @click="handleSchedulerPromptUnsavedDiscard">
+            {{ t("contentOverlay.actions.discard") }}
+          </n-button>
+          <n-button type="primary" @click="handleSchedulerPromptUnsavedSave">
+            {{ t("contentOverlay.actions.save") }}
+          </n-button>
+          <n-button tertiary @click="schedulerPromptUnsavedVisible = false">
+            {{ t("contentOverlay.unsaved.back") }}
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
 
     <n-modal
       v-model:show="schedulerHitsOverlayVisible"
@@ -618,7 +768,11 @@
           {{ t("rstPanel.scheduler.sync_overlay_empty") }}
         </div>
         <div v-else class="sync-change-list">
-          <div v-for="(item, index) in syncOverlayItems" :key="`${item.entry_id}-${item.action}-${index}`" class="sync-change-card">
+          <div
+            v-for="(item, index) in syncOverlayItems"
+            :key="`${item.entry_id}-${item.action}-${index}`"
+            class="sync-change-card"
+          >
             <div class="sync-change-header">
               <div class="sync-change-title">{{ item.name || item.entry_id }}</div>
               <n-tag size="small" :bordered="false">{{ syncActionLabel(item.action) }}</n-tag>
@@ -627,29 +781,40 @@
               {{ syncCategoryLabel(item.category) }} &middot; {{ item.entry_id }}
             </div>
             <div v-if="item.summary" class="sync-change-section">
-              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.summary") }}</div>
+              <div class="sync-change-label">
+                {{ t("rstPanel.scheduler.sync_change.section.summary") }}
+              </div>
               <div class="sync-change-line">{{ item.summary }}</div>
             </div>
             <div v-if="item.field_changes.length > 0" class="sync-change-section">
-              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.fields") }}</div>
+              <div class="sync-change-label">
+                {{ t("rstPanel.scheduler.sync_change.section.fields") }}
+              </div>
               <div
                 v-for="(fieldItem, fieldIndex) in item.field_changes"
                 :key="`${item.entry_id}-${fieldItem.field}-${fieldIndex}`"
                 class="sync-change-line"
               >
-                {{ fieldItem.field }}: {{ fieldItem.before || "(empty)" }} -> {{ fieldItem.after || "(empty)" }}
+                {{ fieldItem.field }}: {{ fieldItem.before || "(empty)" }} ->
+                {{ fieldItem.after || "(empty)" }}
               </div>
             </div>
             <div v-if="item.memory_event" class="sync-change-section">
-              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.memory_event") }}</div>
+              <div class="sync-change-label">
+                {{ t("rstPanel.scheduler.sync_change.section.memory_event") }}
+              </div>
               <div class="sync-change-line">{{ item.memory_event }}</div>
             </div>
             <div v-if="item.content_append" class="sync-change-section">
-              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.appended") }}</div>
+              <div class="sync-change-label">
+                {{ t("rstPanel.scheduler.sync_change.section.appended") }}
+              </div>
               <div class="sync-change-block">{{ item.content_append }}</div>
             </div>
             <div v-if="item.before_content || item.after_content" class="sync-change-section">
-              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.content") }}</div>
+              <div class="sync-change-label">
+                {{ t("rstPanel.scheduler.sync_change.section.content") }}
+              </div>
               <div v-if="item.before_content" class="sync-change-line">
                 {{ t("rstPanel.scheduler.sync_change.before") }}: {{ item.before_content }}
               </div>
@@ -658,7 +823,9 @@
               </div>
             </div>
             <div v-if="item.tags_added.length > 0" class="sync-change-section">
-              <div class="sync-change-label">{{ t("rstPanel.scheduler.sync_change.section.tags") }}</div>
+              <div class="sync-change-label">
+                {{ t("rstPanel.scheduler.sync_change.section.tags") }}
+              </div>
               <div class="sync-change-line">{{ item.tags_added.join(", ") }}</div>
             </div>
           </div>
@@ -954,6 +1121,19 @@ interface LoreTotals {
 
 type SchedulerPromptKey = "confirm_prompt" | "extract_prompt" | "consolidate_prompt";
 
+interface SchedulerPromptConfig {
+  key: SchedulerPromptKey;
+  label: string;
+  placeholder: string;
+  hint: string;
+  runtimeVariables: string[];
+  formatConstraints: string;
+  configured: boolean;
+  charCount: number;
+  lineCount: number;
+  preview: string;
+}
+
 interface SchedulerHitItem {
   id: string;
   name: string;
@@ -996,7 +1176,7 @@ const { currentSession, sessions } = storeToRefs(sessionStore);
 
 type EntryCategory = Exclude<LoreCategory, "character" | "memory">;
 
-const activeTab = ref<"entries" | "characters" | "scheduler">("entries");
+const activeTab = ref<RstLoreTab>("entries");
 const entryCategory = ref<EntryCategory>("world_base");
 const entryFilter = ref<EntryCategory>("world_base");
 
@@ -1088,11 +1268,19 @@ const templateForm = reactive({
   extract_prompt: "",
   consolidate_prompt: "",
 });
-const collapsedSchedulerPrompts = reactive<Record<SchedulerPromptKey, boolean>>({
-  confirm_prompt: false,
-  extract_prompt: false,
-  consolidate_prompt: false,
-});
+type RstLoreTab = "entries" | "characters" | "scheduler";
+
+type SchedulerPromptLeaveIntent =
+  | { type: "close_overlay" }
+  | { type: "switch_tab"; tab: RstLoreTab }
+  | { type: "switch_session"; sessionName: string };
+
+const schedulerPromptOverlayVisible = ref(false);
+const schedulerPromptUnsavedVisible = ref(false);
+const schedulerPromptInitialSnapshot = ref("");
+const pendingSchedulerPromptLeaveIntent = ref<SchedulerPromptLeaveIntent | null>(null);
+const schedulerSessionRollbackInProgress = ref(false);
+const activeSchedulerPromptKey = ref<SchedulerPromptKey>("confirm_prompt");
 const schedulerHitsOverlayVisible = ref(false);
 const schedulerHitLoading = ref(false);
 const schedulerHitItems = ref<SchedulerHitItem[]>([]);
@@ -1111,9 +1299,7 @@ const targetSessionOptions = computed(() =>
   sessions.value
     .filter(
       (session) =>
-        session.mode === "RST" &&
-        !session.is_closed &&
-        session.name !== currentSession.value?.name,
+        session.mode === "RST" && !session.is_closed && session.name !== currentSession.value?.name,
     )
     .map((session) => ({ label: session.name, value: session.name })),
 );
@@ -1131,7 +1317,7 @@ const selectedCharacters = computed(() => {
 });
 const editingCharacter = computed(() =>
   editingCharacterId.value
-    ? loreStore.characters.find((item) => item.character_id === editingCharacterId.value) ?? null
+    ? (loreStore.characters.find((item) => item.character_id === editingCharacterId.value) ?? null)
     : null,
 );
 const characterFormOptions = computed<Array<{ label: string; value: string }>>(() => {
@@ -1151,8 +1337,8 @@ const activeFormDisplayName = computed(() => {
   const activeForm = resolveCharacterActiveForm(character);
   return activeForm?.form_name || t("rstPanel.overlay.character.form.none");
 });
-const showCharacterFormToolbar = computed(
-  () => Boolean(editingCharacter.value && characterFormOptions.value.length > 0),
+const showCharacterFormToolbar = computed(() =>
+  Boolean(editingCharacter.value && characterFormOptions.value.length > 0),
 );
 const showCharacterMemoryPanel = computed(() => Boolean(editingCharacter.value));
 const characterMemoryItems = computed<CharacterMemory[]>(() => {
@@ -1181,33 +1367,61 @@ const canDeleteCharacterForm = computed(() => {
   return Boolean(character && character.forms.length > 1 && selectedCharacterFormId.value);
 });
 const characterCopyConfirmDisabled = computed(
-  () => !hasCharacterSelection.value || !characterCopyTarget.value || targetSessionOptions.value.length === 0,
+  () =>
+    !hasCharacterSelection.value ||
+    !characterCopyTarget.value ||
+    targetSessionOptions.value.length === 0,
 );
-const schedulerPromptConfigs = computed<
-  Array<{ key: SchedulerPromptKey; label: string; placeholder: string; hint: string }>
->(() => [
+const schedulerPromptConfigs = computed<SchedulerPromptConfig[]>(() => [
   {
     key: "confirm_prompt",
     label: t("rstPanel.scheduler.prompt.confirm"),
     placeholder: t("rstPanel.scheduler.placeholder.confirm_prompt"),
     hint: t("rstPanel.scheduler.hint.confirm_prompt"),
+    runtimeVariables: ["{conversation_context}", "{candidate_entries}"],
+    formatConstraints: t("rstPanel.scheduler.constraint.confirm_prompt"),
+    configured: templateForm.confirm_prompt.trim().length > 0,
+    charCount: templateForm.confirm_prompt.trim().length,
+    lineCount: countPromptLines(templateForm.confirm_prompt),
+    preview: buildSchedulerPromptPreview(templateForm.confirm_prompt),
   },
   {
     key: "extract_prompt",
     label: t("rstPanel.scheduler.prompt.extract"),
     placeholder: t("rstPanel.scheduler.placeholder.extract_prompt"),
     hint: t("rstPanel.scheduler.hint.extract_prompt"),
+    runtimeVariables: ["{conversation_context}", "{existing_entries_summary}", "{character_list}"],
+    formatConstraints: t("rstPanel.scheduler.constraint.extract_prompt"),
+    configured: templateForm.extract_prompt.trim().length > 0,
+    charCount: templateForm.extract_prompt.trim().length,
+    lineCount: countPromptLines(templateForm.extract_prompt),
+    preview: buildSchedulerPromptPreview(templateForm.extract_prompt),
   },
   {
     key: "consolidate_prompt",
     label: t("rstPanel.scheduler.prompt.consolidate"),
     placeholder: t("rstPanel.scheduler.placeholder.consolidate_prompt"),
     hint: t("rstPanel.scheduler.hint.consolidate_prompt"),
+    runtimeVariables: ["{character_name}", "{memories_to_consolidate}"],
+    formatConstraints: t("rstPanel.scheduler.constraint.consolidate_prompt"),
+    configured: templateForm.consolidate_prompt.trim().length > 0,
+    charCount: templateForm.consolidate_prompt.trim().length,
+    lineCount: countPromptLines(templateForm.consolidate_prompt),
+    preview: buildSchedulerPromptPreview(templateForm.consolidate_prompt),
   },
 ]);
-const allSchedulerPromptsCollapsed = computed(() =>
-  schedulerPromptConfigs.value.every((prompt) => collapsedSchedulerPrompts[prompt.key]),
+const activeSchedulerPromptConfig = computed<SchedulerPromptConfig | null>(
+  () =>
+    schedulerPromptConfigs.value.find((prompt) => prompt.key === activeSchedulerPromptKey.value) ??
+    schedulerPromptConfigs.value[0] ??
+    null,
 );
+const activeSchedulerPromptValue = computed({
+  get: (): string => templateForm[activeSchedulerPromptKey.value],
+  set: (value: string): void => {
+    templateForm[activeSchedulerPromptKey.value] = value;
+  },
+});
 const schedulerMatchedIds = computed(() => {
   const matched = loreStore.scheduleStatus?.last_matched_entry_ids ?? [];
   if (matched.length > 0) {
@@ -1296,7 +1510,9 @@ function tryOpenCharacterOverlayFromRequest(request: OpenCharacterOverlayRequest
   if (!exists) {
     return false;
   }
-  activeTab.value = "characters";
+  if (!requestActiveTabChange("characters")) {
+    return false;
+  }
   void openCharacterOverlay(request.characterId, request.preferredFormId ?? undefined);
   return true;
 }
@@ -1331,8 +1547,14 @@ function handleExternalLoreDataChanged(event: Event) {
 
 onMounted(async () => {
   if (typeof window !== "undefined") {
-    window.addEventListener(OPEN_CHARACTER_OVERLAY_EVENT, handleOpenCharacterOverlayEvent as EventListener);
-    window.addEventListener(LORE_DATA_CHANGED_EVENT, handleExternalLoreDataChanged as EventListener);
+    window.addEventListener(
+      OPEN_CHARACTER_OVERLAY_EVENT,
+      handleOpenCharacterOverlayEvent as EventListener,
+    );
+    window.addEventListener(
+      LORE_DATA_CHANGED_EVENT,
+      handleExternalLoreDataChanged as EventListener,
+    );
   }
   if (sessions.value.length === 0) {
     await sessionStore.loadSessions();
@@ -1348,12 +1570,37 @@ onBeforeUnmount(() => {
     OPEN_CHARACTER_OVERLAY_EVENT,
     handleOpenCharacterOverlayEvent as EventListener,
   );
-  window.removeEventListener(LORE_DATA_CHANGED_EVENT, handleExternalLoreDataChanged as EventListener);
+  window.removeEventListener(
+    LORE_DATA_CHANGED_EVENT,
+    handleExternalLoreDataChanged as EventListener,
+  );
 });
 
 watch(
   () => currentSession.value?.name,
-  async () => {
+  async (sessionName, previousSessionName) => {
+    if (schedulerSessionRollbackInProgress.value) {
+      return;
+    }
+    if (
+      sessionName !== previousSessionName &&
+      schedulerPromptOverlayVisible.value &&
+      hasSchedulerPromptUnsavedChanges() &&
+      previousSessionName &&
+      sessionName
+    ) {
+      schedulerSessionRollbackInProgress.value = true;
+      try {
+        await sessionStore.loadSession(previousSessionName);
+      } finally {
+        schedulerSessionRollbackInProgress.value = false;
+      }
+      openSchedulerPromptUnsavedDialog({
+        type: "switch_session",
+        sessionName,
+      });
+      return;
+    }
     importRecoveryToken.value += 1;
     pendingCharacterOverlayRequest.value = null;
     await bootstrapCurrentSession();
@@ -1435,11 +1682,17 @@ watch(
     templateForm.confirm_prompt = value.confirm_prompt;
     templateForm.extract_prompt = value.extract_prompt;
     templateForm.consolidate_prompt = value.consolidate_prompt;
+    if (!schedulerPromptOverlayVisible.value) {
+      syncSchedulerPromptSnapshot();
+    }
   },
   { deep: true },
 );
 
 async function bootstrapCurrentSession() {
+  schedulerPromptOverlayVisible.value = false;
+  schedulerPromptUnsavedVisible.value = false;
+  pendingSchedulerPromptLeaveIntent.value = null;
   schedulerHitsOverlayVisible.value = false;
   schedulerHitLoading.value = false;
   schedulerHitItems.value = [];
@@ -1497,9 +1750,7 @@ function parseDelimitedText(text: string): string[] {
 
 function parseIdList(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value
-      .map((item) => String(item).trim())
-      .filter(Boolean);
+    return value.map((item) => String(item).trim()).filter(Boolean);
   }
   return parseDelimitedText(String(value ?? ""));
 }
@@ -1607,13 +1858,7 @@ function collectSkillIds(form: CharacterForm | null): string[] {
   if (!form) {
     return [];
   }
-  return [
-    ...form.weak,
-    ...form.resist,
-    ...form.element,
-    ...form.skills,
-    ...form.penetration,
-  ]
+  return [...form.weak, ...form.resist, ...form.element, ...form.skills, ...form.penetration]
     .map((id) => String(id ?? "").trim())
     .filter(Boolean);
 }
@@ -1671,7 +1916,9 @@ async function handleEntryFilterChange(value: EntryCategory | null) {
   }
   entryFilter.value = value;
   entryCategory.value = value;
-  activeTab.value = "entries";
+  if (!requestActiveTabChange("entries")) {
+    return;
+  }
   if (!currentSession.value?.name) {
     return;
   }
@@ -2641,10 +2888,7 @@ async function handleCharacterOverlaySave(data: {
   closeCharacterOverlay();
 }
 
-function notifyLoreDataChanged(
-  sessionName: string,
-  source: "status-panel" | "rst-lore-panel",
-) {
+function notifyLoreDataChanged(sessionName: string, source: "status-panel" | "rst-lore-panel") {
   if (typeof window === "undefined") {
     return;
   }
@@ -2696,10 +2940,14 @@ async function createCharacterForm() {
     return;
   }
   const character = editingCharacter.value;
-  const created = await loreStore.addCharacterForm(currentSession.value.name, character.character_id, {
-    form_name: buildNewFormName(character),
-    is_default: false,
-  });
+  const created = await loreStore.addCharacterForm(
+    currentSession.value.name,
+    character.character_id,
+    {
+      form_name: buildNewFormName(character),
+      is_default: false,
+    },
+  );
   if (!created) {
     return;
   }
@@ -3007,18 +3255,117 @@ async function confirmCharacterCopy() {
   }
 }
 
-function toggleSchedulerPrompt(promptKey: SchedulerPromptKey) {
-  collapsedSchedulerPrompts[promptKey] = !collapsedSchedulerPrompts[promptKey];
+function buildSchedulerPromptPreview(value: string): string {
+  const normalized = value.replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return t("rstPanel.scheduler.summary.preview_empty");
+  }
+  return normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(" ");
 }
 
-function toggleAllSchedulerPrompts() {
-  const nextCollapsed = !allSchedulerPromptsCollapsed.value;
-  schedulerPromptConfigs.value.forEach((prompt) => {
-    collapsedSchedulerPrompts[prompt.key] = nextCollapsed;
+function buildSchedulerTemplateSnapshot(): string {
+  return JSON.stringify({
+    confirm_prompt: templateForm.confirm_prompt,
+    extract_prompt: templateForm.extract_prompt,
+    consolidate_prompt: templateForm.consolidate_prompt,
   });
 }
 
-function buildSchedulerHitLookup(entries: LoreEntry[], characters: CharacterData[]): Map<string, SchedulerHitItem> {
+function syncSchedulerPromptSnapshot(): void {
+  schedulerPromptInitialSnapshot.value = buildSchedulerTemplateSnapshot();
+}
+
+function hasSchedulerPromptUnsavedChanges(): boolean {
+  return schedulerPromptInitialSnapshot.value !== buildSchedulerTemplateSnapshot();
+}
+
+function openSchedulerPromptUnsavedDialog(intent: SchedulerPromptLeaveIntent): void {
+  pendingSchedulerPromptLeaveIntent.value = intent;
+  schedulerPromptUnsavedVisible.value = true;
+}
+
+async function continueSchedulerPromptLeaveIntent(): Promise<void> {
+  const intent = pendingSchedulerPromptLeaveIntent.value;
+  pendingSchedulerPromptLeaveIntent.value = null;
+  schedulerPromptOverlayVisible.value = false;
+  if (!intent) {
+    return;
+  }
+  if (intent.type === "switch_tab") {
+    activeTab.value = intent.tab;
+    return;
+  }
+  if (intent.type === "switch_session") {
+    await sessionStore.loadSession(intent.sessionName);
+  }
+}
+
+function countPromptLines(value: string): number {
+  const normalized = value.replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return 0;
+  }
+  return normalized.split("\n").length;
+}
+
+function openSchedulerPromptOverlay(promptKey: SchedulerPromptKey) {
+  activeSchedulerPromptKey.value = promptKey;
+  if (!schedulerPromptOverlayVisible.value) {
+    syncSchedulerPromptSnapshot();
+  }
+  schedulerPromptOverlayVisible.value = true;
+}
+
+function attemptCloseSchedulerPromptOverlay() {
+  if (!hasSchedulerPromptUnsavedChanges()) {
+    pendingSchedulerPromptLeaveIntent.value = null;
+    schedulerPromptOverlayVisible.value = false;
+    return;
+  }
+  openSchedulerPromptUnsavedDialog({ type: "close_overlay" });
+}
+
+function handleSchedulerPromptUnsavedDiscard() {
+  schedulerPromptUnsavedVisible.value = false;
+  void continueSchedulerPromptLeaveIntent();
+}
+
+async function handleSchedulerPromptUnsavedSave() {
+  schedulerPromptUnsavedVisible.value = false;
+  const saved = await saveTemplate();
+  if (saved) {
+    await continueSchedulerPromptLeaveIntent();
+  }
+}
+
+function handleActiveTabChange(nextTab: string) {
+  if (nextTab !== "entries" && nextTab !== "characters" && nextTab !== "scheduler") {
+    return;
+  }
+  requestActiveTabChange(nextTab);
+}
+
+function requestActiveTabChange(nextTab: RstLoreTab): boolean {
+  if (nextTab === activeTab.value) {
+    return true;
+  }
+  if (schedulerPromptOverlayVisible.value && hasSchedulerPromptUnsavedChanges()) {
+    openSchedulerPromptUnsavedDialog({ type: "switch_tab", tab: nextTab });
+    return false;
+  }
+  activeTab.value = nextTab;
+  return true;
+}
+
+function buildSchedulerHitLookup(
+  entries: LoreEntry[],
+  characters: CharacterData[],
+): Map<string, SchedulerHitItem> {
   const lookup = new Map<string, SchedulerHitItem>();
 
   entries.forEach((entry) => {
@@ -3138,15 +3485,21 @@ async function triggerSyncNow() {
   await loreStore.triggerSync(currentSession.value.name);
 }
 
-async function saveTemplate() {
+async function saveTemplate(): Promise<boolean> {
   if (!currentSession.value?.name) {
-    return;
+    return false;
   }
-  await loreStore.updateSchedulerTemplate(currentSession.value.name, {
+  const savedTemplate = await loreStore.updateSchedulerTemplate(currentSession.value.name, {
     confirm_prompt: templateForm.confirm_prompt,
     extract_prompt: templateForm.extract_prompt,
     consolidate_prompt: templateForm.consolidate_prompt,
   });
+  if (!savedTemplate) {
+    return false;
+  }
+  syncSchedulerPromptSnapshot();
+  message.success(t("rstPanel.messages.scheduler_template_saved"));
+  return true;
 }
 
 function openImportPicker() {
@@ -3181,11 +3534,11 @@ function isSnapshotBundlePayload(payload: unknown): payload is LoreSnapshotBundl
   }
   const candidate = payload as Partial<LoreSnapshotBundle>;
   return (
-    candidate.format === "rst-lore-snapshot-v1"
-    && Array.isArray(candidate.entries)
-    && Array.isArray(candidate.characters)
-    && typeof candidate.scene_state === "object"
-    && typeof candidate.scheduler_template === "object"
+    candidate.format === "rst-lore-snapshot-v1" &&
+    Array.isArray(candidate.entries) &&
+    Array.isArray(candidate.characters) &&
+    typeof candidate.scene_state === "object" &&
+    typeof candidate.scheduler_template === "object"
   );
 }
 
@@ -3388,7 +3741,9 @@ function actionLabel(action: string): string {
     character_llm_structured_created: t(
       "rstPanel.report.action_type.character_llm_structured_created",
     ),
-    character_yaml_fallback_created: t("rstPanel.report.action_type.character_yaml_fallback_created"),
+    character_yaml_fallback_created: t(
+      "rstPanel.report.action_type.character_yaml_fallback_created",
+    ),
     entry_failed: t("rstPanel.report.action_type.entry_failed"),
   };
   return labels[action] ?? action;
@@ -3959,41 +4314,191 @@ function actionLabel(action: string): string {
   gap: 8px;
 }
 
-.scheduler-prompt-section {
+.scheduler-prompt-summary-card {
+  width: 100%;
   border: 1px solid var(--rst-border-color);
   border-radius: 8px;
-  overflow: hidden;
-}
-
-.scheduler-prompt-toggle {
-  width: 100%;
-  border: none;
-  background: transparent;
+  text-align: left;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
   color: inherit;
   cursor: pointer;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  padding: 8px 10px;
-  font-size: 12px;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.scheduler-prompt-summary-card:hover {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.08);
+  transform: translateY(-1px);
+}
+
+.scheduler-prompt-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .scheduler-prompt-label {
   font-weight: 600;
 }
 
-.scheduler-prompt-arrow {
-  transition: transform 0.2s ease;
+.scheduler-prompt-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--rst-text-secondary);
 }
 
-.scheduler-prompt-arrow.collapsed {
-  transform: rotate(-90deg);
+.scheduler-prompt-summary-preview {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--rst-text-primary);
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
-.scheduler-prompt-input {
-  border-top: 1px solid var(--rst-border-color);
+.scheduler-prompt-summary-hint {
+  font-size: 11px;
+  color: var(--rst-text-secondary);
+}
+
+.scheduler-prompt-overlay-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 420px;
+  max-height: 72vh;
+}
+
+.scheduler-prompt-overlay-switcher {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 10px;
+  background: var(--rst-bg-topbar);
   padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.scheduler-prompt-switcher-item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 10px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scheduler-prompt-switcher-item:hover,
+.scheduler-prompt-switcher-item.active {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.scheduler-prompt-switcher-stats {
+  font-size: 11px;
+  color: var(--rst-text-secondary);
+}
+
+.scheduler-prompt-overlay-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scheduler-prompt-overlay-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scheduler-prompt-overlay-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.scheduler-prompt-overlay-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--rst-text-secondary);
+}
+
+.scheduler-prompt-overlay-editor {
+  min-height: 0;
+}
+
+.scheduler-prompt-overlay-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.scheduler-prompt-detail-card {
+  border: 1px solid var(--rst-border-color);
+  border-radius: 10px;
+  background: var(--rst-bg-topbar);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scheduler-prompt-detail-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scheduler-prompt-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scheduler-prompt-detail-text,
+.scheduler-prompt-detail-note {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.scheduler-prompt-detail-text {
+  color: var(--rst-text-primary);
+}
+
+.scheduler-prompt-detail-note {
+  color: var(--rst-text-secondary);
+}
+
+.unsaved-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--rst-text-secondary);
+}
+
+.unsaved-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .scheduler-prompt-editor :deep(.n-input__textarea-el) {
@@ -4003,14 +4508,6 @@ function actionLabel(action: string): string {
   resize: vertical;
   line-height: 1.45;
   tab-size: 2;
-}
-
-.scheduler-prompt-hint {
-  margin-top: 8px;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--rst-text-secondary);
-  white-space: pre-wrap;
 }
 
 .scheduler-hit-overlay-body {
@@ -4340,6 +4837,15 @@ function actionLabel(action: string): string {
     flex-direction: column;
   }
 
+  .scheduler-prompt-overlay-body,
+  .scheduler-prompt-overlay-sections {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduler-prompt-overlay-switcher {
+    max-height: 180px;
+  }
+
   .character-form-toolbar-actions :deep(.n-select) {
     width: 100%;
   }
@@ -4349,4 +4855,3 @@ function actionLabel(action: string): string {
   }
 }
 </style>
-

@@ -85,7 +85,10 @@ export const useLoreStore = defineStore("lore", () => {
     loading.value = true;
     try {
       const entry = await createEntry(sessionName, payload);
-      if (currentEntriesCategory.value === null || currentEntriesCategory.value === entry.category) {
+      if (
+        currentEntriesCategory.value === null ||
+        currentEntriesCategory.value === entry.category
+      ) {
         entries.value = [...entries.value, entry];
       }
       return entry;
@@ -105,7 +108,10 @@ export const useLoreStore = defineStore("lore", () => {
     loading.value = true;
     try {
       const updated = await updateEntry(sessionName, entryId, payload);
-      if (currentEntriesCategory.value === null || currentEntriesCategory.value === updated.category) {
+      if (
+        currentEntriesCategory.value === null ||
+        currentEntriesCategory.value === updated.category
+      ) {
         entries.value = entries.value.map((entry) => (entry.id === entryId ? updated : entry));
       } else {
         entries.value = entries.value.filter((entry) => entry.id !== entryId);
@@ -281,10 +287,7 @@ export const useLoreStore = defineStore("lore", () => {
           return character;
         }
         const forms = payload.is_default
-          ? [
-              ...character.forms.map((form) => ({ ...form, is_default: false })),
-              createdForm,
-            ]
+          ? [...character.forms.map((form) => ({ ...form, is_default: false })), createdForm]
           : [...character.forms, createdForm];
         return {
           ...character,
@@ -362,10 +365,7 @@ export const useLoreStore = defineStore("lore", () => {
     }
   }
 
-  async function deleteCharacterAction(
-    sessionName: string,
-    characterId: string,
-  ): Promise<void> {
+  async function deleteCharacterAction(sessionName: string, characterId: string): Promise<void> {
     loading.value = true;
     try {
       await deleteCharacter(sessionName, characterId);
@@ -441,12 +441,14 @@ export const useLoreStore = defineStore("lore", () => {
   async function updateSchedulerTemplateAction(
     sessionName: string,
     payload: SchedulerTemplateUpdate,
-  ): Promise<void> {
+  ): Promise<SchedulerPromptTemplate | null> {
     loading.value = true;
     try {
       schedulerTemplate.value = await updateSchedulerTemplate(sessionName, payload);
+      return schedulerTemplate.value;
     } catch (error) {
       message.error(parseApiError(error));
+      return null;
     } finally {
       loading.value = false;
     }

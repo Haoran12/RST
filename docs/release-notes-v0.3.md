@@ -11,6 +11,11 @@
 
 - Fixed production frontend API resolution so release builds default to same-origin instead of baking in a machine-specific localhost API base.
 
+## Patch Updates
+- Improved the RST Lores scheduler prompt template editing UX by moving full template editing into a larger overlay.
+- Kept the scheduler panel compact with prompt summary cards, while exposing runtime variables and format constraints in the overlay.
+- Added unsaved-change guards and save-success feedback for scheduler prompt templates, including tab-switch and session-switch interception.
+
 ## Documentation
 - Updated `README.md`, `README.en.md`, and `README.zh-CN.md` for the v0.3 release flow.
 - Documented the packaged release entry scripts and the GitHub Release publishing command.
