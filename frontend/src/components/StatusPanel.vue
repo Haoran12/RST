@@ -141,13 +141,21 @@
                   @keydown.enter.prevent="requestCharacterOverlay('vitality')"
                   @keydown.space.prevent="requestCharacterOverlay('vitality')"
                 >
-                  <div class="character-energy-bar" role="progressbar" :aria-valuemin="0" :aria-valuemax="100" :aria-valuenow="activeCharacterVitalityPercent">
+                  <div
+                    class="character-energy-bar"
+                    role="progressbar"
+                    :aria-valuemin="0"
+                    :aria-valuemax="100"
+                    :aria-valuenow="activeCharacterVitalityPercent"
+                  >
                     <div
                       class="character-energy-bar__fill"
                       :class="activeCharacterVitalityStateClass"
                       :style="{ width: `${activeCharacterVitalityFillPercent}%` }"
                     ></div>
-                    <span class="character-energy-bar__text">{{ valueOrFallback(activeCharacterEnergyText) }}</span>
+                    <span class="character-energy-bar__text">{{
+                      valueOrFallback(activeCharacterEnergyText)
+                    }}</span>
                   </div>
                 </div>
               </div>
@@ -179,15 +187,31 @@
               </div>
               <div class="character-field-row">
                 <span class="character-field-label">{{ t("statusPanel.character.activity") }}</span>
-                <span class="character-field-value">{{ valueOrFallback(activeCharacterActivity) }}</span>
+                <span class="character-field-value">{{
+                  valueOrFallback(activeCharacterActivity)
+                }}</span>
               </div>
               <div class="character-field-row">
-                <span class="character-field-label">{{ t("statusPanel.character.body_state") }}</span>
-                <span class="character-field-value">{{ valueOrFallback(activeCharacterBodyState) }}</span>
+                <span class="character-field-label">{{
+                  t("statusPanel.character.objective")
+                }}</span>
+                <span class="character-field-value">{{
+                  valueOrFallback(activeCharacterObjective)
+                }}</span>
+              </div>
+              <div class="character-field-row">
+                <span class="character-field-label">{{
+                  t("statusPanel.character.body_state")
+                }}</span>
+                <span class="character-field-value">{{
+                  valueOrFallback(activeCharacterBodyState)
+                }}</span>
               </div>
               <div class="character-field-row">
                 <span class="character-field-label">{{ t("statusPanel.character.mind") }}</span>
-                <span class="character-field-value">{{ valueOrFallback(activeCharacterMind) }}</span>
+                <span class="character-field-value">{{
+                  valueOrFallback(activeCharacterMind)
+                }}</span>
               </div>
             </div>
           </article>
@@ -269,14 +293,7 @@ const PRESENT_TAG_HINTS = [
   "\u5f53\u524d",
   "\u51fa\u573a",
 ];
-const TIME_TAG_KEYS = [
-  "time",
-  "date",
-  "timeline",
-  "\u65f6\u95f4",
-  "\u65e5\u671f",
-  "\u65f6\u523b",
-];
+const TIME_TAG_KEYS = ["time", "date", "timeline", "\u65f6\u95f4", "\u65e5\u671f", "\u65f6\u523b"];
 const PLACE_TAG_KEYS = [
   "place",
   "location",
@@ -288,7 +305,8 @@ const PLACE_TAG_KEYS = [
 const REQUEST_OPEN_CHARACTER_OVERLAY_EVENT = "rst-request-open-character-overlay";
 const LORE_DATA_CHANGED_EVENT = "rst-lore-data-changed";
 const SCENE_NAME_NOTE_RE = /\([^)]*\)|\uFF08[^\uFF09]*\uFF09|\[[^\]]*]|\u3010[^\u3011]*\u3011/g;
-const SCENE_NAME_SEPARATOR_RE = /[\s\u3000,\uFF0C\u3001;\uFF1B\u00B7\u2027"'`\u201C\u201D\u2018\u2019]/g;
+const SCENE_NAME_SEPARATOR_RE =
+  /[\s\u3000,\uFF0C\u3001;\uFF1B\u00B7\u2027"'`\u201C\u201D\u2018\u2019]/g;
 
 const sessionStore = useSessionStore();
 const { t } = useI18n();
@@ -528,6 +546,7 @@ const activeCharacterBodyState = computed(() => {
 });
 
 const activeCharacterActivity = computed(() => activeCharacterForm.value?.activity ?? "");
+const activeCharacterObjective = computed(() => activeCharacter.value?.objective ?? "");
 const activeCharacterMind = computed(() => activeCharacterForm.value?.mind ?? "");
 const activeCharacterFormDisplay = computed(() => {
   const character = activeCharacter.value;
@@ -861,7 +880,12 @@ function isTagMatchedByKeys(tag: string, keys: string[]): boolean {
   return keys.some((candidate) => key.includes(candidate.toLowerCase()));
 }
 
-function upsertTagGroup(tags: string[], keys: string[], canonicalKey: string, value: string): string[] {
+function upsertTagGroup(
+  tags: string[],
+  keys: string[],
+  canonicalKey: string,
+  value: string,
+): string[] {
   const filtered = tags.filter((tag) => !isTagMatchedByKeys(tag, keys));
   if (!value) {
     return filtered;
@@ -1402,7 +1426,9 @@ function escapeRegExp(value: string): string {
   cursor: pointer;
   border-radius: 8px;
   outline: 1px solid transparent;
-  transition: background 0.2s ease, outline-color 0.2s ease;
+  transition:
+    background 0.2s ease,
+    outline-color 0.2s ease;
 }
 
 .character-click-target:hover {
@@ -1429,7 +1455,10 @@ function escapeRegExp(value: string): string {
 .character-energy-bar__fill {
   height: 100%;
   border-radius: inherit;
-  transition: width 0.25s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    width 0.25s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
   position: relative;
 }
 

@@ -656,9 +656,19 @@
 
               <section class="scheduler-prompt-detail-card">
                 <div class="scheduler-prompt-detail-title">
-                  {{ t("rstPanel.scheduler.detail.format_constraints") }}
+                  {{
+                    activeSchedulerPromptConfig.key === "extract_prompt"
+                      ? t("rstPanel.scheduler.detail.output_contract")
+                      : t("rstPanel.scheduler.detail.format_constraints")
+                  }}
                 </div>
-                <div class="scheduler-prompt-detail-text">
+                <div
+                  class="scheduler-prompt-detail-text"
+                  :class="{
+                    'scheduler-prompt-detail-text--contract':
+                      activeSchedulerPromptConfig.key === 'extract_prompt',
+                  }"
+                >
                   {{ activeSchedulerPromptConfig.formatConstraints }}
                 </div>
                 <div class="scheduler-prompt-detail-note">
@@ -4482,6 +4492,16 @@ function actionLabel(action: string): string {
 
 .scheduler-prompt-detail-text {
   color: var(--rst-text-primary);
+}
+
+.scheduler-prompt-detail-text--contract {
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 11px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--rst-border-color);
 }
 
 .scheduler-prompt-detail-note {

@@ -236,11 +236,12 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.scheduler.summary.click_hint":
       "Click to open overlay for full prompt and constraints.",
     "rstPanel.scheduler.detail.runtime_variables": "Runtime Variables",
+    "rstPanel.scheduler.detail.output_contract": "OUTPUT CONTRACT (STRICT)",
     "rstPanel.scheduler.detail.format_constraints": "Format Constraints",
     "rstPanel.scheduler.constraint.confirm_prompt":
       "The final runtime prompt also appends retrieved lore, character, and memory blocks. Keep this template focused on confirmation logic.",
     "rstPanel.scheduler.constraint.extract_prompt":
-      "Backend appends OUTPUT CONTRACT (STRICT) automatically. Do not rewrite or weaken the required output format in this template.",
+      'OUTPUT CONTRACT (STRICT):\n- Return a JSON array only. Do not add markdown fences.\n- Every item must include a valid "type" and follow one of these schemas:\n  1) {"type":"character_update","name":"角色名","field_updates":{"objective":"...","active_form.activity":"...","active_form.vitality_cur":42,"mind":"...","active_form.body":"..."}}\n  2) {"type":"plot_event","name":"事件名","content":"事件内容","tags":["tag1"]}\n  3) {"type":"character_memory","character_name":"角色名","event":"记忆内容","importance":1-10,"tags":["tag1"],"known_by":["角色名"],"plot_event_name":"事件名"}\n  4) {"type":"lore_update","name":"条目名","category":"world_base|society|place|faction|skills|others|plot","content_append":"追加内容","tags":["tag1"]}\n- Use exact key names above. For character updates, put fields under field_updates only.\n- Use root-level character fields like objective when the update is long-term character state.\n- Use active_form.activity for current behavior/action, active_form.body for body state, and mind for mental state.\n- Use active_form.vitality_cur for current vitality/stamina changes. Return a JSON number, not text.\n- Fatigue, spellcasting, injuries, and overexertion usually reduce vitality; rest, relaxation, eating, and recovery usually restore vitality.\n- If nothing needs to be updated, return [].',
     "rstPanel.scheduler.constraint.consolidate_prompt":
       "Triggered only when a character's memories exceed the consolidation threshold, so the template should focus on merge and summarization behavior.",
     "rstPanel.scheduler.expand_all": "Expand All",
@@ -733,11 +734,12 @@ export const messages: Record<LocaleCode, TranslationMap> = {
     "rstPanel.scheduler.summary.click_hint":
       "\u70b9\u51fb\u6253\u5f00 Overlay \u67e5\u770b\u5b8c\u6574\u63d0\u793a\u8bcd\u4e0e\u683c\u5f0f\u7ea6\u675f",
     "rstPanel.scheduler.detail.runtime_variables": "\u8fd0\u884c\u65f6\u53d8\u91cf",
+    "rstPanel.scheduler.detail.output_contract": "OUTPUT CONTRACT (STRICT)",
     "rstPanel.scheduler.detail.format_constraints": "\u683c\u5f0f\u7ea6\u675f",
     "rstPanel.scheduler.constraint.confirm_prompt":
       "\u6700\u7ec8\u8fd0\u884c\u63d0\u793a\u8bcd\u8fd8\u4f1a\u62fc\u4e0a\u68c0\u7d22\u5230\u7684\u8bbe\u5b9a/\u4eba\u7269/\u8bb0\u5fc6\u5757\uff0c\u8fd9\u4e2a\u6a21\u677f\u5e94\u91cd\u70b9\u5199\u786e\u8ba4\u903b\u8f91\u3002",
     "rstPanel.scheduler.constraint.extract_prompt":
-      "\u540e\u7aef\u4f1a\u81ea\u52a8\u8ffd\u52a0 OUTPUT CONTRACT (STRICT)\uff0c\u8bf7\u4e0d\u8981\u5728\u8fd9\u4e2a\u6a21\u677f\u91cc\u6539\u5199\u6216\u5f31\u5316\u5fc5\u8981\u7684\u8f93\u51fa\u683c\u5f0f\u8981\u6c42\u3002",
+      'OUTPUT CONTRACT (STRICT):\n- Return a JSON array only. Do not add markdown fences.\n- Every item must include a valid "type" and follow one of these schemas:\n  1) {"type":"character_update","name":"角色名","field_updates":{"objective":"...","active_form.activity":"...","active_form.vitality_cur":42,"mind":"...","active_form.body":"..."}}\n  2) {"type":"plot_event","name":"事件名","content":"事件内容","tags":["tag1"]}\n  3) {"type":"character_memory","character_name":"角色名","event":"记忆内容","importance":1-10,"tags":["tag1"],"known_by":["角色名"],"plot_event_name":"事件名"}\n  4) {"type":"lore_update","name":"条目名","category":"world_base|society|place|faction|skills|others|plot","content_append":"追加内容","tags":["tag1"]}\n- Use exact key names above. For character updates, put fields under field_updates only.\n- Use root-level character fields like objective when the update is long-term character state.\n- Use active_form.activity for current behavior/action, active_form.body for body state, and mind for mental state.\n- Use active_form.vitality_cur for current vitality/stamina changes. Return a JSON number, not text.\n- Fatigue, spellcasting, injuries, and overexertion usually reduce vitality; rest, relaxation, eating, and recovery usually restore vitality.\n- If nothing needs to be updated, return [].',
     "rstPanel.scheduler.constraint.consolidate_prompt":
       "\u53ea\u4f1a\u5728\u5355\u4e2a\u89d2\u8272\u7684\u8bb0\u5fc6\u6570\u8d85\u8fc7\u6574\u5408\u9608\u503c\u65f6\u89e6\u53d1\uff0c\u6a21\u677f\u5e94\u91cd\u70b9\u63cf\u8ff0\u5408\u5e76\u4e0e\u6982\u62ec\u884c\u4e3a\u3002",
     "rstPanel.scheduler.expand_all": "\u5168\u90e8\u5c55\u5f00",

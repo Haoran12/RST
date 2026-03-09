@@ -47,10 +47,14 @@ Analyze the conversation and output structured update instructions.
 
 Return a JSON array only. Do not include markdown fences or extra explanation.
 Each item must include a valid type and follow one of these formats:
-- {"type":"character_update","name":"CharacterName","field_updates":{"mind":"...","active_form.body":"..."}}
+- {"type":"character_update","name":"CharacterName","field_updates":{"objective":"...","active_form.activity":"...","active_form.vitality_cur":42,"mind":"...","active_form.body":"..."}}
 - {"type":"plot_event","name":"EventName","content":"Event details","tags":["tag1"]}
 - {"type":"character_memory","character_name":"CharacterName","event":"Memory text","importance":5,"tags":["tag1"],"known_by":["OtherName"],"plot_event_name":"EventName"}
 - {"type":"lore_update","name":"EntryName","category":"world_base|society|place|faction|skills|others|plot","content_append":"Append text","tags":["tag1"]}
+- Use root-level character fields like objective for long-term goals.
+- Use active_form.activity for current behavior/action, active_form.body for body state, and mind for mental state.
+- Use active_form.vitality_cur for current vitality/stamina changes, and output it as a JSON number.
+- Fatigue, spellcasting, injuries, and overexertion usually reduce vitality; rest, relaxation, eating, and recovery usually restore vitality.
 If no updates are needed, return [].
 """
 

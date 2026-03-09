@@ -48,6 +48,18 @@ CHARACTER_UPDATE_CHAR_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 CHARACTER_UPDATE_FORM_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "vitality_cur": (
+        "vitality",
+        "current_vitality",
+        "stamina",
+        "current_stamina",
+        "energy",
+        "current_energy",
+        "当前精力",
+        "精力",
+        "当前体力",
+        "体力",
+    ),
     "activity": (
         "action",
         "current_action",
@@ -86,11 +98,15 @@ SYNC_ACTION_ALIASES: dict[str, str] = {
 EXTRACT_OUTPUT_CONTRACT = """OUTPUT CONTRACT (STRICT):
 - Return a JSON array only. Do not add markdown fences.
 - Every item must include a valid "type" and follow one of these schemas:
-  1) {"type":"character_update","name":"角色名","field_updates":{"mind":"...","active_form.body":"..."}}
+  1) {"type":"character_update","name":"角色名","field_updates":{"objective":"...","active_form.activity":"...","active_form.vitality_cur":42,"mind":"...","active_form.body":"..."}}
   2) {"type":"plot_event","name":"事件名","content":"事件内容","tags":["tag1"]}
   3) {"type":"character_memory","character_name":"角色名","event":"记忆内容","importance":1-10,"tags":["tag1"],"known_by":["角色名"],"plot_event_name":"事件名"}
   4) {"type":"lore_update","name":"条目名","category":"world_base|society|place|faction|skills|others|plot","content_append":"追加内容","tags":["tag1"]}
 - Use exact key names above. For character updates, put fields under field_updates only.
+- Use root-level character fields like objective when the update is long-term character state.
+- Use active_form.activity for current behavior/action, active_form.body for body state, and mind for mental state.
+- Use active_form.vitality_cur for current vitality/stamina changes. Return a JSON number, not text.
+- Fatigue, spellcasting, injuries, and overexertion usually reduce vitality; rest, relaxation, eating, and recovery usually restore vitality.
 - If nothing needs to be updated, return [].
 """
 

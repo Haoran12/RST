@@ -450,6 +450,9 @@ async def test_sync_prompt_includes_strict_output_contract(
     assert "OUTPUT CONTRACT (STRICT)" in prompt_text
     assert '"type":"character_update"' in prompt_text
     assert '"field_updates"' in prompt_text
+    assert '"objective":"..."' in prompt_text
+    assert '"active_form.activity":"..."' in prompt_text
+    assert '"active_form.vitality_cur":42' in prompt_text
 
 
 @pytest.mark.asyncio
@@ -525,7 +528,9 @@ async def test_sync_updates_character_activity_and_appearance_alias_fields(
     "type": "character_update",
     "name": "柳璃",
     "field_updates": {
+      "目标": "护送遗物回到山门",
       "当前行为": "警戒四周",
+      "当前精力": 38,
       "外貌": "银发沾雨，披风破损",
       "active_form.body_state": "左臂擦伤",
       "active_form.mental_state": "紧张但冷静"
@@ -565,6 +570,8 @@ async def test_sync_updates_character_activity_and_appearance_alias_fields(
         for item in change.get("field_changes", [])
     ]
     assert "active_form.activity" in changed_fields
+    assert "active_form.vitality_cur" in changed_fields
+    assert "objective" in changed_fields
     assert "active_form.physique" in changed_fields
     assert "active_form.body" in changed_fields
     assert "active_form.mind" in changed_fields
@@ -573,8 +580,10 @@ async def test_sync_updates_character_activity_and_appearance_alias_fields(
     assert characters.status_code == 200
     payload = characters.json()
     assert payload["total"] == 1
+    assert payload["characters"][0]["objective"] == "护送遗物回到山门"
     active_form = payload["characters"][0]["forms"][0]
     assert active_form["activity"] == "收刀入鞘后观察四周"
+    assert active_form["vitality_cur"] == 38
     assert active_form["physique"] == "湿透的银发贴在额前"
     assert active_form["body"] == "左臂擦伤"
     assert active_form["mind"] == "紧张但冷静"
