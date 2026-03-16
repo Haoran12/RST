@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
@@ -587,6 +587,131 @@ async def test_sync_updates_character_activity_and_appearance_alias_fields(
     assert active_form["physique"] == "湿透的银发贴在额前"
     assert active_form["body"] == "左臂擦伤"
     assert active_form["mind"] == "紧张但冷静"
+
+
+@pytest.mark.asyncio
+async def test_sync_ignores_vitality_drop_in_daily_dialogue(
+    async_client,
+    sample_api_config,
+    monkeypatch,
+) -> None:
+    sync_text = """
+[
+  {
+    "type": "character_update",
+    "name": "柳璃",
+    "field_updates": {
+      "active_form.activity": "在营火旁闲聊近况",
+      "active_form.mind": "平静交流",
+      "active_form.vitality_cur": 30
+    }
+  }
+]
+""".strip()
+    provider = _SchedulerSyncProvider(sync_text)
+    monkeypatch.setattr("app.services.lore_updater.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "LoreSyncVitalityDailyDialogueSession"
+    await _create_session(async_client, session_name, config_id, preset_id, config_id)
+
+    created_character = await async_client.post(
+        f"/sessions/{session_name}/lores/characters",
+        json={"name": "柳璃", "race": "人类"},
+    )
+    assert created_character.status_code == 201
+
+    sync_response = await async_client.post(f"/sessions/{session_name}/lores/sync")
+    assert sync_response.status_code == 200
+    sync_payload = sync_response.json()
+    changed_fields = [
+        item["field"]
+        for change in sync_payload["changes"]
+        for item in change.get("field_changes", [])
+    ]
+    assert "active_form.activity" in changed_fields
+    assert "active_form.mind" in changed_fields
+    assert "active_form.vitality_cur" not in changed_fields
+
+    characters = await async_client.get(f"/sessions/{session_name}/lores/characters")
+    assert characters.status_code == 200
+    payload = characters.json()
+    active_form = payload["characters"][0]["forms"][0]
+    assert active_form["vitality_cur"] == 50
+    assert active_form["activity"] == "在营火旁闲聊近况"
+    assert active_form["mind"] == "平静交流"
+
+
+@pytest.mark.asyncio
+async def test_sync_vitality_is_clamped_and_never_negative(
+    async_client,
+    sample_api_config,
+    monkeypatch,
+) -> None:
+    sync_text = """
+[
+  {
+    "type": "character_update",
+    "name": "柳璃",
+    "field_updates": {
+      "active_form.activity": "激烈战斗后踉跄",
+      "active_form.body": "腹部受伤并流血",
+      "active_form.vitality_cur": -30
+    }
+  },
+  {
+    "type": "character_update",
+    "name": "柳璃",
+    "field_updates": {
+      "active_form.activity": "静坐调息",
+      "active_form.body": "治疗包扎中",
+      "active_form.vitality_cur": 40
+    }
+  }
+]
+""".strip()
+    provider = _SchedulerSyncProvider(sync_text)
+    monkeypatch.setattr("app.services.lore_updater.get_provider", lambda _: provider)
+
+    config_id = await _create_api_config(async_client, sample_api_config)
+    preset_id = await _create_preset(async_client)
+    session_name = "LoreSyncVitalityClampSession"
+    await _create_session(async_client, session_name, config_id, preset_id, config_id)
+
+    created_character = await async_client.post(
+        f"/sessions/{session_name}/lores/characters",
+        json={"name": "柳璃", "race": "人类"},
+    )
+    assert created_character.status_code == 201
+    created_payload = created_character.json()
+    character_id = created_payload["character_id"]
+    form_id = created_payload["forms"][0]["form_id"]
+
+    set_vitality = await async_client.put(
+        f"/sessions/{session_name}/lores/characters/{character_id}/forms/{form_id}",
+        json={"vitality_cur": 5},
+    )
+    assert set_vitality.status_code == 200
+
+    sync_response = await async_client.post(f"/sessions/{session_name}/lores/sync")
+    assert sync_response.status_code == 200
+    sync_payload = sync_response.json()
+    transitions = [
+        (item["before"], item["after"])
+        for change in sync_payload["changes"]
+        for item in change.get("field_changes", [])
+        if item["field"] == "active_form.vitality_cur"
+    ]
+    assert ("5", "0") in transitions
+    assert ("0", "12") in transitions
+    assert all(int(after) >= 0 for _, after in transitions)
+
+    characters = await async_client.get(f"/sessions/{session_name}/lores/characters")
+    assert characters.status_code == 200
+    payload = characters.json()
+    active_form = payload["characters"][0]["forms"][0]
+    assert active_form["vitality_cur"] == 12
 
 
 @pytest.mark.asyncio

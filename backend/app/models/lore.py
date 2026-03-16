@@ -31,7 +31,19 @@ ENTRY_CATEGORIES: tuple[LoreCategory, ...] = (
 )
 
 
-DEFAULT_CONFIRM_PROMPT = """你是一个世界设定管理助手。以下是当前对话上下文和候选设定条目。\n\n## 当前对话上下文\n{conversation_context}\n\n## 候选设定与记忆条目\n{candidate_entries}\n\n请筛选与当前场景相关的条目，并输出精简后的可注入设定文本。\n如果没有相关条目，输出空字符串。"""
+DEFAULT_CONFIRM_PROMPT = """你是一个世界设定管理助手。以下是当前对话上下文和候选设定条目。
+
+注意：候选条目中的人物信息已过滤掉短期叙事状态（当前行为、身体状态、精神状态），因为这些信息已在对话上下文中体现。请专注于筛选与当前场景相关的长期设定信息。
+
+## 当前对话上下文
+{conversation_context}
+
+## 候选设定与记忆条目
+{candidate_entries}
+
+请筛选与当前场景相关的条目，并输出精简后的可注入设定文本。
+输出应包含：人物核心设定、世界观、地点、技能、重要记忆等长期信息。
+如果没有相关条目，输出空字符串。"""
 
 DEFAULT_EXTRACT_PROMPT = """You are a lore synchronization assistant.
 Analyze the conversation and output structured update instructions.
@@ -49,11 +61,15 @@ Return a JSON array only. Do not include markdown fences or extra explanation.
 Each item must include a valid type and follow one of these formats:
 - {"type":"character_update","name":"CharacterName","field_updates":{"objective":"...","active_form.activity":"...","active_form.vitality_cur":42,"mind":"...","active_form.body":"..."}}
 - {"type":"plot_event","name":"EventName","content":"Event details","tags":["tag1"]}
-- {"type":"character_memory","character_name":"CharacterName","event":"Memory text","importance":5,"tags":["tag1"],"known_by":["OtherName"],"plot_event_name":"EventName"}
+- {"type":"character_memory","character_name":"CharacterName","event":"Memory text","importance":5-10,"tags":["tag1"],"known_by":["OtherName"],"plot_event_name":"EventName"}
 - {"type":"lore_update","name":"EntryName","category":"world_base|society|place|faction|skills|others|plot","content_append":"Append text","tags":["tag1"]}
 - Use root-level character fields like objective for long-term goals.
 - Use active_form.activity for current behavior/action, active_form.body for body state, and mind for mental state.
 - Use active_form.vitality_cur for current vitality/stamina changes, and output it as a JSON number.
+- Do not reduce vitality for ordinary daily dialogue without fatigue/spellcasting/injury context.
+- Only increase vitality when recovery actions are present (e.g., rest, treatment, meditation).
+- Keep vitality changes bounded per sync (typically within +/-12), and never below 0.
+- For memories, use importance 5-10 (5=moderately important, 10=critical). Focus on events worth remembering beyond immediate context.
 - Fatigue, spellcasting, injuries, and overexertion usually reduce vitality; rest, relaxation, eating, and recovery usually restore vitality.
 If no updates are needed, return [].
 """

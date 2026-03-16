@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import json
@@ -27,6 +27,7 @@ from app.models.session import Message
 from app.providers.base import ProviderError
 from app.providers.registry import get_provider
 from app.services.api_config_service import get_api_config_storage
+from app.services.llm_usage import extract_stop_reason, extract_usage
 from app.services.log_service import log_service
 from app.services.rst_runtime_service import rst_runtime_service
 from app.services.session_service import get_session_dir, get_session_storage
@@ -38,6 +39,64 @@ from app.time_utils import now_local, now_local_iso
 MEMORY_CONSOLIDATION_THRESHOLD = 30
 MEMORY_CONSOLIDATION_TARGET = 20
 OPTIMISTIC_LOCK_RETRIES = 2
+VITALITY_MAX_DELTA_PER_SYNC = 12
+VITALITY_CONSUME_KEYWORDS: tuple[str, ...] = (
+    "劳累",
+    "疲劳",
+    "疲惫",
+    "奔波",
+    "奔跑",
+    "战斗",
+    "鏖战",
+    "施法",
+    "咏唱",
+    "法术",
+    "受伤",
+    "负伤",
+    "伤口",
+    "擦伤",
+    "流血",
+    "中毒",
+    "透支",
+    "过度",
+    "fatigue",
+    "exhaust",
+    "overexert",
+    "spell",
+    "cast",
+    "injur",
+    "wound",
+    "bleed",
+    "hurt",
+    "damage",
+)
+VITALITY_RECOVERY_KEYWORDS: tuple[str, ...] = (
+    "休息",
+    "歇息",
+    "睡觉",
+    "治疗",
+    "疗伤",
+    "包扎",
+    "静坐",
+    "打坐",
+    "冥想",
+    "调息",
+    "恢复",
+    "进食",
+    "吃饭",
+    "放松",
+    "recovery",
+    "recover",
+    "rest",
+    "sleep",
+    "heal",
+    "healing",
+    "meditat",
+    "relax",
+    "eat",
+    "bandage",
+    "treat",
+)
 
 CHARACTER_UPDATE_CHAR_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "objective": ("goal", "target", "purpose", "目标", "目的"),
@@ -100,12 +159,16 @@ EXTRACT_OUTPUT_CONTRACT = """OUTPUT CONTRACT (STRICT):
 - Every item must include a valid "type" and follow one of these schemas:
   1) {"type":"character_update","name":"角色名","field_updates":{"objective":"...","active_form.activity":"...","active_form.vitality_cur":42,"mind":"...","active_form.body":"..."}}
   2) {"type":"plot_event","name":"事件名","content":"事件内容","tags":["tag1"]}
-  3) {"type":"character_memory","character_name":"角色名","event":"记忆内容","importance":1-10,"tags":["tag1"],"known_by":["角色名"],"plot_event_name":"事件名"}
+  3) {"type":"character_memory","character_name":"角色名","event":"记忆内容","importance":5-10,"tags":["tag1"],"known_by":["角色名"],"plot_event_name":"事件名"}
   4) {"type":"lore_update","name":"条目名","category":"world_base|society|place|faction|skills|others|plot","content_append":"追加内容","tags":["tag1"]}
 - Use exact key names above. For character updates, put fields under field_updates only.
 - Use root-level character fields like objective when the update is long-term character state.
 - Use active_form.activity for current behavior/action, active_form.body for body state, and mind for mental state.
 - Use active_form.vitality_cur for current vitality/stamina changes. Return a JSON number, not text.
+- Do not reduce vitality for ordinary daily dialogue without fatigue/spellcasting/injury context.
+- Only increase vitality when recovery actions are present (e.g., rest, treatment, meditation).
+- Keep vitality changes bounded per sync (typically within +/-12), and never below 0.
+- For memories, use importance 5-10 (5=moderately important, 10=critical). Focus on events worth remembering beyond immediate context.
 - Fatigue, spellcasting, injuries, and overexertion usually reduce vitality; rest, relaxation, eating, and recovery usually restore vitality.
 - If nothing needs to be updated, return [].
 """
@@ -199,6 +262,8 @@ class LoreUpdater:
         except ProviderError as exc:
             response_time = self._local_iso()
             duration_ms = int((perf_counter() - started_at) * 1000)
+            prompt_tokens, completion_tokens, total_tokens = extract_usage(exc.response)
+            stop_reason = extract_stop_reason(exc.response)
             log_service.add_log(
                 LogEntry(
                     id=generate_id(),
@@ -210,6 +275,10 @@ class LoreUpdater:
                     request_time=request_time,
                     response_time=response_time,
                     duration_ms=duration_ms,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    stop_reason=stop_reason,
                     raw_request={**raw_request, "provider_request": exc.request},
                     raw_response={
                         "error": str(exc),
@@ -241,6 +310,8 @@ class LoreUpdater:
 
         response_time = self._local_iso()
         duration_ms = int((perf_counter() - started_at) * 1000)
+        prompt_tokens, completion_tokens, total_tokens = extract_usage(result.response)
+        stop_reason = extract_stop_reason(result.response)
         log_service.add_log(
             LogEntry(
                 id=generate_id(),
@@ -252,6 +323,10 @@ class LoreUpdater:
                 request_time=request_time,
                 response_time=response_time,
                 duration_ms=duration_ms,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                stop_reason=stop_reason,
                 raw_request={**raw_request, "provider_request": result.request},
                 raw_response=result.response,
             )
@@ -567,6 +642,119 @@ class LoreUpdater:
 
         return char_updates, form_updates
 
+    def _coerce_int(self, value: Any) -> int | None:
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            if value != value:  # NaN
+                return None
+            return int(round(value))
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            try:
+                return int(float(text))
+            except Exception:
+                return None
+        return None
+
+    def _collect_text_fragments(self, value: Any) -> list[str]:
+        fragments: list[str] = []
+        stack = [value]
+        while stack:
+            item = stack.pop()
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    fragments.append(text)
+                continue
+            if isinstance(item, dict):
+                stack.extend(item.values())
+                continue
+            if isinstance(item, list):
+                stack.extend(item)
+        return fragments
+
+    def _contains_any_keyword(self, text: str, keywords: tuple[str, ...]) -> bool:
+        lowered = text.lower()
+        return any(keyword in lowered for keyword in keywords if keyword)
+
+    def _sanitize_vitality_updates(
+        self,
+        *,
+        form_updates: dict[str, Any],
+        old_active_form: CharacterForm | None,
+        conversation_context: str,
+        raw_updates: dict[str, Any],
+        char_updates: dict[str, Any],
+    ) -> dict[str, Any]:
+        sanitized = dict(form_updates)
+        if not sanitized:
+            return sanitized
+
+        vitality_max = old_active_form.vitality_max if old_active_form else 0
+        if "vitality_max" in sanitized:
+            parsed_max = self._coerce_int(sanitized.get("vitality_max"))
+            if parsed_max is None:
+                sanitized.pop("vitality_max", None)
+            else:
+                vitality_max = max(0, parsed_max)
+                sanitized["vitality_max"] = vitality_max
+        vitality_max = max(0, vitality_max)
+
+        if old_active_form is None:
+            if "vitality_cur" in sanitized:
+                parsed_cur = self._coerce_int(sanitized.get("vitality_cur"))
+                if parsed_cur is None:
+                    sanitized.pop("vitality_cur", None)
+                else:
+                    sanitized["vitality_cur"] = max(0, min(parsed_cur, vitality_max))
+            return sanitized
+
+        current_vitality = max(0, old_active_form.vitality_cur)
+        if "vitality_cur" not in sanitized:
+            if current_vitality > vitality_max:
+                sanitized["vitality_cur"] = vitality_max
+            return sanitized
+
+        target_vitality = self._coerce_int(sanitized.get("vitality_cur"))
+        if target_vitality is None:
+            sanitized.pop("vitality_cur", None)
+            return sanitized
+        target_vitality = max(0, min(target_vitality, vitality_max))
+
+        delta = target_vitality - current_vitality
+        if delta == 0:
+            sanitized["vitality_cur"] = target_vitality
+            return sanitized
+
+        context_parts = [
+            conversation_context,
+            *self._collect_text_fragments(raw_updates),
+            *self._collect_text_fragments(char_updates),
+            *self._collect_text_fragments(sanitized),
+        ]
+        context_text = "\n".join(context_parts)
+
+        if delta < 0:
+            if not self._contains_any_keyword(context_text, VITALITY_CONSUME_KEYWORDS):
+                sanitized.pop("vitality_cur", None)
+                return sanitized
+            delta = max(delta, -VITALITY_MAX_DELTA_PER_SYNC)
+        else:
+            if not self._contains_any_keyword(context_text, VITALITY_RECOVERY_KEYWORDS):
+                sanitized.pop("vitality_cur", None)
+                return sanitized
+            delta = min(delta, VITALITY_MAX_DELTA_PER_SYNC)
+
+        normalized = current_vitality + delta
+        normalized = max(0, min(normalized, vitality_max))
+        sanitized["vitality_cur"] = normalized
+        return sanitized
+
     def _render_consolidate_prompt(
         self,
         template: SchedulerPromptTemplate,
@@ -852,10 +1040,11 @@ class LoreUpdater:
             store = self._store(session_name)
             selected = self._select_messages(messages, scan_depth)
             template = store.load_scheduler_template()
+            conversation_context = self._conversation_text(selected)
 
             prompt = self._render_extract_prompt(
                 template,
-                self._conversation_text(selected),
+                conversation_context,
                 self._existing_summary(store),
                 self._character_list_summary(store),
             )
@@ -907,13 +1096,30 @@ class LoreUpdater:
                         char_file = self._ensure_character(store, name)
                         old_data = char_file.data
 
+                        old_active_form = None
+                        if old_data.forms:
+                            old_active_id = old_data.active_form_id or old_data.forms[0].form_id
+                            old_active_form = next(
+                                (form for form in old_data.forms if form.form_id == old_active_id),
+                                old_data.forms[0],
+                            )
+                        normalized_form_updates = self._sanitize_vitality_updates(
+                            form_updates=form_updates,
+                            old_active_form=old_active_form,
+                            conversation_context=conversation_context,
+                            raw_updates=updates,
+                            char_updates=char_updates,
+                        )
+
                         data = old_data
                         if char_updates:
                             data = data.model_copy(update=char_updates)
-                        if form_updates and data.forms:
+                        if normalized_form_updates and data.forms:
                             active_id = data.active_form_id or data.forms[0].form_id
                             forms = [
-                                form.model_copy(update=form_updates) if form.form_id == active_id else form
+                                form.model_copy(update=normalized_form_updates)
+                                if form.form_id == active_id
+                                else form
                                 for form in data.forms
                             ]
                             data = data.model_copy(update={"forms": forms})
@@ -928,13 +1134,6 @@ class LoreUpdater:
                                 SyncFieldChange(field=key, before=before_text, after=after_text)
                             )
 
-                        old_active_form = None
-                        if old_data.forms:
-                            old_active_id = old_data.active_form_id or old_data.forms[0].form_id
-                            old_active_form = next(
-                                (form for form in old_data.forms if form.form_id == old_active_id),
-                                old_data.forms[0],
-                            )
                         new_active_form = None
                         if data.forms:
                             new_active_id = data.active_form_id or data.forms[0].form_id
@@ -943,7 +1142,7 @@ class LoreUpdater:
                                 data.forms[0],
                             )
 
-                        for key in form_updates:
+                        for key in normalized_form_updates:
                             before_text = self._format_change_value(
                                 getattr(old_active_form, key, None) if old_active_form else None
                             )
@@ -969,7 +1168,7 @@ class LoreUpdater:
                             updated_file = store.update_character_fields(
                                 old_data.character_id,
                                 char_updates,
-                                form_updates,
+                                normalized_form_updates,
                                 expected_updated_at=old_data.updated_at,
                             )
                             if updated_file is None:
