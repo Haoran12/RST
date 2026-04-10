@@ -1,0 +1,6 @@
+rust_input: crate::frb_api
+rust_root: rust/
+rust_output: rust/src/frb_generated.rs
+dart_output: lib/core/bridge
+dart_entrypoint_class_name: RustCore
+web: false
