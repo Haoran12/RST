@@ -1,5 +1,11 @@
 # Version History
 
+## 0.1.0+5 (2026-04-11)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+5-release.apk`
+- Notes: Drawer navigation now shows only concise configuration titles; all detailed descriptions and content are moved into their respective pages after entering.
+
 ## 0.1.0+4 (2026-04-11)
 
 - Build type: Android APK release
