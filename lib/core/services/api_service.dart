@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../bridge/frb_api.dart' as frb;
@@ -381,6 +382,72 @@ class ApiService {
     );
   }
 
+  Future<List<String>> fetchAvailableModels({
+    required ProviderType providerType,
+    required String baseUrl,
+    required String requestPath,
+    required String apiKey,
+    Map<String, String> customHeaders = const <String, String>{},
+    int? requestTimeoutMs,
+  }) async {
+    final url = _composeModelsUrl(baseUrl: baseUrl, requestPath: requestPath);
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: Duration(milliseconds: requestTimeoutMs ?? 15000),
+        receiveTimeout: Duration(milliseconds: requestTimeoutMs ?? 15000),
+        sendTimeout: Duration(milliseconds: requestTimeoutMs ?? 15000),
+        headers: <String, String>{
+          if (apiKey.trim().isNotEmpty)
+            'Authorization': 'Bearer ${apiKey.trim()}',
+          ...customHeaders,
+        },
+      ),
+    );
+
+    try {
+      final response = await dio.getUri<dynamic>(Uri.parse(url));
+      final payload = response.data;
+      if (payload is! Map) {
+        throw StateError('模型列表响应格式不正确');
+      }
+
+      final data = payload['data'];
+      if (data is! List) {
+        throw StateError('模型列表响应缺少 data');
+      }
+
+      final models =
+          data
+              .whereType<Map>()
+              .map((item) => '${item['id'] ?? ''}'.trim())
+              .where((item) => item.isNotEmpty)
+              .toSet()
+              .toList(growable: false)
+            ..sort();
+
+      if (models.isEmpty) {
+        throw StateError('没有返回可用模型');
+      }
+
+      if (providerType == ProviderType.openai) {
+        return models;
+      }
+      return models;
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      final details = error.response?.data?.toString().trim();
+      if (statusCode == null) {
+        throw StateError(error.message ?? '获取模型列表失败');
+      }
+      if (details == null || details.isEmpty) {
+        throw StateError('http_$statusCode');
+      }
+      throw StateError('http_$statusCode: $details');
+    } finally {
+      dio.close();
+    }
+  }
+
   RuntimeApiConfig _toRuntimeApiConfig(StoredApiConfig config) {
     final providerType = config.providerType;
     final requestPath = config.requestPath.trim().isEmpty
@@ -602,6 +669,65 @@ class ApiService {
 
   String _newId(String prefix) {
     return '$prefix-${DateTime.now().microsecondsSinceEpoch}';
+  }
+
+  String _composeModelsUrl({
+    required String baseUrl,
+    required String requestPath,
+  }) {
+    final normalizedBase = baseUrl.trim();
+    if (normalizedBase.isEmpty) {
+      throw StateError('Base URL 不能为空');
+    }
+
+    Uri baseUri = Uri.parse(normalizedBase);
+    var segments = baseUri.pathSegments
+        .where((segment) => segment.isNotEmpty)
+        .toList(growable: true);
+
+    final normalizedRequestPath = requestPath.trim();
+    if (normalizedRequestPath.isNotEmpty) {
+      final requestUri = Uri.tryParse(normalizedRequestPath);
+      if (requestUri != null &&
+          requestUri.hasScheme &&
+          requestUri.host.isNotEmpty) {
+        baseUri = requestUri;
+        segments = requestUri.pathSegments
+            .where((segment) => segment.isNotEmpty)
+            .toList(growable: true);
+      } else {
+        segments = normalizedRequestPath
+            .split('/')
+            .where((segment) => segment.isNotEmpty)
+            .toList(growable: true);
+      }
+    }
+
+    segments = _trimRequestSegments(segments);
+    if (!segments.contains('v1')) {
+      segments.add('v1');
+    } else {
+      final v1Index = segments.indexOf('v1');
+      segments = segments.sublist(0, v1Index + 1);
+    }
+    segments.add('models');
+
+    return baseUri
+        .replace(pathSegments: segments, query: null, fragment: null)
+        .toString();
+  }
+
+  List<String> _trimRequestSegments(List<String> segments) {
+    if (segments.length >= 2 &&
+        segments[segments.length - 2] == 'chat' &&
+        segments.last == 'completions') {
+      return segments.sublist(0, segments.length - 2);
+    }
+    if (segments.isNotEmpty &&
+        (segments.last == 'responses' || segments.last == 'completions')) {
+      return segments.sublist(0, segments.length - 1);
+    }
+    return segments;
   }
 
   Map<String, String> _sanitizeHeaders(Map<String, String> raw) {

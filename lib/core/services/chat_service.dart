@@ -129,7 +129,6 @@ class ChatService {
       throw ArgumentError.value(request.sessionId, 'sessionId');
     }
 
-    final loadedSession = await _rustBridge.loadSession(sessionId);
     final existingMessages = await _rustBridge.listMessages(sessionId: sessionId);
     final resolvedInput = _resolveUserInput(
       rawUserInput: userInput,
@@ -155,7 +154,6 @@ class ChatService {
     }
 
     final promptResult = await _buildPromptMessagesForSession(
-      sessionConfig: loadedSession.config,
       presetConfig: request.presetConfig,
       allMessages: promptSourceMessages,
       maxContextMessages: request.maxContextMessages,
@@ -216,7 +214,6 @@ class ChatService {
       throw ArgumentError.value(request.sessionId, 'sessionId');
     }
 
-    final loadedSession = await _rustBridge.loadSession(sessionId);
     final allMessages = await _rustBridge.listMessages(sessionId: sessionId);
     final retryPair = _resolveRetryPair(
       allMessages: allMessages,
@@ -234,7 +231,6 @@ class ChatService {
     request.onMessageUpdated?.call(retryPair.assistant);
 
     final promptResult = _buildPromptMessagesForRetry(
-      sessionConfig: loadedSession.config,
       presetConfig: request.presetConfig,
       allMessages: allMessages,
       userMessageId: retryPair.user.messageId,
@@ -528,7 +524,6 @@ class ChatService {
   }
 
   Future<_PromptResult> _buildPromptMessagesForSession({
-    required frb.SessionConfig sessionConfig,
     required RuntimePresetConfig presetConfig,
     required List<frb.MessageRecord> allMessages,
     required int maxContextMessages,
@@ -547,7 +542,6 @@ class ChatService {
         )
         .toList(growable: false);
     return _assemblePromptMessages(
-      sessionConfig: sessionConfig,
       presetConfig: presetConfig,
       historyMessages: history,
       maxContextMessages: maxContextMessages,
@@ -560,7 +554,6 @@ class ChatService {
   }
 
   _PromptResult _buildPromptMessagesForRetry({
-    required frb.SessionConfig sessionConfig,
     required RuntimePresetConfig presetConfig,
     required List<frb.MessageRecord> allMessages,
     required String userMessageId,
@@ -585,7 +578,6 @@ class ChatService {
     }
     final sourceUser = allMessages.firstWhere((m) => m.messageId == userMessageId);
     return _assemblePromptMessages(
-      sessionConfig: sessionConfig,
       presetConfig: presetConfig,
       historyMessages: records,
       maxContextMessages: maxContextMessages,
@@ -598,7 +590,6 @@ class ChatService {
   }
 
   _PromptResult _assemblePromptMessages({
-    required frb.SessionConfig sessionConfig,
     required RuntimePresetConfig presetConfig,
     required List<frb.MessageRecord> historyMessages,
     required int maxContextMessages,
@@ -619,7 +610,6 @@ class ChatService {
     final promptMessages = <Map<String, String>>[];
     final usedEntries = <String>[];
     final context = _PromptContext(
-      sessionConfig: sessionConfig,
       userInput: requiredUserInput,
       historyMessages: eligibleHistory,
       userDescription: userDescription,
@@ -1274,7 +1264,6 @@ class _PromptResult {
 
 class _PromptContext {
   const _PromptContext({
-    required this.sessionConfig,
     required this.userInput,
     required this.historyMessages,
     required this.userDescription,
@@ -1282,22 +1271,13 @@ class _PromptContext {
     required this.lores,
   });
 
-  final frb.SessionConfig sessionConfig;
   final String userInput;
   final List<frb.MessageRecord> historyMessages;
   final String userDescription;
   final String scene;
   final String lores;
 
-  String mainPromptContent(String entryContent) {
-    final modeLabel = sessionConfig.mode == frb.SessionMode.rst ? 'RST' : 'ST';
-    return [
-      entryContent.trim(),
-      'session_id: ${sessionConfig.sessionId}',
-      'session_name: ${sessionConfig.sessionName}',
-      'mode: $modeLabel',
-    ].where((line) => line.isNotEmpty).join('\n');
-  }
+  String mainPromptContent(String entryContent) => entryContent.trim();
 
   String loresContent() => lores.trim();
 
