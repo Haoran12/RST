@@ -516,7 +516,7 @@ class _MessageWithMetadata extends StatelessWidget {
         if (message.errorMessage != null && message.errorMessage!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 2, left: 6, right: 6),
-            child: Text(
+            child: SelectableText(
               message.errorMessage!,
               style: const TextStyle(fontSize: 11, color: AppColors.error),
             ),

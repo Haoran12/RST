@@ -129,7 +129,9 @@ class ChatService {
       throw ArgumentError.value(request.sessionId, 'sessionId');
     }
 
-    final existingMessages = await _rustBridge.listMessages(sessionId: sessionId);
+    final existingMessages = await _rustBridge.listMessages(
+      sessionId: sessionId,
+    );
     final resolvedInput = _resolveUserInput(
       rawUserInput: userInput,
       visibleMessages: existingMessages,
@@ -150,7 +152,9 @@ class ChatService {
       );
       request.onMessageUpdated?.call(userMessage);
       excludedHistoryMessageIds.add(userMessage.messageId);
-      promptSourceMessages = await _rustBridge.listMessages(sessionId: sessionId);
+      promptSourceMessages = await _rustBridge.listMessages(
+        sessionId: sessionId,
+      );
     }
 
     final promptResult = await _buildPromptMessagesForSession(
@@ -322,6 +326,9 @@ class ChatService {
         options: Options(
           responseType: ResponseType.stream,
           headers: providerRequest.headers,
+          connectTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+          receiveTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+          sendTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
         ),
       );
 
@@ -576,7 +583,9 @@ class ChatService {
       }
       records.add(message);
     }
-    final sourceUser = allMessages.firstWhere((m) => m.messageId == userMessageId);
+    final sourceUser = allMessages.firstWhere(
+      (m) => m.messageId == userMessageId,
+    );
     return _assemblePromptMessages(
       presetConfig: presetConfig,
       historyMessages: records,
@@ -599,9 +608,12 @@ class ChatService {
     required String scene,
     required String lores,
   }) {
-    final normalizedHistoryLimit = maxContextMessages < 0 ? 0 : maxContextMessages;
+    final normalizedHistoryLimit = maxContextMessages < 0
+        ? 0
+        : maxContextMessages;
     var eligibleHistory = historyMessages;
-    if (normalizedHistoryLimit > 0 && eligibleHistory.length > normalizedHistoryLimit) {
+    if (normalizedHistoryLimit > 0 &&
+        eligibleHistory.length > normalizedHistoryLimit) {
       eligibleHistory = eligibleHistory
           .sublist(eligibleHistory.length - normalizedHistoryLimit)
           .toList(growable: false);
@@ -809,10 +821,13 @@ class ChatService {
         url: url,
         headers: headers,
         payload: payload,
+        requestTimeoutMs: apiConfig.requestTimeoutMs,
       );
     }
 
-    payload['input'] = promptMessages.map(_toOpenAiInputMessage).toList(growable: false);
+    payload['input'] = promptMessages
+        .map(_toOpenAiInputMessage)
+        .toList(growable: false);
     if (limit != null && limit > 0) {
       payload['max_output_tokens'] = limit;
     }
@@ -832,6 +847,7 @@ class ChatService {
       url: url,
       headers: headers,
       payload: payload,
+      requestTimeoutMs: apiConfig.requestTimeoutMs,
     );
   }
 
@@ -898,10 +914,28 @@ class ChatService {
 
   String _composeUrl(String baseUrl, String requestPath) {
     final trimmedBase = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    if (trimmedBase.isEmpty) {
+      throw StateError('Base URL 不能为空');
+    }
+
     if (requestPath.startsWith('http://') ||
         requestPath.startsWith('https://')) {
-      return requestPath;
+      final parsedRequestUri = Uri.tryParse(requestPath);
+      if (parsedRequestUri == null ||
+          !parsedRequestUri.hasScheme ||
+          parsedRequestUri.host.isEmpty) {
+        throw StateError('Request Path 不是合法的完整 URL: $requestPath');
+      }
+      return parsedRequestUri.toString();
     }
+
+    final parsedBaseUri = Uri.tryParse(trimmedBase);
+    if (parsedBaseUri == null ||
+        !parsedBaseUri.hasScheme ||
+        parsedBaseUri.host.isEmpty) {
+      throw StateError('Base URL 不是合法地址: $baseUrl');
+    }
+
     final normalizedPath = requestPath.startsWith('/')
         ? requestPath
         : '/$requestPath';
@@ -928,7 +962,9 @@ class ChatService {
 
   _SseChunk _parseCompatibleChunk(Map<String, dynamic> decoded) {
     final choices = decoded['choices'];
-    final firstChoice = choices is List && choices.isNotEmpty ? choices.first : null;
+    final firstChoice = choices is List && choices.isNotEmpty
+        ? choices.first
+        : null;
     final choiceMap = firstChoice is Map
         ? firstChoice.cast<String, dynamic>()
         : null;
@@ -1238,6 +1274,13 @@ class ChatService {
     return sanitized;
   }
 
+  Duration? _durationFromMs(int? timeoutMs) {
+    if (timeoutMs == null || timeoutMs <= 0) {
+      return null;
+    }
+    return Duration(milliseconds: timeoutMs);
+  }
+
   String _readableError(DioException error) {
     final statusCode = error.response?.statusCode;
     final data = error.response?.data;
@@ -1246,7 +1289,18 @@ class ChatService {
       final message = error.message == null
           ? null
           : _redactSensitiveText(error.message!);
-      return details.isEmpty ? message ?? 'network_error' : details;
+      if (details.isNotEmpty) {
+        return details;
+      }
+      final normalized = (message ?? '').toLowerCase();
+      if (normalized.contains('failed host lookup')) {
+        return 'network_dns_error: 无法解析目标域名。请检查 Base URL、设备网络/DNS、代理设置；Android release 包也要确认主清单包含 INTERNET 权限。原始错误: ${message ?? 'failed host lookup'}';
+      }
+      if (normalized.contains('connection timed out') ||
+          normalized.contains('timed out')) {
+        return 'network_timeout: 请求超时，请检查网络质量或增大请求超时。原始错误: ${message ?? 'timed out'}';
+      }
+      return message ?? 'network_error';
     }
     if (details.isEmpty) {
       return 'http_$statusCode';
@@ -1308,6 +1362,7 @@ class _ProviderRequest {
     required this.url,
     required this.headers,
     required this.payload,
+    this.requestTimeoutMs,
   });
 
   final ProviderType providerType;
@@ -1316,6 +1371,7 @@ class _ProviderRequest {
   final String url;
   final Map<String, String> headers;
   final Map<String, dynamic> payload;
+  final int? requestTimeoutMs;
 }
 
 class _RetryPair {

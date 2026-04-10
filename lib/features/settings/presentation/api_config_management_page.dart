@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/common.dart';
@@ -519,15 +520,43 @@ class _ApiConfigEditorDialogState
                                 ),
                                 if (_modelFetchError != null) ...[
                                   const SizedBox(height: 10),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      _modelFetchError!,
-                                      style: const TextStyle(
-                                        color: AppColors.error,
-                                        fontSize: 12,
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: SelectableText(
+                                          _modelFetchError!,
+                                          style: const TextStyle(
+                                            color: AppColors.error,
+                                            fontSize: 12,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      IconButton(
+                                        tooltip: '复制错误信息',
+                                        onPressed: () async {
+                                          final message = _modelFetchError!;
+                                          await Clipboard.setData(
+                                            ClipboardData(text: message),
+                                          );
+                                          if (!context.mounted) {
+                                            return;
+                                          }
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('错误信息已复制'),
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.copy_all_outlined,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ],

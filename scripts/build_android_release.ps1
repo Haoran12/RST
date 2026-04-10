@@ -6,11 +6,15 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $pubspecPath = Join-Path $projectRoot "pubspec.yaml"
+$mainManifestPath = Join-Path $projectRoot "android\app\src\main\AndroidManifest.xml"
 $flutterOutputApk = Join-Path $projectRoot "build\app\outputs\flutter-apk\app-release.apk"
 $releaseDir = Join-Path $projectRoot "build\android"
 
 if (-not (Test-Path $pubspecPath)) {
     throw "pubspec.yaml not found at $pubspecPath"
+}
+if (-not (Test-Path $mainManifestPath)) {
+    throw "AndroidManifest.xml not found at $mainManifestPath"
 }
 
 $versionLine = (Get-Content $pubspecPath | Where-Object { $_ -match '^\s*version:\s*' } | Select-Object -First 1)
@@ -21,6 +25,11 @@ if ([string]::IsNullOrWhiteSpace($versionLine)) {
 $version = ($versionLine -replace '^\s*version:\s*', '').Trim()
 if ($version -notmatch '^0\.1\.(\d+)\+(\d+)$') {
     throw "Invalid version '$version'. Development stage requires '0.1.<patch>+<build>'."
+}
+
+$manifestRaw = Get-Content $mainManifestPath -Raw
+if ($manifestRaw -notmatch '<uses-permission\s+android:name="android\.permission\.INTERNET"\s*/?>') {
+    throw "android.permission.INTERNET is missing in main AndroidManifest.xml. Release builds require network permission."
 }
 
 if (-not $SkipFlutterBuild) {

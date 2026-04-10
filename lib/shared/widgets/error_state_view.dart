@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import 'buttons.dart';
@@ -17,12 +18,44 @@ class ErrorStateView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassPanelCard(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, color: AppColors.error),
-          const SizedBox(width: 10),
-          Expanded(child: Text(message)),
-          SecondaryOutlineButton(label: '重试', onPressed: onRetry),
+          Row(
+            children: [
+              const Icon(Icons.error_outline, color: AppColors.error),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  '请求失败',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                tooltip: '复制错误信息',
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: message));
+                  if (!context.mounted) {
+                    return;
+                  }
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('错误信息已复制')));
+                },
+                icon: const Icon(Icons.copy_all_outlined, size: 18),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SelectableText(
+            message,
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: SecondaryOutlineButton(label: '重试', onPressed: onRetry),
+          ),
         ],
       ),
     );
