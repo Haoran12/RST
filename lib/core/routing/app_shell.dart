@@ -20,18 +20,21 @@ class AppShell extends ConsumerWidget {
     _DrawerNavItem(
       tab: AppTab.chat,
       label: '聊天',
+      subtitle: '对话区域与会话上下文',
       icon: Icons.forum_outlined,
       page: const ChatPage(),
     ),
     _DrawerNavItem(
       tab: AppTab.sessionManagement,
       label: '会话管理',
+      subtitle: '模式、绑定、上下文相关配置',
       icon: Icons.chat_bubble_outline_rounded,
       page: const SessionManagementPage(),
     ),
     _DrawerNavItem(
       tab: AppTab.worldBook,
       label: '世界书',
+      subtitle: '管理 lore 文件与绑定项',
       icon: Icons.menu_book_outlined,
       page: ResourceManagementPage(
         title: '世界书',
@@ -46,6 +49,7 @@ class AppShell extends ConsumerWidget {
     _DrawerNavItem(
       tab: AppTab.preset,
       label: '预设',
+      subtitle: '主提示词与参数方案',
       icon: Icons.auto_awesome_motion_outlined,
       page: ResourceManagementPage(
         title: '预设',
@@ -60,6 +64,7 @@ class AppShell extends ConsumerWidget {
     _DrawerNavItem(
       tab: AppTab.apiConfig,
       label: 'API配置',
+      subtitle: '提供商、模型与访问配置',
       icon: Icons.cloud_sync_outlined,
       page: ResourceManagementPage(
         title: 'API配置',
@@ -74,6 +79,7 @@ class AppShell extends ConsumerWidget {
     _DrawerNavItem(
       tab: AppTab.appearance,
       label: '外观',
+      subtitle: '主题与显示方案',
       icon: Icons.palette_outlined,
       page: ResourceManagementPage(
         title: '外观',
@@ -88,6 +94,7 @@ class AppShell extends ConsumerWidget {
     _DrawerNavItem(
       tab: AppTab.log,
       label: '日志',
+      subtitle: '查看请求与调度记录',
       icon: Icons.receipt_long_outlined,
       page: const LogPage(),
     ),
@@ -101,13 +108,85 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTab = ref.watch(appTabProvider);
     final currentIndex = _tabToIndex[currentTab] ?? 0;
+    Widget buildDetails(_DrawerNavItem item) {
+      switch (item.tab) {
+        case AppTab.chat:
+          return _DrawerChatDetails(
+            onOpenPage: () {
+              Navigator.of(context).pop();
+              ref.read(appTabProvider.notifier).state = item.tab;
+            },
+          );
+        case AppTab.sessionManagement:
+          return _DrawerSessionDetails(
+            onOpenPage: () {
+              Navigator.of(context).pop();
+              ref.read(appTabProvider.notifier).state = item.tab;
+            },
+            onOpenFullscreen: () =>
+                _showSessionQuickSettingsBottomSheet(context),
+          );
+        case AppTab.worldBook:
+          return _DrawerResourceDetails(
+            title: '世界书',
+            emptyHint: '先创建世界书，再在 ST 会话里绑定。',
+            type: ManagedOptionType.worldBook,
+            optionsProvider: worldBookOptionsProvider,
+            onOpenPage: () {
+              Navigator.of(context).pop();
+              ref.read(appTabProvider.notifier).state = item.tab;
+            },
+          );
+        case AppTab.preset:
+          return _DrawerResourceDetails(
+            title: '预设',
+            emptyHint: '先创建预设，用于会话生成策略。',
+            type: ManagedOptionType.preset,
+            optionsProvider: presetOptionsProvider,
+            onOpenPage: () {
+              Navigator.of(context).pop();
+              ref.read(appTabProvider.notifier).state = item.tab;
+            },
+          );
+        case AppTab.apiConfig:
+          return _DrawerResourceDetails(
+            title: 'API配置',
+            emptyHint: '至少创建一个 API 配置后再绑定。',
+            type: ManagedOptionType.apiConfig,
+            optionsProvider: apiConfigOptionsProvider,
+            onOpenPage: () {
+              Navigator.of(context).pop();
+              ref.read(appTabProvider.notifier).state = item.tab;
+            },
+          );
+        case AppTab.appearance:
+          return _DrawerResourceDetails(
+            title: '外观',
+            emptyHint: '创建一套外观后可绑定到当前会话。',
+            type: ManagedOptionType.appearance,
+            optionsProvider: appearanceOptionsProvider,
+            onOpenPage: () {
+              Navigator.of(context).pop();
+              ref.read(appTabProvider.notifier).state = item.tab;
+            },
+          );
+        case AppTab.log:
+          return _DrawerLogDetails(
+            onOpenPage: () {
+              Navigator.of(context).pop();
+              ref.read(appTabProvider.notifier).state = item.tab;
+            },
+          );
+      }
+    }
 
     return AppScaffold(
       headerTrailing: const _SessionQuickSettingsTrigger(),
       drawer: Drawer(
+        backgroundColor: AppColors.backgroundElevated,
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -116,28 +195,41 @@ class AppShell extends ConsumerWidget {
                     horizontal: 12,
                     vertical: 10,
                   ),
-                  child: Text(
-                    '导航',
-                    style: Theme.of(context).textTheme.titleLarge,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Tavo 风格设置',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '点击分组可展开详细配置',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 10),
                 Expanded(
-                  child: ListView.builder(
+                  child: ListView.separated(
                     itemCount: _items.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final item = _items[index];
-                      return ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        leading: Icon(item.icon),
-                        title: Text(item.label),
+                      return _DrawerExpandableSection(
+                        label: item.label,
+                        subtitle: item.subtitle,
+                        icon: item.icon,
                         selected: index == currentIndex,
-                        onTap: () {
+                        onOpenPage: () {
                           Navigator.of(context).pop();
                           ref.read(appTabProvider.notifier).state = item.tab;
                         },
+                        child: buildDetails(item),
                       );
                     },
                   ),
@@ -155,6 +247,533 @@ class AppShell extends ConsumerWidget {
   }
 }
 
+Future<void> _showSessionQuickSettingsBottomSheet(BuildContext context) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    backgroundColor: AppColors.backgroundElevated,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (context) => const FractionallySizedBox(
+      heightFactor: 0.88,
+      child: _SessionQuickSettingsSheet(),
+    ),
+  );
+}
+
+class _DrawerExpandableSection extends StatefulWidget {
+  const _DrawerExpandableSection({
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.onOpenPage,
+    required this.child,
+  });
+
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onOpenPage;
+  final Widget child;
+
+  @override
+  State<_DrawerExpandableSection> createState() =>
+      _DrawerExpandableSectionState();
+}
+
+class _DrawerExpandableSectionState extends State<_DrawerExpandableSection> {
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.selected;
+  }
+
+  @override
+  void didUpdateWidget(covariant _DrawerExpandableSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.selected && widget.selected && !_expanded) {
+      _expanded = true;
+    }
+  }
+
+  void _toggleExpanded() {
+    setState(() {
+      _expanded = !_expanded;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = widget.selected
+        ? AppColors.borderStrong
+        : AppColors.borderSubtle;
+    final background = widget.selected
+        ? AppColors.surfaceOverlay.withValues(alpha: 0.72)
+        : AppColors.surfaceCard.withValues(alpha: 0.84);
+    final iconColor = widget.selected
+        ? AppColors.accentPrimary
+        : AppColors.textSecondary;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: _toggleExpanded,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: borderColor),
+                      color: AppColors.surfaceOverlay,
+                    ),
+                    child: Icon(widget.icon, size: 19, color: iconColor),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.label,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.subtitle,
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '进入页面',
+                    onPressed: widget.onOpenPage,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    child: const Icon(Icons.keyboard_arrow_down_rounded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 200),
+            crossFadeState: _expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            firstChild: const SizedBox.shrink(),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: widget.child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DrawerChatDetails extends StatelessWidget {
+  const _DrawerChatDetails({required this.onOpenPage});
+
+  final VoidCallback onOpenPage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderSubtle),
+            color: AppColors.backgroundBase.withValues(alpha: 0.25),
+          ),
+          child: const Text(
+            '进入聊天界面并使用当前会话绑定的 API、Preset、世界书与外观方案。',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+        ),
+        const SizedBox(height: 10),
+        PrimaryPillButton(label: '打开聊天', onPressed: onOpenPage),
+      ],
+    );
+  }
+}
+
+class _DrawerSessionDetails extends StatelessWidget {
+  const _DrawerSessionDetails({
+    required this.onOpenPage,
+    required this.onOpenFullscreen,
+  });
+
+  final VoidCallback onOpenPage;
+  final VoidCallback onOpenFullscreen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.borderSubtle),
+            color: AppColors.backgroundBase.withValues(alpha: 0.45),
+          ),
+          child: const SizedBox(
+            height: 420,
+            child: _SessionQuickSettingsSheet(embedded: true),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: PrimaryPillButton(label: '进入会话页', onPressed: onOpenPage),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SecondaryOutlineButton(
+                label: '全屏设置',
+                onPressed: onOpenFullscreen,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DrawerResourceDetails extends ConsumerWidget {
+  const _DrawerResourceDetails({
+    required this.title,
+    required this.emptyHint,
+    required this.type,
+    required this.optionsProvider,
+    required this.onOpenPage,
+  });
+
+  final String title;
+  final String emptyHint;
+  final ManagedOptionType type;
+  final StateProvider<List<ManagedOption>> optionsProvider;
+  final VoidCallback onOpenPage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final options = ref.watch(optionsProvider);
+    final preview = options.take(3).toList(growable: false);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(
+              '$title配置 (${options.length})',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const Spacer(),
+            if (options.length > preview.length)
+              Text(
+                '还有 ${options.length - preview.length} 项',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (preview.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderSubtle),
+              color: AppColors.backgroundBase.withValues(alpha: 0.25),
+            ),
+            child: Text(
+              emptyHint,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+          )
+        else
+          ...preview.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _DrawerOptionItem(
+                item: item,
+                onEdit: () => _openEditDialog(context, ref, source: item),
+                onDelete: () => _deleteItem(context, ref, item),
+              ),
+            ),
+          ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            Expanded(
+              child: PrimaryPillButton(label: '进入页面', onPressed: onOpenPage),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SecondaryOutlineButton(
+                label: '新建',
+                onPressed: () => _openEditDialog(context, ref),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openEditDialog(
+    BuildContext context,
+    WidgetRef ref, {
+    ManagedOption? source,
+  }) async {
+    final nameController = TextEditingController(text: source?.name ?? '');
+    final descController = TextEditingController(
+      text: source?.description ?? '',
+    );
+    final isEdit = source != null;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isEdit ? '编辑$title' : '新建$title'),
+        content: SizedBox(
+          width: 340,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: '名称'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: descController,
+                maxLines: 2,
+                decoration: const InputDecoration(labelText: '描述'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved != true) {
+      return;
+    }
+
+    final name = nameController.text.trim();
+    final description = descController.text.trim();
+    if (name.isEmpty) {
+      return;
+    }
+
+    final notifier = ref.read(optionsProvider.notifier);
+    final current = notifier.state;
+    if (isEdit) {
+      notifier.state = current
+          .map(
+            (item) => item.id == source.id
+                ? item.copyWith(
+                    name: name,
+                    description: description.isEmpty ? '无描述' : description,
+                    updatedAt: DateTime.now(),
+                  )
+                : item,
+          )
+          .toList(growable: false);
+      return;
+    }
+
+    final idBase = _slugify(name);
+    final idSuffix = DateTime.now().millisecondsSinceEpoch.toString();
+    final next = buildManagedOptionTemplate(
+      type,
+      id: '$idBase-$idSuffix',
+      name: name,
+      description: description.isEmpty ? '无描述' : description,
+    );
+    notifier.state = <ManagedOption>[next, ...current];
+  }
+
+  Future<void> _deleteItem(
+    BuildContext context,
+    WidgetRef ref,
+    ManagedOption item,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('删除$title'),
+        content: Text('确定删除“${item.name}”？此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    final notifier = ref.read(optionsProvider.notifier);
+    notifier.state = notifier.state
+        .where((element) => element.id != item.id)
+        .toList(growable: false);
+  }
+
+  String _slugify(String value) {
+    final normalized = value.trim().toLowerCase().replaceAll(' ', '-');
+    return normalized.replaceAll(RegExp(r'[^a-z0-9\-_]'), '');
+  }
+}
+
+class _DrawerOptionItem extends StatelessWidget {
+  const _DrawerOptionItem({
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ManagedOption item;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle),
+        color: AppColors.backgroundBase.withValues(alpha: 0.3),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: '编辑',
+            onPressed: onEdit,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.edit_outlined, size: 17),
+          ),
+          IconButton(
+            tooltip: '删除',
+            onPressed: onDelete,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 17,
+              color: AppColors.error,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DrawerLogDetails extends StatelessWidget {
+  const _DrawerLogDetails({required this.onOpenPage});
+
+  final VoidCallback onOpenPage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderSubtle),
+            color: AppColors.backgroundBase.withValues(alpha: 0.25),
+          ),
+          child: const Text(
+            '查看请求日志、响应耗时、token 用量和错误详情。',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+        ),
+        const SizedBox(height: 10),
+        PrimaryPillButton(label: '打开日志页', onPressed: onOpenPage),
+      ],
+    );
+  }
+}
+
 class _SessionQuickSettingsTrigger extends ConsumerWidget {
   const _SessionQuickSettingsTrigger();
 
@@ -162,21 +781,7 @@ class _SessionQuickSettingsTrigger extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return IconButton(
       tooltip: '当前会话设置',
-      onPressed: () async {
-        await showModalBottomSheet<void>(
-          context: context,
-          useSafeArea: true,
-          isScrollControlled: true,
-          backgroundColor: AppColors.backgroundElevated,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          builder: (context) => const FractionallySizedBox(
-            heightFactor: 0.88,
-            child: _SessionQuickSettingsSheet(),
-          ),
-        );
-      },
+      onPressed: () => _showSessionQuickSettingsBottomSheet(context),
       icon: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -199,7 +804,9 @@ class _SessionQuickSettingsTrigger extends ConsumerWidget {
 }
 
 class _SessionQuickSettingsSheet extends ConsumerStatefulWidget {
-  const _SessionQuickSettingsSheet();
+  const _SessionQuickSettingsSheet({this.embedded = false});
+
+  final bool embedded;
 
   @override
   ConsumerState<_SessionQuickSettingsSheet> createState() =>
@@ -345,25 +952,32 @@ class _SessionQuickSettingsSheetState
     final presetOptions = ref.watch(presetOptionsProvider);
     final worldBookOptions = ref.watch(worldBookOptionsProvider);
     final appearanceOptions = ref.watch(appearanceOptionsProvider);
+    final listPadding = widget.embedded
+        ? const EdgeInsets.fromLTRB(12, 12, 12, 12)
+        : const EdgeInsets.fromLTRB(16, 10, 16, 16);
 
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_config == null) {
       return Padding(
-        padding: const EdgeInsets.all(16),
+        padding: listPadding,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
+            if (widget.embedded)
+              Text('当前会话设置', style: Theme.of(context).textTheme.titleMedium)
+            else
+              Row(
+                children: [
+                  Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
             const SizedBox(height: 12),
             const GlassPanelCard(child: Text('暂无可设置会话，请先到“会话管理”创建会话。')),
           ],
@@ -400,18 +1014,21 @@ class _SessionQuickSettingsSheetState
     };
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      padding: listPadding,
       children: [
-        Row(
-          children: [
-            Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            IconButton(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
+        if (widget.embedded)
+          Text('当前会话设置', style: Theme.of(context).textTheme.titleMedium)
+        else
+          Row(
+            children: [
+              Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
+              const Spacer(),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
         const SizedBox(height: 8),
         GlassPanelCard(
           child: Column(
@@ -632,12 +1249,14 @@ class _DrawerNavItem {
   const _DrawerNavItem({
     required this.tab,
     required this.label,
+    required this.subtitle,
     required this.icon,
     required this.page,
   });
 
   final AppTab tab;
   final String label;
+  final String subtitle;
   final IconData icon;
   final Widget page;
 }
