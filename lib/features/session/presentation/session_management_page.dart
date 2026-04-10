@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/bridge/frb_api.dart' as frb;
 import '../../../core/models/common.dart';
 import '../../../core/providers/app_state.dart';
+import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/buttons.dart';
@@ -47,6 +48,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
   @override
   Widget build(BuildContext context) {
     final currentSessionId = ref.watch(currentSessionIdProvider);
+    ref.listen<int>(workspaceReloadTickProvider, (previous, next) {
+      _reload();
+    });
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
@@ -74,7 +78,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                 children: [
                   Text('会话管理', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 6),
-                  const Text('创建、重命名、删除会话，并选择当前会话。'),
+                  const Text('创建、切换、重命名、删除会话。当前会话详细配置请使用右上角按钮。'),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -233,20 +237,26 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
   }
 
   Future<void> _openCreateDialog(BuildContext context) async {
-    final runtime = ref.read(apiServiceProvider).loadStartupRuntime();
-    final apiOptions = ref.read(apiConfigOptionsProvider);
-    final presetOptions = ref.read(presetOptionsProvider);
+    final apiOptions = await ref.read(apiConfigCatalogProvider.future);
+    final presetOptions = await ref.read(presetCatalogProvider.future);
+    if (!context.mounted) {
+      return;
+    }
     final worldBookOptions = ref.read(worldBookOptionsProvider);
     final sessionService = ref.read(sessionServiceProvider);
 
     final nameController = TextEditingController(text: '新会话');
     frb.SessionMode selectedMode = frb.SessionMode.rst;
     String selectedApiId = apiOptions.isNotEmpty
-        ? apiOptions.first.id
-        : runtime.apiConfig.apiId;
+        ? apiOptions.first.apiId
+        : ref.read(apiServiceProvider).loadStartupRuntime().apiConfig.apiId;
     String selectedPresetId = presetOptions.isNotEmpty
-        ? presetOptions.first.id
-        : runtime.presetConfig.presetId;
+        ? presetOptions.first.presetId
+        : ref
+              .read(apiServiceProvider)
+              .loadStartupRuntime()
+              .presetConfig
+              .presetId;
     String? selectedWorldBookId = worldBookOptions.isNotEmpty
         ? worldBookOptions.first.id
         : null;
@@ -294,7 +304,8 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                   value: selectedApiId,
                   options: _toEntries(
                     apiOptions,
-                    fallbackId: runtime.apiConfig.apiId,
+                    selector: (item) => item.apiId,
+                    labelSelector: (item) => item.name,
                   ),
                   onChanged: (value) {
                     if (value == null) {
@@ -311,7 +322,8 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                   value: selectedPresetId,
                   options: _toEntries(
                     presetOptions,
-                    fallbackId: runtime.presetConfig.presetId,
+                    selector: (item) => item.presetId,
+                    labelSelector: (item) => item.name,
                   ),
                   onChanged: (value) {
                     if (value == null) {
@@ -326,7 +338,11 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                 _OptionSelector(
                   label: '世界书（仅 ST）',
                   value: selectedWorldBookId,
-                  options: _toEntries(worldBookOptions),
+                  options: _toEntries(
+                    worldBookOptions,
+                    selector: (item) => item.id,
+                    labelSelector: (item) => item.name,
+                  ),
                   allowNull: true,
                   onChanged: (value) => setLocalState(() {
                     selectedWorldBookId = value;
@@ -349,6 +365,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
       ),
     );
 
+    if (!context.mounted) {
+      return;
+    }
     if (saved != true) {
       return;
     }
@@ -370,20 +389,23 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
           : null,
     );
     ref.read(currentSessionIdProvider.notifier).state = created.sessionId;
+    ref.read(workspaceReloadTickProvider.notifier).state++;
     ref.read(appTabProvider.notifier).state = AppTab.chat;
     _reload();
   }
 
   Future<void> _openEditDialog(BuildContext context, String sessionId) async {
     final sessionService = ref.read(sessionServiceProvider);
-    final runtime = ref.read(apiServiceProvider).loadStartupRuntime();
     final loaded = await sessionService.loadSession(sessionId);
     if (!context.mounted) {
       return;
     }
 
-    final apiOptions = ref.read(apiConfigOptionsProvider);
-    final presetOptions = ref.read(presetOptionsProvider);
+    final apiOptions = await ref.read(apiConfigCatalogProvider.future);
+    final presetOptions = await ref.read(presetCatalogProvider.future);
+    if (!context.mounted) {
+      return;
+    }
     final worldBookOptions = ref.read(worldBookOptionsProvider);
 
     final nameController = TextEditingController(
@@ -437,8 +459,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                   value: selectedApiId,
                   options: _toEntries(
                     apiOptions,
-                    fallbackId: runtime.apiConfig.apiId,
-                    fallbackLabel: runtime.apiConfig.name,
+                    selector: (item) => item.apiId,
+                    labelSelector: (item) => item.name,
+                    fallbackId: loaded.config.mainApiConfigId,
                   ),
                   onChanged: (value) {
                     if (value == null) {
@@ -455,8 +478,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                   value: selectedPresetId,
                   options: _toEntries(
                     presetOptions,
-                    fallbackId: runtime.presetConfig.presetId,
-                    fallbackLabel: runtime.presetConfig.name,
+                    selector: (item) => item.presetId,
+                    labelSelector: (item) => item.name,
+                    fallbackId: loaded.config.presetId,
                   ),
                   onChanged: (value) {
                     if (value == null) {
@@ -471,7 +495,11 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                 _OptionSelector(
                   label: '世界书（仅 ST）',
                   value: selectedWorldBookId,
-                  options: _toEntries(worldBookOptions),
+                  options: _toEntries(
+                    worldBookOptions,
+                    selector: (item) => item.id,
+                    labelSelector: (item) => item.name,
+                  ),
                   allowNull: true,
                   onChanged: (value) => setLocalState(() {
                     selectedWorldBookId = value;
@@ -494,6 +522,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
       ),
     );
 
+    if (!context.mounted) {
+      return;
+    }
     if (saved != true) {
       return;
     }
@@ -518,6 +549,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         updatedAt: config.updatedAt,
       ),
     );
+    ref.read(workspaceReloadTickProvider.notifier).state++;
     _reload();
   }
 
@@ -552,16 +584,22 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     if (ref.read(currentSessionIdProvider) == sessionId) {
       ref.read(currentSessionIdProvider.notifier).state = null;
     }
+    ref.read(workspaceReloadTickProvider.notifier).state++;
     _reload();
   }
 
-  List<_OptionEntry> _toEntries(
-    List<ManagedOption> options, {
+  List<_OptionEntry> _toEntries<T>(
+    List<T> options, {
+    required String Function(T item) selector,
+    required String Function(T item) labelSelector,
     String? fallbackId,
     String? fallbackLabel,
   }) {
     final items = options
-        .map((item) => _OptionEntry(id: item.id, label: item.name))
+        .map(
+          (item) =>
+              _OptionEntry(id: selector(item), label: labelSelector(item)),
+        )
         .toList(growable: true);
     if (fallbackId != null && !items.any((item) => item.id == fallbackId)) {
       items.add(

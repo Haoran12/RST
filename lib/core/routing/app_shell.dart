@@ -5,12 +5,16 @@ import '../../core/bridge/frb_api.dart' as frb;
 import '../../features/chat/presentation/chat_page.dart';
 import '../../features/log/presentation/log_page.dart';
 import '../../features/session/presentation/session_management_page.dart';
+import '../../features/settings/presentation/api_config_management_page.dart';
+import '../../features/settings/presentation/preset_management_page.dart';
 import '../../features/settings/presentation/resource_management_page.dart';
+import '../models/workspace_config.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/buttons.dart';
 import '../../shared/widgets/glass_panel_card.dart';
 import '../providers/app_state.dart';
+import '../providers/config_catalog_providers.dart';
 import '../providers/service_providers.dart';
 
 class AppShell extends ConsumerWidget {
@@ -27,7 +31,7 @@ class AppShell extends ConsumerWidget {
     _DrawerNavItem(
       tab: AppTab.sessionManagement,
       label: '会话管理',
-      subtitle: '模式、绑定、上下文相关配置',
+      subtitle: '会话增删改查与切换',
       icon: Icons.chat_bubble_outline_rounded,
       page: const SessionManagementPage(),
     ),
@@ -51,30 +55,14 @@ class AppShell extends ConsumerWidget {
       label: '预设',
       subtitle: '主提示词与参数方案',
       icon: Icons.auto_awesome_motion_outlined,
-      page: ResourceManagementPage(
-        title: '预设',
-        subtitle: '管理提示词与生成参数预设，支持完整增删改查。',
-        emptyTitle: '暂无预设',
-        emptyDescription: '先创建预设，供会话与快速设置选择。',
-        icon: Icons.auto_awesome_motion_outlined,
-        optionType: ManagedOptionType.preset,
-        optionsProvider: presetOptionsProvider,
-      ),
+      page: const PresetManagementPage(),
     ),
     _DrawerNavItem(
       tab: AppTab.apiConfig,
       label: 'API配置',
       subtitle: '提供商、模型与访问配置',
       icon: Icons.cloud_sync_outlined,
-      page: ResourceManagementPage(
-        title: 'API配置',
-        subtitle: '管理 API 提供商、模型与接口配置项。',
-        emptyTitle: '暂无 API 配置',
-        emptyDescription: '创建后可在会话设置中切换使用。',
-        icon: Icons.cloud_sync_outlined,
-        optionType: ManagedOptionType.apiConfig,
-        optionsProvider: apiConfigOptionsProvider,
-      ),
+      page: const ApiConfigManagementPage(),
     ),
     _DrawerNavItem(
       tab: AppTab.appearance,
@@ -123,8 +111,6 @@ class AppShell extends ConsumerWidget {
               Navigator.of(context).pop();
               ref.read(appTabProvider.notifier).state = item.tab;
             },
-            onOpenFullscreen: () =>
-                _showSessionQuickSettingsBottomSheet(context),
           );
         case AppTab.worldBook:
           return _DrawerResourceDetails(
@@ -138,22 +124,14 @@ class AppShell extends ConsumerWidget {
             },
           );
         case AppTab.preset:
-          return _DrawerResourceDetails(
-            title: '预设',
-            emptyHint: '先创建预设，用于会话生成策略。',
-            type: ManagedOptionType.preset,
-            optionsProvider: presetOptionsProvider,
+          return _DrawerPresetDetails(
             onOpenPage: () {
               Navigator.of(context).pop();
               ref.read(appTabProvider.notifier).state = item.tab;
             },
           );
         case AppTab.apiConfig:
-          return _DrawerResourceDetails(
-            title: 'API配置',
-            emptyHint: '至少创建一个 API 配置后再绑定。',
-            type: ManagedOptionType.apiConfig,
-            optionsProvider: apiConfigOptionsProvider,
+          return _DrawerApiConfigDetails(
             onOpenPage: () {
               Navigator.of(context).pop();
               ref.read(appTabProvider.notifier).state = item.tab;
@@ -199,16 +177,8 @@ class AppShell extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Tavo 风格设置',
+                        'RST',
                         style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        '点击分组可展开详细配置',
-                        style: TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 12,
-                        ),
                       ),
                     ],
                   ),
@@ -429,13 +399,9 @@ class _DrawerChatDetails extends StatelessWidget {
 }
 
 class _DrawerSessionDetails extends StatelessWidget {
-  const _DrawerSessionDetails({
-    required this.onOpenPage,
-    required this.onOpenFullscreen,
-  });
+  const _DrawerSessionDetails({required this.onOpenPage});
 
   final VoidCallback onOpenPage;
-  final VoidCallback onOpenFullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -443,31 +409,165 @@ class _DrawerSessionDetails extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.borderSubtle),
-            color: AppColors.backgroundBase.withValues(alpha: 0.45),
+            color: AppColors.backgroundBase.withValues(alpha: 0.25),
           ),
-          child: const SizedBox(
-            height: 420,
-            child: _SessionQuickSettingsSheet(embedded: true),
+          child: const Text(
+            '这里负责会话的创建、切换、重命名和删除。当前会话绑定的 API、Preset、世界书等详细配置，请使用右上角按钮。',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ),
         const SizedBox(height: 10),
+        PrimaryPillButton(label: '进入会话页', onPressed: onOpenPage),
+      ],
+    );
+  }
+}
+
+class _DrawerPresetDetails extends ConsumerWidget {
+  const _DrawerPresetDetails({required this.onOpenPage});
+
+  final VoidCallback onOpenPage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final presets = ref.watch(presetCatalogProvider);
+    return _DrawerStoredConfigDetails<StoredPresetConfig>(
+      title: '预设',
+      asyncItems: presets,
+      emptyHint: '先创建预设，用于会话生成策略。',
+      nameSelector: (item) => item.name,
+      subtitleSelector: (item) => item.presetId,
+      onOpenPage: onOpenPage,
+    );
+  }
+}
+
+class _DrawerApiConfigDetails extends ConsumerWidget {
+  const _DrawerApiConfigDetails({required this.onOpenPage});
+
+  final VoidCallback onOpenPage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final configs = ref.watch(apiConfigCatalogProvider);
+    return _DrawerStoredConfigDetails<StoredApiConfig>(
+      title: 'API配置',
+      asyncItems: configs,
+      emptyHint: '至少创建一个 API 配置后再绑定。',
+      nameSelector: (item) => item.name,
+      subtitleSelector: (item) => item.defaultModel,
+      onOpenPage: onOpenPage,
+    );
+  }
+}
+
+class _DrawerStoredConfigDetails<T> extends StatelessWidget {
+  const _DrawerStoredConfigDetails({
+    required this.title,
+    required this.asyncItems,
+    required this.emptyHint,
+    required this.nameSelector,
+    required this.subtitleSelector,
+    required this.onOpenPage,
+  });
+
+  final String title;
+  final AsyncValue<List<T>> asyncItems;
+  final String emptyHint;
+  final String Function(T item) nameSelector;
+  final String Function(T item) subtitleSelector;
+  final VoidCallback onOpenPage;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = asyncItems.valueOrNull ?? <T>[];
+    final preview = items.take(3).toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         Row(
           children: [
-            Expanded(
-              child: PrimaryPillButton(label: '进入会话页', onPressed: onOpenPage),
+            Text(
+              '$title (${items.length})',
+              style: Theme.of(context).textTheme.labelLarge,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: SecondaryOutlineButton(
-                label: '全屏设置',
-                onPressed: onOpenFullscreen,
+            const Spacer(),
+            if (asyncItems.isLoading)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-            ),
           ],
         ),
+        const SizedBox(height: 8),
+        if (asyncItems.hasError)
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderSubtle),
+              color: AppColors.backgroundBase.withValues(alpha: 0.25),
+            ),
+            child: Text(
+              '${asyncItems.error}',
+              style: const TextStyle(color: AppColors.error, fontSize: 12),
+            ),
+          )
+        else if (preview.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderSubtle),
+              color: AppColors.backgroundBase.withValues(alpha: 0.25),
+            ),
+            child: Text(
+              emptyHint,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+          )
+        else
+          ...preview.map<Widget>(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderSubtle),
+                  color: AppColors.backgroundBase.withValues(alpha: 0.3),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nameSelector(item),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitleSelector(item),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: 2),
+        PrimaryPillButton(label: '进入页面', onPressed: onOpenPage),
       ],
     );
   }
@@ -804,9 +904,7 @@ class _SessionQuickSettingsTrigger extends ConsumerWidget {
 }
 
 class _SessionQuickSettingsSheet extends ConsumerStatefulWidget {
-  const _SessionQuickSettingsSheet({this.embedded = false});
-
-  final bool embedded;
+  const _SessionQuickSettingsSheet();
 
   @override
   ConsumerState<_SessionQuickSettingsSheet> createState() =>
@@ -929,6 +1027,7 @@ class _SessionQuickSettingsSheetState
         saved.sessionId: _appearanceId,
       };
       ref.read(sessionAppearanceProvider.notifier).state = appearanceState;
+      ref.read(workspaceReloadTickProvider.notifier).state++;
 
       setState(() {
         _config = saved;
@@ -948,13 +1047,11 @@ class _SessionQuickSettingsSheetState
 
   @override
   Widget build(BuildContext context) {
-    final apiOptions = ref.watch(apiConfigOptionsProvider);
-    final presetOptions = ref.watch(presetOptionsProvider);
+    final apiOptions = ref.watch(apiConfigCatalogProvider);
+    final presetOptions = ref.watch(presetCatalogProvider);
     final worldBookOptions = ref.watch(worldBookOptionsProvider);
     final appearanceOptions = ref.watch(appearanceOptionsProvider);
-    final listPadding = widget.embedded
-        ? const EdgeInsets.fromLTRB(12, 12, 12, 12)
-        : const EdgeInsets.fromLTRB(16, 10, 16, 16);
+    const listPadding = EdgeInsets.fromLTRB(16, 10, 16, 16);
 
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
@@ -965,19 +1062,16 @@ class _SessionQuickSettingsSheetState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (widget.embedded)
-              Text('当前会话设置', style: Theme.of(context).textTheme.titleMedium)
-            else
-              Row(
-                children: [
-                  Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
+            Row(
+              children: [
+                Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             const GlassPanelCard(child: Text('暂无可设置会话，请先到“会话管理”创建会话。')),
           ],
@@ -986,25 +1080,25 @@ class _SessionQuickSettingsSheetState
     }
 
     final config = _config!;
-    final apiEntries = _ensureOption(
-      config.mainApiConfigId,
-      apiOptions,
-      ManagedOptionType.apiConfig,
+    final apiEntries = _ensureStoredOption<StoredApiConfig>(
+      selectedId: config.mainApiConfigId,
+      source: apiOptions.valueOrNull ?? const <StoredApiConfig>[],
+      idSelector: (item) => item.apiId,
+      nameSelector: (item) => item.name,
     );
-    final presetEntries = _ensureOption(
-      config.presetId,
-      presetOptions,
-      ManagedOptionType.preset,
+    final presetEntries = _ensureStoredOption<StoredPresetConfig>(
+      selectedId: config.presetId,
+      source: presetOptions.valueOrNull ?? const <StoredPresetConfig>[],
+      idSelector: (item) => item.presetId,
+      nameSelector: (item) => item.name,
     );
-    final worldEntries = _ensureOption(
+    final worldEntries = _ensureManagedOption(
       config.stWorldBookId,
       worldBookOptions,
-      ManagedOptionType.worldBook,
     );
-    final appearanceEntries = _ensureOption(
+    final appearanceEntries = _ensureManagedOption(
       _appearanceId,
       appearanceOptions,
-      ManagedOptionType.appearance,
     );
 
     final schedulerLabel = switch (_schedulerMode) {
@@ -1016,19 +1110,16 @@ class _SessionQuickSettingsSheetState
     return ListView(
       padding: listPadding,
       children: [
-        if (widget.embedded)
-          Text('当前会话设置', style: Theme.of(context).textTheme.titleMedium)
-        else
-          Row(
-            children: [
-              Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
-              const Spacer(),
-              IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
+        Row(
+          children: [
+            Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
+            const Spacer(),
+            IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
         GlassPanelCard(
           child: Column(
@@ -1099,10 +1190,22 @@ class _SessionQuickSettingsSheetState
             children: [
               Text('会话绑定项', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),
+              if (apiOptions.hasError || presetOptions.hasError)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    '${apiOptions.error ?? presetOptions.error}',
+                    style: const TextStyle(
+                      color: AppColors.error,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
               _OptionSelector(
                 label: 'API配置',
                 value: _apiConfigId,
                 options: apiEntries,
+                enabled: !apiOptions.isLoading,
                 onChanged: (value) {
                   if (value == null) {
                     return;
@@ -1117,6 +1220,7 @@ class _SessionQuickSettingsSheetState
                 label: '预设',
                 value: _presetId,
                 options: presetEntries,
+                enabled: !presetOptions.isLoading,
                 onChanged: (value) {
                   if (value == null) {
                     return;
@@ -1180,25 +1284,51 @@ class _SessionQuickSettingsSheetState
     );
   }
 
-  List<ManagedOption> _ensureOption(
+  List<_SelectorEntry> _ensureStoredOption<T>({
+    required String? selectedId,
+    required List<T> source,
+    required String Function(T item) idSelector,
+    required String Function(T item) nameSelector,
+  }) {
+    if (selectedId == null || selectedId.isEmpty) {
+      return source
+          .map(
+            (item) =>
+                _SelectorEntry(id: idSelector(item), name: nameSelector(item)),
+          )
+          .toList(growable: false);
+    }
+    final entries = source
+        .map(
+          (item) =>
+              _SelectorEntry(id: idSelector(item), name: nameSelector(item)),
+        )
+        .toList(growable: true);
+    if (entries.any((item) => item.id == selectedId)) {
+      return entries;
+    }
+    return <_SelectorEntry>[
+      _SelectorEntry(id: selectedId, name: '$selectedId (未在列表)'),
+      ...entries,
+    ];
+  }
+
+  List<_SelectorEntry> _ensureManagedOption(
     String? selectedId,
     List<ManagedOption> source,
-    ManagedOptionType type,
   ) {
+    final entries = source
+        .map((item) => _SelectorEntry(id: item.id, name: item.name))
+        .toList(growable: true);
     if (selectedId == null || selectedId.isEmpty) {
-      return source;
+      return entries;
     }
-    if (source.any((item) => item.id == selectedId)) {
-      return source;
+    if (entries.any((item) => item.id == selectedId)) {
+      return entries;
     }
-    return <ManagedOption>[
-      buildManagedOptionTemplate(
-        type,
-        id: selectedId,
-        name: '$selectedId (未在列表)',
-        description: '会话当前绑定值',
-      ),
-      ...source,
+    return <_SelectorEntry>[
+      _SelectorEntry(id: selectedId, name: '$selectedId (未在列表)'),
+      ...entries,
     ];
   }
 }
@@ -1210,13 +1340,15 @@ class _OptionSelector extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.allowNull = false,
+    this.enabled = true,
   });
 
   final String label;
   final String? value;
-  final List<ManagedOption> options;
+  final List<_SelectorEntry> options;
   final ValueChanged<String?> onChanged;
   final bool allowNull;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1239,10 +1371,17 @@ class _OptionSelector extends StatelessWidget {
     return DropdownButtonFormField<String?>(
       initialValue: selected,
       items: items,
-      onChanged: onChanged,
+      onChanged: enabled ? onChanged : null,
       decoration: InputDecoration(labelText: label),
     );
   }
+}
+
+class _SelectorEntry {
+  const _SelectorEntry({required this.id, required this.name});
+
+  final String id;
+  final String name;
 }
 
 class _DrawerNavItem {

@@ -16,7 +16,15 @@ class RustBridge {
       return;
     }
 
-    final supportDir = await getApplicationSupportDirectory();
+    Directory supportDir;
+    try {
+      supportDir = await getApplicationSupportDirectory();
+    } catch (_) {
+      supportDir = Directory('${Directory.systemTemp.path}/rst_test_support');
+      if (!supportDir.existsSync()) {
+        supportDir.createSync(recursive: true);
+      }
+    }
     final workspaceDir = Directory('${supportDir.path}/rst_data');
     if (!workspaceDir.existsSync()) {
       workspaceDir.createSync(recursive: true);

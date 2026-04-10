@@ -20,7 +20,22 @@ void main() {
     expect(find.text('世界书'), findsOneWidget);
     expect(find.text('预设'), findsOneWidget);
     expect(find.text('API配置'), findsOneWidget);
+
+    final drawerList = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.text('外观'),
+      200,
+      scrollable: drawerList,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('外观'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('日志'),
+      200,
+      scrollable: drawerList,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('日志'), findsWidgets);
   });
 }

@@ -18,5 +18,8 @@
 
 - Development-stage versioning remains unified on `0.1.xx` and must not drift to other minor lines without owner approval.
 - Every packaged build artifact filename must include the full app version (recommended: `0.1.<patch>+<build>` or equivalent normalized form).
+- Canonical Android APK output directory is **`<repo>/build/android`**.
+- Do not treat `build/app/outputs/flutter-apk/` as final delivery path; it is only Flutter's intermediate output.
+- Standard packaging command: `pwsh ./scripts/build_android_release.ps1`.
 - The project must maintain a persistent released-version record (for example in `docs/version-history.md` or `CHANGELOG.md`) and update it for each release.
 - The build process must include version bump capability: at minimum, increment `+build` on each build/release and write back the updated version metadata.

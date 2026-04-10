@@ -52,6 +52,19 @@ cargo install cargo-ndk
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 ```
 
+## Android Release Packaging (Canonical Path)
+
+Use the project packaging script so final APK output is always standardized:
+
+```powershell
+pwsh ./scripts/build_android_release.ps1
+```
+
+Final artifacts are placed in:
+
+- `build/android/rst-<version>-release.apk`
+- `build/android/rst-latest-release.apk`
+
 ## Generate FRB Bridge
 
 ```powershell

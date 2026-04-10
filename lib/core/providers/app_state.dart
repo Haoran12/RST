@@ -80,7 +80,9 @@ class ManagedOptionField {
       label: label ?? this.label,
       type: type ?? this.type,
       value: replaceValue ? value : (value ?? this.value),
-      helperText: replaceHelperText ? helperText : (helperText ?? this.helperText),
+      helperText: replaceHelperText
+          ? helperText
+          : (helperText ?? this.helperText),
       placeholder: replacePlaceholder
           ? placeholder
           : (placeholder ?? this.placeholder),
@@ -199,6 +201,7 @@ class ManagedOption {
 
 final appTabProvider = StateProvider<AppTab>((_) => AppTab.chat);
 final currentSessionIdProvider = StateProvider<String?>((_) => null);
+final workspaceReloadTickProvider = StateProvider<int>((_) => 0);
 
 final worldBookOptionsProvider = StateProvider<List<ManagedOption>>(
   (_) => <ManagedOption>[
@@ -425,7 +428,8 @@ List<ManagedOptionSection> _buildPresetSections() {
           key: 'builtin_order',
           label: '条目顺序',
           type: ManagedFieldType.multiline,
-          value: 'Main_Prompt\nlores\nuser_description\nchat_history\nscene\nuser_input',
+          value:
+              'Main_Prompt\nlores\nuser_description\nchat_history\nscene\nuser_input',
           readOnly: true,
           helperText: '当前版本先支持查看与整体编辑，后续可继续扩展拖拽排序。',
         ),
@@ -459,7 +463,10 @@ List<ManagedOptionSection> _buildPresetSections() {
           type: ManagedFieldType.select,
           value: 'reuse_last_user',
           choices: <ManagedFieldChoice>[
-            ManagedFieldChoice(label: '复用上一条 user 消息', value: 'reuse_last_user'),
+            ManagedFieldChoice(
+              label: '复用上一条 user 消息',
+              value: 'reuse_last_user',
+            ),
             ManagedFieldChoice(label: '固定 continue', value: 'continue'),
           ],
         ),

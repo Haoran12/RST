@@ -79,16 +79,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       final sessionService = ref.read(sessionServiceProvider);
       final rustBridge = ref.read(rustBridgeProvider);
 
-      final runtime = apiService.loadStartupRuntime();
+      await apiService.ensureDefaults();
       List<frb.SessionSummary> sessions = await sessionService.listSessions();
       String? resolvedSessionId = targetSessionId;
 
       if (sessions.isEmpty) {
+        final defaults = apiService.loadStartupRuntime();
         final created = await sessionService.createSession(
           sessionName: '默认会话',
           mode: SessionMode.rst,
-          mainApiConfigId: runtime.apiConfig.apiId,
-          presetId: runtime.presetConfig.presetId,
+          mainApiConfigId: defaults.apiConfig.apiId,
+          presetId: defaults.presetConfig.presetId,
         );
         sessions = await sessionService.listSessions();
         resolvedSessionId = created.sessionId;
@@ -107,6 +108,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
       final loaded = await sessionService.loadSession(resolvedSessionId);
       final sessionConfig = loaded.config;
+      final runtime = await apiService.loadSessionRuntime(sessionConfig);
       final messages = await rustBridge.listMessages(
         sessionId: sessionConfig.sessionId,
       );
@@ -167,8 +169,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   Future<void> _handleSendPressed() async {
     final session = _session;
-    final runtime = _runtime;
-    if (session == null || runtime == null) {
+    if (session == null) {
       return;
     }
     final roundSessionId = session.sessionId;
@@ -192,6 +193,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
 
     try {
+      final runtime = await ref
+          .read(apiServiceProvider)
+          .loadSessionRuntime(session);
+      if (!mounted || _session?.sessionId != roundSessionId) {
+        return;
+      }
+      setState(() {
+        _runtime = runtime;
+      });
       await ref
           .read(chatServiceProvider)
           .sendRound(
@@ -282,6 +292,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         return;
       }
       unawaited(_bootstrap(preferredSessionId: next));
+    });
+    ref.listen<int>(workspaceReloadTickProvider, (previous, next) {
+      if (previous == next) {
+        return;
+      }
+      unawaited(
+        _bootstrap(preferredSessionId: ref.read(currentSessionIdProvider)),
+      );
     });
 
     if (_isBootstrapping) {

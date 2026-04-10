@@ -1,4 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+
+import '../bridge/frb_api.dart' as frb;
 import '../models/common.dart';
+import '../models/workspace_config.dart';
 
 class PresetBuiltinEntryNames {
   static const String mainPrompt = 'Main_Prompt';
@@ -182,14 +189,6 @@ class ApiService {
     'RST_PRESET_STOP_SEQUENCES',
     defaultValue: '',
   );
-  static const String _presetOrderRaw = String.fromEnvironment(
-    'RST_PRESET_ENTRY_ORDER',
-    defaultValue: '',
-  );
-  static const String _presetDisabledRaw = String.fromEnvironment(
-    'RST_PRESET_DISABLED_ENTRIES',
-    defaultValue: '',
-  );
   static const String _maxContextMessagesRaw = String.fromEnvironment(
     'RST_MAX_CONTEXT_MESSAGES',
     defaultValue: '16',
@@ -207,7 +206,284 @@ class ApiService {
     defaultValue: '',
   );
 
+  Future<void> warmup() async {
+    await ensureDefaults();
+  }
+
   StartupChatRuntime loadStartupRuntime() {
+    final apiConfig = _defaultApiConfig();
+    final presetConfig = _defaultPresetConfig();
+    return StartupChatRuntime(
+      apiConfig: _toRuntimeApiConfig(apiConfig),
+      presetConfig: _toRuntimePresetConfig(presetConfig),
+      maxContextMessages: _parseInt(_maxContextMessagesRaw) ?? 16,
+      defaultUserDescription: _defaultUserDescription.trim(),
+      defaultScene: _defaultScene.trim(),
+      defaultLores: _defaultLores.trim(),
+    );
+  }
+
+  StoredPresetConfig buildPresetDraft({String? name}) {
+    final now = DateTime.now().toUtc();
+    final base = _defaultPresetConfig();
+    final normalizedName = (name ?? '新预设').trim();
+    return base.copyWith(
+      presetId: _newId('preset'),
+      name: normalizedName.isEmpty ? '新预设' : normalizedName,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  StoredApiConfig buildApiConfigDraft({String? name}) {
+    final now = DateTime.now().toUtc();
+    final base = _defaultApiConfig();
+    final normalizedName = (name ?? '新API配置').trim();
+    return base.copyWith(
+      apiId: _newId('api'),
+      name: normalizedName.isEmpty ? '新API配置' : normalizedName,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  Future<List<StoredPresetConfig>> listPresets() async {
+    await ensureDefaults();
+    final files = await _jsonFiles(await _presetsDirectory());
+    final items = <StoredPresetConfig>[];
+    for (final file in files) {
+      items.add(await _readPresetFile(file));
+    }
+    items.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return items;
+  }
+
+  Future<List<StoredApiConfig>> listApiConfigs() async {
+    await ensureDefaults();
+    final files = await _jsonFiles(await _apiConfigsDirectory());
+    final items = <StoredApiConfig>[];
+    for (final file in files) {
+      items.add(await _readApiFile(file));
+    }
+    items.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return items;
+  }
+
+  Future<StoredPresetConfig> getPreset(String presetId) async {
+    await ensureDefaults();
+    final file = await _presetFile(presetId);
+    if (!await file.exists()) {
+      throw StateError('preset_not_found: $presetId');
+    }
+    return _readPresetFile(file);
+  }
+
+  Future<StoredApiConfig> getApiConfig(String apiId) async {
+    await ensureDefaults();
+    final file = await _apiConfigFile(apiId);
+    if (!await file.exists()) {
+      throw StateError('api_config_not_found: $apiId');
+    }
+    return _readApiFile(file);
+  }
+
+  Future<StoredPresetConfig> savePreset(StoredPresetConfig config) async {
+    final now = DateTime.now().toUtc();
+    final normalized = config.copyWith(
+      name: config.name.trim().isEmpty ? '未命名预设' : config.name.trim(),
+      description: _normalizeOptional(config.description),
+      clearDescription: _normalizeOptional(config.description) == null,
+      mainPrompt: config.mainPrompt.trim(),
+      stopSequences: config.stopSequences
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false),
+      reasoningEffort: _normalizeOptional(config.reasoningEffort),
+      clearReasoningEffort: _normalizeOptional(config.reasoningEffort) == null,
+      verbosity: _normalizeOptional(config.verbosity),
+      clearVerbosity: _normalizeOptional(config.verbosity) == null,
+      updatedAt: now,
+      createdAt: config.createdAt.toUtc(),
+    );
+    final file = await _presetFile(normalized.presetId);
+    await _writeJson(file, normalized.toJson());
+    return normalized;
+  }
+
+  Future<StoredApiConfig> saveApiConfig(StoredApiConfig config) async {
+    final now = DateTime.now().toUtc();
+    final normalizedKey = config.apiKeyCiphertext.trim();
+    final normalized = config.copyWith(
+      name: config.name.trim().isEmpty ? '未命名 API 配置' : config.name.trim(),
+      baseUrl: config.baseUrl.trim(),
+      requestPath: config.requestPath.trim(),
+      apiKeyCiphertext: normalizedKey,
+      apiKeyHint: _buildApiKeyHint(normalizedKey),
+      clearApiKeyHint: normalizedKey.isEmpty,
+      defaultModel: config.defaultModel.trim(),
+      customHeaders: _sanitizeHeaders(config.customHeaders),
+      requestTimeoutMs:
+          config.requestTimeoutMs != null && config.requestTimeoutMs! > 0
+          ? config.requestTimeoutMs
+          : null,
+      clearRequestTimeoutMs:
+          config.requestTimeoutMs == null || config.requestTimeoutMs! <= 0,
+      updatedAt: now,
+      createdAt: config.createdAt.toUtc(),
+    );
+    final file = await _apiConfigFile(normalized.apiId);
+    await _writeJson(file, normalized.toJson());
+    return normalized;
+  }
+
+  Future<void> deletePreset(String presetId) async {
+    final file = await _presetFile(presetId);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    await ensureDefaults();
+  }
+
+  Future<void> deleteApiConfig(String apiId) async {
+    final file = await _apiConfigFile(apiId);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    await ensureDefaults();
+  }
+
+  Future<void> ensureDefaults() async {
+    final presetsDir = await _presetsDirectory();
+    final apisDir = await _apiConfigsDirectory();
+    final presetFiles = await _jsonFiles(presetsDir);
+    if (presetFiles.isEmpty) {
+      await savePreset(_defaultPresetConfig());
+    }
+    final apiFiles = await _jsonFiles(apisDir);
+    if (apiFiles.isEmpty) {
+      await saveApiConfig(_defaultApiConfig());
+    }
+  }
+
+  Future<StartupChatRuntime> loadSessionRuntime(
+    frb.SessionConfig session,
+  ) async {
+    await ensureDefaults();
+    final apiConfig = await getApiConfig(session.mainApiConfigId);
+    final presetConfig = await getPreset(session.presetId);
+    return StartupChatRuntime(
+      apiConfig: _toRuntimeApiConfig(apiConfig),
+      presetConfig: _toRuntimePresetConfig(presetConfig),
+      maxContextMessages: _parseInt(_maxContextMessagesRaw) ?? 16,
+      defaultUserDescription: _defaultUserDescription.trim(),
+      defaultScene: _defaultScene.trim(),
+      defaultLores: _defaultLores.trim(),
+    );
+  }
+
+  RuntimeApiConfig _toRuntimeApiConfig(StoredApiConfig config) {
+    final providerType = config.providerType;
+    final requestPath = config.requestPath.trim().isEmpty
+        ? providerType == ProviderType.openai
+              ? '/v1/responses'
+              : '/v1/chat/completions'
+        : config.requestPath.trim();
+    return RuntimeApiConfig(
+      apiId: config.apiId,
+      name: config.name,
+      providerType: providerType,
+      baseUrl: config.baseUrl.trim(),
+      requestPath: requestPath,
+      apiKey: config.apiKeyCiphertext.trim(),
+      defaultModel: config.defaultModel.trim(),
+      customHeaders: config.customHeaders,
+      requestTimeoutMs: config.requestTimeoutMs,
+    );
+  }
+
+  RuntimePresetConfig _toRuntimePresetConfig(StoredPresetConfig config) {
+    final entries = _buildPresetEntries(config.mainPrompt.trim());
+    _assertBuiltinEntries(entries);
+    return RuntimePresetConfig(
+      presetId: config.presetId,
+      name: config.name,
+      entries: entries,
+      temperature: config.temperature,
+      topP: config.topP,
+      presencePenalty: config.presencePenalty,
+      frequencyPenalty: config.frequencyPenalty,
+      maxCompletionTokens: config.maxCompletionTokens,
+      stopSequences: config.stopSequences,
+      reasoningEffort: _normalizeOptional(config.reasoningEffort),
+      verbosity: _normalizeOptional(config.verbosity),
+    );
+  }
+
+  List<RuntimePresetEntry> _buildPresetEntries(String mainPrompt) {
+    return <RuntimePresetEntry>[
+      RuntimePresetEntry(
+        name: PresetBuiltinEntryNames.mainPrompt,
+        role: 'system',
+        content: mainPrompt,
+        disabled: false,
+        comment: '主系统指令',
+        builtin: true,
+      ),
+      const RuntimePresetEntry(
+        name: PresetBuiltinEntryNames.lores,
+        role: 'system',
+        content: '',
+        disabled: false,
+        comment: 'Lore 注入调度器输出',
+        builtin: true,
+      ),
+      const RuntimePresetEntry(
+        name: PresetBuiltinEntryNames.userDescription,
+        role: 'system',
+        content: '',
+        disabled: false,
+        comment: 'Session 用户描述',
+        builtin: true,
+      ),
+      const RuntimePresetEntry(
+        name: PresetBuiltinEntryNames.chatHistory,
+        role: 'system',
+        content: '',
+        disabled: false,
+        comment: '最近可见消息',
+        builtin: true,
+      ),
+      const RuntimePresetEntry(
+        name: PresetBuiltinEntryNames.scene,
+        role: 'system',
+        content: '',
+        disabled: false,
+        comment: '会话场景',
+        builtin: true,
+      ),
+      const RuntimePresetEntry(
+        name: PresetBuiltinEntryNames.userInput,
+        role: 'user',
+        content: '',
+        disabled: false,
+        comment: '用户输入',
+        builtin: true,
+      ),
+    ];
+  }
+
+  void _assertBuiltinEntries(List<RuntimePresetEntry> entries) {
+    final names = entries.map((entry) => entry.name).toSet();
+    for (final requiredName in PresetBuiltinEntryNames.all) {
+      if (!names.contains(requiredName)) {
+        throw StateError(
+          'missing required preset builtin entry: $requiredName',
+        );
+      }
+    }
+  }
+
+  StoredApiConfig _defaultApiConfig() {
     final providerType = _providerTypeRaw.trim().toLowerCase() == 'openai'
         ? ProviderType.openai
         : ProviderType.openaiCompatible;
@@ -216,25 +492,27 @@ class ApiService {
               ? '/v1/responses'
               : '/v1/chat/completions'
         : _apiRequestPathRaw.trim();
-
-    final apiConfig = RuntimeApiConfig(
+    final now = DateTime.now().toUtc();
+    return StoredApiConfig(
       apiId: _apiId,
       name: _apiName,
       providerType: providerType,
       baseUrl: _apiBaseUrl.trim(),
       requestPath: requestPath,
-      apiKey: _apiKey.trim(),
+      apiKeyCiphertext: _apiKey.trim(),
+      apiKeyHint: _buildApiKeyHint(_apiKey.trim()),
       defaultModel: _apiModel.trim(),
-      requestTimeoutMs: null,
+      createdAt: now,
+      updatedAt: now,
     );
+  }
 
-    final entries = _buildPresetEntries();
-    _assertBuiltinEntries(entries);
-
-    final presetConfig = RuntimePresetConfig(
+  StoredPresetConfig _defaultPresetConfig() {
+    final now = DateTime.now().toUtc();
+    return StoredPresetConfig(
       presetId: _presetId,
       name: _presetName,
-      entries: entries,
+      mainPrompt: _presetMainPrompt.trim(),
       temperature: _parseDouble(_presetTemperatureRaw),
       topP: _parseDouble(_presetTopPRaw),
       presencePenalty: _parseDouble(_presetPresencePenaltyRaw),
@@ -243,106 +521,111 @@ class ApiService {
       stopSequences: _parseCsv(_presetStopSequencesRaw),
       reasoningEffort: _normalizeOptional(_presetReasoningEffort),
       verbosity: _normalizeOptional(_presetVerbosity),
-    );
-
-    return StartupChatRuntime(
-      apiConfig: apiConfig,
-      presetConfig: presetConfig,
-      maxContextMessages: _parseInt(_maxContextMessagesRaw) ?? 16,
-      defaultUserDescription: _defaultUserDescription.trim(),
-      defaultScene: _defaultScene.trim(),
-      defaultLores: _defaultLores.trim(),
+      createdAt: now,
+      updatedAt: now,
     );
   }
 
-  Future<void> warmup() async {
-    loadStartupRuntime();
+  Future<Directory> _workspaceDir() async {
+    Directory supportDir;
+    try {
+      supportDir = await getApplicationSupportDirectory();
+    } catch (_) {
+      supportDir = Directory('${Directory.systemTemp.path}/rst_test_support');
+      if (!supportDir.existsSync()) {
+        supportDir.createSync(recursive: true);
+      }
+    }
+    final workspaceDir = Directory('${supportDir.path}/rst_data');
+    if (!workspaceDir.existsSync()) {
+      workspaceDir.createSync(recursive: true);
+    }
+    return workspaceDir;
   }
 
-  List<RuntimePresetEntry> _buildPresetEntries() {
-    final disabled = _parseCsv(_presetDisabledRaw).toSet();
-    final order = _parseCsv(_presetOrderRaw);
-    final defaults = <String, RuntimePresetEntry>{
-      PresetBuiltinEntryNames.mainPrompt: RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.mainPrompt,
-        role: 'system',
-        content: _presetMainPrompt.trim(),
-        disabled: disabled.contains(PresetBuiltinEntryNames.mainPrompt),
-        comment: '主系统指令（用户可通过 preset 主指令配置）',
-        builtin: true,
-      ),
-      PresetBuiltinEntryNames.lores: RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.lores,
-        role: 'system',
-        content: '',
-        disabled: disabled.contains(PresetBuiltinEntryNames.lores),
-        comment: 'Lore 注入调度器输出',
-        builtin: true,
-      ),
-      PresetBuiltinEntryNames.userDescription: RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.userDescription,
-        role: 'system',
-        content: '',
-        disabled: disabled.contains(PresetBuiltinEntryNames.userDescription),
-        comment: 'Session 用户描述',
-        builtin: true,
-      ),
-      PresetBuiltinEntryNames.chatHistory: RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.chatHistory,
-        role: 'system',
-        content: '',
-        disabled: disabled.contains(PresetBuiltinEntryNames.chatHistory),
-        comment: '最近 mem_length 条可见消息',
-        builtin: true,
-      ),
-      PresetBuiltinEntryNames.scene: RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.scene,
-        role: 'system',
-        content: '',
-        disabled: disabled.contains(PresetBuiltinEntryNames.scene),
-        comment: '会话场景',
-        builtin: true,
-      ),
-      PresetBuiltinEntryNames.userInput: RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.userInput,
-        role: 'user',
-        content: '',
-        disabled: disabled.contains(PresetBuiltinEntryNames.userInput),
-        comment: '用户最新输入',
-        builtin: true,
-      ),
-    };
-
-    if (order.isEmpty) {
-      return PresetBuiltinEntryNames.all
-          .map((name) => defaults[name]!)
-          .toList(growable: false);
+  Future<Directory> _presetsDirectory() async {
+    final dir = Directory('${(await _workspaceDir()).path}/config/presets');
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
     }
-
-    final ordered = <RuntimePresetEntry>[];
-    final remaining = <String>{...PresetBuiltinEntryNames.all};
-    for (final name in order) {
-      if (!defaults.containsKey(name)) {
-        continue;
-      }
-      ordered.add(defaults[name]!);
-      remaining.remove(name);
-    }
-    for (final name in PresetBuiltinEntryNames.all) {
-      if (remaining.contains(name)) {
-        ordered.add(defaults[name]!);
-      }
-    }
-    return ordered;
+    return dir;
   }
 
-  void _assertBuiltinEntries(List<RuntimePresetEntry> entries) {
-    final names = entries.map((entry) => entry.name).toSet();
-    for (final requiredName in PresetBuiltinEntryNames.all) {
-      if (!names.contains(requiredName)) {
-        throw StateError('missing required preset builtin entry: $requiredName');
+  Future<Directory> _apiConfigsDirectory() async {
+    final dir = Directory('${(await _workspaceDir()).path}/config/api_configs');
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return dir;
+  }
+
+  Future<File> _presetFile(String presetId) async {
+    return File('${(await _presetsDirectory()).path}/$presetId.json');
+  }
+
+  Future<File> _apiConfigFile(String apiId) async {
+    return File('${(await _apiConfigsDirectory()).path}/$apiId.json');
+  }
+
+  Future<List<File>> _jsonFiles(Directory directory) async {
+    final files = <File>[];
+    await for (final entity in directory.list()) {
+      if (entity is File && entity.path.toLowerCase().endsWith('.json')) {
+        files.add(entity);
       }
     }
+    files.sort((a, b) => a.path.compareTo(b.path));
+    return files;
+  }
+
+  Future<StoredPresetConfig> _readPresetFile(File file) async {
+    final raw = await file.readAsString();
+    final json = jsonDecode(raw);
+    if (json is! Map<String, dynamic>) {
+      throw StateError('invalid_preset_file: ${file.path}');
+    }
+    return StoredPresetConfig.fromJson(json);
+  }
+
+  Future<StoredApiConfig> _readApiFile(File file) async {
+    final raw = await file.readAsString();
+    final json = jsonDecode(raw);
+    if (json is! Map<String, dynamic>) {
+      throw StateError('invalid_api_config_file: ${file.path}');
+    }
+    return StoredApiConfig.fromJson(json);
+  }
+
+  Future<void> _writeJson(File file, Map<String, dynamic> json) async {
+    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(json));
+  }
+
+  String _newId(String prefix) {
+    return '$prefix-${DateTime.now().microsecondsSinceEpoch}';
+  }
+
+  Map<String, String> _sanitizeHeaders(Map<String, String> raw) {
+    final next = <String, String>{};
+    raw.forEach((key, value) {
+      final normalizedKey = key.trim();
+      final normalizedValue = value.trim();
+      if (normalizedKey.isEmpty || normalizedValue.isEmpty) {
+        return;
+      }
+      next[normalizedKey] = normalizedValue;
+    });
+    return next;
+  }
+
+  String? _buildApiKeyHint(String apiKey) {
+    final normalized = apiKey.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    if (normalized.length <= 8) {
+      return '${normalized.substring(0, 2)}***';
+    }
+    return '${normalized.substring(0, 4)}***${normalized.substring(normalized.length - 4)}';
   }
 
   double? _parseDouble(String value) {
@@ -361,8 +644,8 @@ class ApiService {
     return int.tryParse(normalized);
   }
 
-  String? _normalizeOptional(String value) {
-    final normalized = value.trim();
+  String? _normalizeOptional(String? value) {
+    final normalized = value?.trim() ?? '';
     if (normalized.isEmpty) {
       return null;
     }
