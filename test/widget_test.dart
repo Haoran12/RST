@@ -15,6 +15,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
+    expect(find.text('聊天'), findsOneWidget);
     expect(find.text('会话管理'), findsOneWidget);
     expect(find.text('世界书'), findsOneWidget);
     expect(find.text('预设'), findsOneWidget);

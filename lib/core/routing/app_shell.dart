@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/bridge/frb_api.dart' as frb;
+import '../../features/chat/presentation/chat_page.dart';
 import '../../features/log/presentation/log_page.dart';
 import '../../features/session/presentation/session_management_page.dart';
 import '../../features/settings/presentation/resource_management_page.dart';
@@ -16,6 +17,12 @@ class AppShell extends ConsumerWidget {
   const AppShell({super.key});
 
   static final _items = <_DrawerNavItem>[
+    _DrawerNavItem(
+      tab: AppTab.chat,
+      label: '聊天',
+      icon: Icons.forum_outlined,
+      page: const ChatPage(),
+    ),
     _DrawerNavItem(
       tab: AppTab.sessionManagement,
       label: '会话管理',
@@ -32,6 +39,7 @@ class AppShell extends ConsumerWidget {
         emptyTitle: '暂无世界书',
         emptyDescription: '先创建世界书，再绑定到 ST 会话。',
         icon: Icons.menu_book_outlined,
+        optionType: ManagedOptionType.worldBook,
         optionsProvider: worldBookOptionsProvider,
       ),
     ),
@@ -45,6 +53,7 @@ class AppShell extends ConsumerWidget {
         emptyTitle: '暂无预设',
         emptyDescription: '先创建预设，供会话与快速设置选择。',
         icon: Icons.auto_awesome_motion_outlined,
+        optionType: ManagedOptionType.preset,
         optionsProvider: presetOptionsProvider,
       ),
     ),
@@ -58,6 +67,7 @@ class AppShell extends ConsumerWidget {
         emptyTitle: '暂无 API 配置',
         emptyDescription: '创建后可在会话设置中切换使用。',
         icon: Icons.cloud_sync_outlined,
+        optionType: ManagedOptionType.apiConfig,
         optionsProvider: apiConfigOptionsProvider,
       ),
     ),
@@ -71,6 +81,7 @@ class AppShell extends ConsumerWidget {
         emptyTitle: '暂无外观方案',
         emptyDescription: '创建后可绑定到当前会话。',
         icon: Icons.palette_outlined,
+        optionType: ManagedOptionType.appearance,
         optionsProvider: appearanceOptionsProvider,
       ),
     ),
@@ -136,9 +147,9 @@ class AppShell extends ConsumerWidget {
           ),
         ),
       ),
-      child: IndexedStack(
-        index: currentIndex,
-        children: _items.map((item) => item.page).toList(growable: false),
+      child: KeyedSubtree(
+        key: ValueKey(_items[currentIndex].tab),
+        child: _items[currentIndex].page,
       ),
     );
   }
@@ -247,7 +258,8 @@ class _SessionQuickSettingsSheetState
 
       setState(() {
         _config = config;
-        _schedulerMode = schedulerMap[config.sessionId] ?? _deriveScheduler(config);
+        _schedulerMode =
+            schedulerMap[config.sessionId] ?? _deriveScheduler(config);
         _apiConfigId = config.mainApiConfigId;
         _presetId = config.presetId;
         _worldBookId = config.stWorldBookId;
@@ -284,7 +296,9 @@ class _SessionQuickSettingsSheetState
       final mode = _schedulerMode == SchedulerMode.rst
           ? frb.SessionMode.rst
           : frb.SessionMode.st;
-      final saved = await ref.read(sessionServiceProvider).saveSession(
+      final saved = await ref
+          .read(sessionServiceProvider)
+          .saveSession(
             frb.SessionConfig(
               sessionId: config.sessionId,
               sessionName: config.sessionName,
@@ -351,19 +365,33 @@ class _SessionQuickSettingsSheetState
               ],
             ),
             const SizedBox(height: 12),
-            const GlassPanelCard(
-              child: Text('暂无可设置会话，请先到“会话管理”创建会话。'),
-            ),
+            const GlassPanelCard(child: Text('暂无可设置会话，请先到“会话管理”创建会话。')),
           ],
         ),
       );
     }
 
     final config = _config!;
-    final apiEntries = _ensureOption(config.mainApiConfigId, apiOptions);
-    final presetEntries = _ensureOption(config.presetId, presetOptions);
-    final worldEntries = _ensureOption(config.stWorldBookId, worldBookOptions);
-    final appearanceEntries = _ensureOption(_appearanceId, appearanceOptions);
+    final apiEntries = _ensureOption(
+      config.mainApiConfigId,
+      apiOptions,
+      ManagedOptionType.apiConfig,
+    );
+    final presetEntries = _ensureOption(
+      config.presetId,
+      presetOptions,
+      ManagedOptionType.preset,
+    );
+    final worldEntries = _ensureOption(
+      config.stWorldBookId,
+      worldBookOptions,
+      ManagedOptionType.worldBook,
+    );
+    final appearanceEntries = _ensureOption(
+      _appearanceId,
+      appearanceOptions,
+      ManagedOptionType.appearance,
+    );
 
     final schedulerLabel = switch (_schedulerMode) {
       SchedulerMode.direct => '关键词识别：按规则快速命中',
@@ -389,11 +417,17 @@ class _SessionQuickSettingsSheetState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(config.sessionName, style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                config.sessionName,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 4),
               Text(
                 'session_id: ${config.sessionId}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
               ),
             ],
           ),
@@ -412,7 +446,10 @@ class _SessionQuickSettingsSheetState
                     value: SchedulerMode.direct,
                     child: Text('direct'),
                   ),
-                  DropdownMenuItem(value: SchedulerMode.rst, child: Text('RST')),
+                  DropdownMenuItem(
+                    value: SchedulerMode.rst,
+                    child: Text('RST'),
+                  ),
                   DropdownMenuItem(
                     value: SchedulerMode.agent,
                     child: Text('Agent'),
@@ -430,7 +467,10 @@ class _SessionQuickSettingsSheetState
               const SizedBox(height: 8),
               Text(
                 schedulerLabel,
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
               ),
             ],
           ),
@@ -526,6 +566,7 @@ class _SessionQuickSettingsSheetState
   List<ManagedOption> _ensureOption(
     String? selectedId,
     List<ManagedOption> source,
+    ManagedOptionType type,
   ) {
     if (selectedId == null || selectedId.isEmpty) {
       return source;
@@ -534,11 +575,11 @@ class _SessionQuickSettingsSheetState
       return source;
     }
     return <ManagedOption>[
-      ManagedOption(
+      buildManagedOptionTemplate(
+        type,
         id: selectedId,
         name: '$selectedId (未在列表)',
         description: '会话当前绑定值',
-        updatedAt: DateTime.now(),
       ),
       ...source,
     ];
@@ -568,18 +609,13 @@ class _OptionSelector extends StatelessWidget {
     final items = <DropdownMenuItem<String?>>[];
     if (allowNull) {
       items.add(
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('不绑定'),
-        ),
+        const DropdownMenuItem<String?>(value: null, child: Text('不绑定')),
       );
     }
     items.addAll(
       options.map(
-        (item) => DropdownMenuItem<String?>(
-          value: item.id,
-          child: Text(item.name),
-        ),
+        (item) =>
+            DropdownMenuItem<String?>(value: item.id, child: Text(item.name)),
       ),
     );
 

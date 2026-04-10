@@ -16,16 +16,28 @@ class MessageBubble extends StatelessWidget {
   final bool hidden;
 
   bool get _isUser => role == 'user';
+  bool get _isSystem => role == 'system';
 
   @override
   Widget build(BuildContext context) {
+    final label = switch (role) {
+      'user' => 'User',
+      'system' => 'System',
+      _ => 'Assistant',
+    };
+    final background = _isUser
+        ? AppColors.surfaceActive
+        : _isSystem
+        ? AppColors.backgroundElevated
+        : AppColors.surfaceOverlay;
+
     return Align(
       alignment: _isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: _isUser ? AppColors.surfaceActive : AppColors.surfaceOverlay,
+            color: background,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: hidden ? AppColors.warning : AppColors.borderSubtle,
@@ -39,7 +51,7 @@ class MessageBubble extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      _isUser ? 'User' : 'Assistant',
+                      label,
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -52,7 +64,7 @@ class MessageBubble extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
+                SelectableText(
                   content,
                   style: const TextStyle(
                     color: AppColors.textStrong,

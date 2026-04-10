@@ -60,10 +60,9 @@ class _LogPageState extends ConsumerState<LogPage> {
             return EmptyStateView(
               title: '暂无日志',
               description: '发送一轮消息后会出现请求摘要。',
-              actionLabel: '去会话管理',
+              actionLabel: '去聊天',
               onAction: () {
-                ref.read(appTabProvider.notifier).state =
-                    AppTab.sessionManagement;
+                ref.read(appTabProvider.notifier).state = AppTab.chat;
               },
             );
           }

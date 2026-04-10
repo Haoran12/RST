@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/bridge/frb_api.dart' as frb;
 import '../../../core/models/common.dart';
+import '../../../core/providers/app_state.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/chat_service.dart';
@@ -48,32 +51,71 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.dispose();
   }
 
-  Future<void> _bootstrap() async {
+  Future<void> _bootstrap({String? preferredSessionId}) async {
+    final previousSessionId = _session?.sessionId;
+    final targetSessionId =
+        preferredSessionId ?? ref.read(currentSessionIdProvider);
+    final shouldSwitchSession =
+        previousSessionId != null && previousSessionId != targetSessionId;
+
+    if (shouldSwitchSession && _isSending) {
+      await ref.read(chatServiceProvider).stop(previousSessionId);
+    }
+
+    if (mounted) {
+      setState(() {
+        _isBootstrapping = true;
+        if (shouldSwitchSession) {
+          _session = null;
+          _isSending = false;
+          _messages = const <frb.MessageRecord>[];
+          _lastRoundMetadata = null;
+        }
+      });
+    }
+
     try {
       final apiService = ref.read(apiServiceProvider);
       final sessionService = ref.read(sessionServiceProvider);
       final rustBridge = ref.read(rustBridgeProvider);
 
       final runtime = apiService.loadStartupRuntime();
-      var sessions = await sessionService.listSessions();
-      frb.SessionConfig sessionConfig;
+      List<frb.SessionSummary> sessions = await sessionService.listSessions();
+      String? resolvedSessionId = targetSessionId;
 
       if (sessions.isEmpty) {
-        sessionConfig = await sessionService.createSession(
+        final created = await sessionService.createSession(
           sessionName: '默认会话',
           mode: SessionMode.rst,
           mainApiConfigId: runtime.apiConfig.apiId,
           presetId: runtime.presetConfig.presetId,
         );
         sessions = await sessionService.listSessions();
-      } else {
-        final loaded = await sessionService.loadSession(sessions.first.sessionId);
-        sessionConfig = loaded.config;
+        resolvedSessionId = created.sessionId;
       }
 
+      final fallbackSessionId = sessions.isNotEmpty
+          ? sessions.first.sessionId
+          : null;
+      final exists =
+          resolvedSessionId != null &&
+          sessions.any((item) => item.sessionId == resolvedSessionId);
+      resolvedSessionId = exists ? resolvedSessionId : fallbackSessionId;
+      if (resolvedSessionId == null) {
+        throw StateError('没有可用会话，且创建默认会话失败。');
+      }
+
+      final loaded = await sessionService.loadSession(resolvedSessionId);
+      final sessionConfig = loaded.config;
       final messages = await rustBridge.listMessages(
         sessionId: sessionConfig.sessionId,
       );
+
+      final currentSessionId = ref.read(currentSessionIdProvider);
+      if (currentSessionId != sessionConfig.sessionId) {
+        ref.read(currentSessionIdProvider.notifier).state =
+            sessionConfig.sessionId;
+      }
 
       if (!mounted) {
         return;
@@ -85,6 +127,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _messages = _sortMessages(messages);
         _errorText = null;
         _isBootstrapping = false;
+        _isSending = false;
       });
       _scrollToBottom(force: true);
     } catch (error) {
@@ -94,20 +137,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       setState(() {
         _errorText = error.toString();
         _isBootstrapping = false;
+        _isSending = false;
       });
     }
   }
 
-  Future<void> _reloadMessages() async {
-    final session = _session;
-    if (session == null) {
+  Future<void> _reloadMessages({String? sessionId}) async {
+    final activeSessionId = sessionId ?? _session?.sessionId;
+    if (activeSessionId == null) {
       return;
     }
     try {
-      final messages = await ref.read(rustBridgeProvider).listMessages(
-            sessionId: session.sessionId,
-          );
+      final messages = await ref
+          .read(rustBridgeProvider)
+          .listMessages(sessionId: activeSessionId);
       if (!mounted) {
+        return;
+      }
+      if (_session?.sessionId != activeSessionId) {
         return;
       }
       setState(() {
@@ -124,9 +171,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (session == null || runtime == null) {
       return;
     }
+    final roundSessionId = session.sessionId;
 
     if (_isSending) {
-      await ref.read(chatServiceProvider).stop(session.sessionId);
+      await ref.read(chatServiceProvider).stop(roundSessionId);
       return;
     }
 
@@ -144,9 +192,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
 
     try {
-      await ref.read(chatServiceProvider).sendRound(
+      await ref
+          .read(chatServiceProvider)
+          .sendRound(
             SendRoundRequest(
-              sessionId: session.sessionId,
+              sessionId: roundSessionId,
               userInput: rawInput,
               apiConfig: runtime.apiConfig,
               presetConfig: runtime.presetConfig,
@@ -155,7 +205,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               sessionScene: runtime.defaultScene,
               sessionLores: runtime.defaultLores,
               onRoundPrepared: (metadata) {
-                if (!mounted) {
+                if (!mounted || _session?.sessionId != roundSessionId) {
                   return;
                 }
                 setState(() {
@@ -163,7 +213,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 });
               },
               onMessageUpdated: (message) {
-                if (!mounted) {
+                if (!mounted || _session?.sessionId != roundSessionId) {
                   return;
                 }
                 setState(() {
@@ -174,18 +224,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ),
           );
     } catch (error) {
-      if (!mounted) {
+      if (!mounted || _session?.sessionId != roundSessionId) {
         return;
       }
       setState(() {
         _errorText = error.toString();
       });
     } finally {
-      if (mounted) {
+      if (mounted && _session?.sessionId == roundSessionId) {
         setState(() {
           _isSending = false;
         });
-        await _reloadMessages();
+        await _reloadMessages(sessionId: roundSessionId);
       }
     }
   }
@@ -227,6 +277,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(currentSessionIdProvider, (previous, next) {
+      if (previous == next) {
+        return;
+      }
+      unawaited(_bootstrap(preferredSessionId: next));
+    });
+
     if (_isBootstrapping) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -261,7 +318,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     final modeLabel = session.mode == frb.SessionMode.rst ? 'RST' : 'ST';
     final statusLabel = _isSending ? 'receiving' : 'idle';
-    final statusColor = _isSending ? AppColors.accentSecondary : AppColors.success;
+    final statusColor = _isSending
+        ? AppColors.accentSecondary
+        : AppColors.success;
 
     return Column(
       children: [
@@ -282,7 +341,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       else
                         const Text(
                           '等待发送',
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                          style: TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
                         ),
                     ],
                   ),

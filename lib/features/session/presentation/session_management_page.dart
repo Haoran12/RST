@@ -32,7 +32,8 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     final currentSessionId = ref.read(currentSessionIdProvider);
     final exists = sessions.any((item) => item.sessionId == currentSessionId);
     if (sessions.isNotEmpty && (!exists || currentSessionId == null)) {
-      ref.read(currentSessionIdProvider.notifier).state = sessions.first.sessionId;
+      ref.read(currentSessionIdProvider.notifier).state =
+          sessions.first.sessionId;
     }
     return sessions;
   }
@@ -83,9 +84,23 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                       ),
                       const SizedBox(width: 8),
                       SecondaryOutlineButton(
-                        label: '刷新',
-                        onPressed: _reload,
+                        label: '打开当前聊天',
+                        onPressed: sessions.isEmpty
+                            ? null
+                            : () {
+                                final targetSessionId =
+                                    currentSessionId ??
+                                    sessions.first.sessionId;
+                                ref
+                                        .read(currentSessionIdProvider.notifier)
+                                        .state =
+                                    targetSessionId;
+                                ref.read(appTabProvider.notifier).state =
+                                    AppTab.chat;
+                              },
                       ),
+                      const SizedBox(width: 8),
+                      SecondaryOutlineButton(label: '刷新', onPressed: _reload),
                     ],
                   ),
                 ],
@@ -158,23 +173,36 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
+                            PrimaryPillButton(
+                              label: '进入聊天',
+                              onPressed: () {
+                                ref
+                                        .read(currentSessionIdProvider.notifier)
+                                        .state =
+                                    session.sessionId;
+                                ref.read(appTabProvider.notifier).state =
+                                    AppTab.chat;
+                              },
+                            ),
+                            const SizedBox(width: 8),
                             SecondaryOutlineButton(
                               label: selected ? '已选中' : '设为当前',
                               onPressed: selected
                                   ? null
                                   : () {
                                       ref
-                                          .read(currentSessionIdProvider.notifier)
-                                          .state = session.sessionId;
+                                          .read(
+                                            currentSessionIdProvider.notifier,
+                                          )
+                                          .state = session
+                                          .sessionId;
                                     },
                             ),
                             const SizedBox(width: 8),
                             SecondaryOutlineButton(
                               label: '编辑',
-                              onPressed: () => _openEditDialog(
-                                context,
-                                session.sessionId,
-                              ),
+                              onPressed: () =>
+                                  _openEditDialog(context, session.sessionId),
                             ),
                             const SizedBox(width: 8),
                             TextButton(
@@ -245,7 +273,10 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                       value: frb.SessionMode.rst,
                       child: Text('RST'),
                     ),
-                    DropdownMenuItem(value: frb.SessionMode.st, child: Text('ST')),
+                    DropdownMenuItem(
+                      value: frb.SessionMode.st,
+                      child: Text('ST'),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value == null) {
@@ -261,7 +292,10 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                 _OptionSelector(
                   label: 'API配置',
                   value: selectedApiId,
-                  options: _toEntries(apiOptions, fallbackId: runtime.apiConfig.apiId),
+                  options: _toEntries(
+                    apiOptions,
+                    fallbackId: runtime.apiConfig.apiId,
+                  ),
                   onChanged: (value) {
                     if (value == null) {
                       return;
@@ -326,12 +360,17 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
 
     final created = await sessionService.createSession(
       sessionName: name,
-      mode: selectedMode == frb.SessionMode.rst ? SessionMode.rst : SessionMode.st,
+      mode: selectedMode == frb.SessionMode.rst
+          ? SessionMode.rst
+          : SessionMode.st,
       mainApiConfigId: selectedApiId,
       presetId: selectedPresetId,
-      stWorldBookId: selectedMode == frb.SessionMode.st ? selectedWorldBookId : null,
+      stWorldBookId: selectedMode == frb.SessionMode.st
+          ? selectedWorldBookId
+          : null,
     );
     ref.read(currentSessionIdProvider.notifier).state = created.sessionId;
+    ref.read(appTabProvider.notifier).state = AppTab.chat;
     _reload();
   }
 
@@ -347,8 +386,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     final presetOptions = ref.read(presetOptionsProvider);
     final worldBookOptions = ref.read(worldBookOptionsProvider);
 
-    final nameController =
-        TextEditingController(text: loaded.config.sessionName);
+    final nameController = TextEditingController(
+      text: loaded.config.sessionName,
+    );
     frb.SessionMode selectedMode = loaded.config.mode;
     String selectedApiId = loaded.config.mainApiConfigId;
     String selectedPresetId = loaded.config.presetId;
@@ -376,7 +416,10 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                       value: frb.SessionMode.rst,
                       child: Text('RST'),
                     ),
-                    DropdownMenuItem(value: frb.SessionMode.st, child: Text('ST')),
+                    DropdownMenuItem(
+                      value: frb.SessionMode.st,
+                      child: Text('ST'),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value == null) {
@@ -468,7 +511,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         mode: selectedMode,
         mainApiConfigId: selectedApiId,
         presetId: selectedPresetId,
-        stWorldBookId: selectedMode == frb.SessionMode.st ? selectedWorldBookId : null,
+        stWorldBookId: selectedMode == frb.SessionMode.st
+            ? selectedWorldBookId
+            : null,
         createdAt: config.createdAt,
         updatedAt: config.updatedAt,
       ),
@@ -519,7 +564,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         .map((item) => _OptionEntry(id: item.id, label: item.name))
         .toList(growable: true);
     if (fallbackId != null && !items.any((item) => item.id == fallbackId)) {
-      items.add(_OptionEntry(id: fallbackId, label: fallbackLabel ?? fallbackId));
+      items.add(
+        _OptionEntry(id: fallbackId, label: fallbackLabel ?? fallbackId),
+      );
     }
     return items;
   }
@@ -561,18 +608,13 @@ class _OptionSelector extends StatelessWidget {
     final dropdownItems = <DropdownMenuItem<String?>>[];
     if (allowNull) {
       dropdownItems.add(
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('不绑定'),
-        ),
+        const DropdownMenuItem<String?>(value: null, child: Text('不绑定')),
       );
     }
     dropdownItems.addAll(
       options.map(
-        (item) => DropdownMenuItem<String?>(
-          value: item.id,
-          child: Text(item.label),
-        ),
+        (item) =>
+            DropdownMenuItem<String?>(value: item.id, child: Text(item.label)),
       ),
     );
 
