@@ -138,6 +138,31 @@ class RustBridge {
     return frb.listMessages(sessionId: sessionId, limit: limit);
   }
 
+  Future<frb.RequestLog> createRequestLog({
+    required frb.CreateRequestLogRequest seed,
+  }) async {
+    await initialize();
+    return frb.createRequestLog(seed: seed);
+  }
+
+  Future<List<frb.RequestLogSummary>> listRequestLogs({
+    String? sessionId,
+    frb.RequestLogStatus? status,
+    int? limit,
+  }) async {
+    await initialize();
+    return frb.listRequestLogs(
+      sessionId: sessionId,
+      status: status,
+      limit: limit,
+    );
+  }
+
+  Future<frb.RequestLog> getRequestLog(String logId) async {
+    await initialize();
+    return frb.getRequestLog(logId: logId);
+  }
+
   frb.SessionMode _toFrbSessionMode(core.SessionMode mode) {
     return switch (mode) {
       core.SessionMode.st => frb.SessionMode.st,

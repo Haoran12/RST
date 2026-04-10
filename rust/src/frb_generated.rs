@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1991897616;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -285336400;
 
 // Section: executor
 
@@ -74,6 +74,41 @@ fn wire__crate__frb_api__create_message_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
                         let output_ok = crate::frb_api::create_message(api_message)?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__frb_api__create_request_log_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "create_request_log",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_seed = <crate::frb_api::CreateRequestLogRequest>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::frb_api::create_request_log(api_seed)?;
                         Ok(output_ok)
                     })(),
                 )
@@ -188,6 +223,41 @@ fn wire__crate__frb_api__delete_session_impl(
         },
     )
 }
+fn wire__crate__frb_api__get_request_log_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_request_log",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_log_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::frb_api::get_request_log(api_log_id)?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
 fn wire__crate__frb_api__list_messages_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -217,6 +287,48 @@ fn wire__crate__frb_api__list_messages_impl(
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || {
                         let output_ok = crate::frb_api::list_messages(api_session_id, api_limit)?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
+        },
+    )
+}
+fn wire__crate__frb_api__list_request_logs_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "list_request_logs",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_session_id = <Option<String>>::sse_decode(&mut deserializer);
+            let api_status =
+                <Option<crate::frb_api::RequestLogStatus>>::sse_decode(&mut deserializer);
+            let api_limit = <Option<u32>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::frb_api::list_request_logs(
+                            api_session_id,
+                            api_status,
+                            api_limit,
+                        )?;
                         Ok(output_ok)
                     })(),
                 )
@@ -592,6 +704,44 @@ impl SseDecode for crate::frb_api::CreateMessageRequest {
     }
 }
 
+impl SseDecode for crate::frb_api::CreateRequestLogRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sessionId = <String>::sse_decode(deserializer);
+        let mut var_provider = <String>::sse_decode(deserializer);
+        let mut var_model = <String>::sse_decode(deserializer);
+        let mut var_status = <crate::frb_api::RequestLogStatus>::sse_decode(deserializer);
+        let mut var_requestTime = <String>::sse_decode(deserializer);
+        let mut var_responseTime = <Option<String>>::sse_decode(deserializer);
+        let mut var_durationMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_promptTokens = <Option<i64>>::sse_decode(deserializer);
+        let mut var_completionTokens = <Option<i64>>::sse_decode(deserializer);
+        let mut var_totalTokens = <Option<i64>>::sse_decode(deserializer);
+        let mut var_stopReason = <Option<String>>::sse_decode(deserializer);
+        let mut var_redacted = <bool>::sse_decode(deserializer);
+        let mut var_payloadTruncated = <bool>::sse_decode(deserializer);
+        let mut var_requestPreviewJson = <Option<String>>::sse_decode(deserializer);
+        let mut var_responsePreviewJson = <Option<String>>::sse_decode(deserializer);
+        return crate::frb_api::CreateRequestLogRequest {
+            session_id: var_sessionId,
+            provider: var_provider,
+            model: var_model,
+            status: var_status,
+            request_time: var_requestTime,
+            response_time: var_responseTime,
+            duration_ms: var_durationMs,
+            prompt_tokens: var_promptTokens,
+            completion_tokens: var_completionTokens,
+            total_tokens: var_totalTokens,
+            stop_reason: var_stopReason,
+            redacted: var_redacted,
+            payload_truncated: var_payloadTruncated,
+            request_preview_json: var_requestPreviewJson,
+            response_preview_json: var_responsePreviewJson,
+        };
+    }
+}
+
 impl SseDecode for crate::frb_api::CreateSessionRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -675,6 +825,20 @@ impl SseDecode for Vec<u8> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<u8>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::frb_api::RequestLogSummary> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::frb_api::RequestLogSummary>::sse_decode(
+                deserializer,
+            ));
         }
         return ans_;
     }
@@ -779,6 +943,17 @@ impl SseDecode for Option<i64> {
     }
 }
 
+impl SseDecode for Option<crate::frb_api::RequestLogStatus> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::frb_api::RequestLogStatus>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<u32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -787,6 +962,84 @@ impl SseDecode for Option<u32> {
         } else {
             return None;
         }
+    }
+}
+
+impl SseDecode for crate::frb_api::RequestLog {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_logId = <String>::sse_decode(deserializer);
+        let mut var_sessionId = <String>::sse_decode(deserializer);
+        let mut var_provider = <String>::sse_decode(deserializer);
+        let mut var_model = <String>::sse_decode(deserializer);
+        let mut var_status = <crate::frb_api::RequestLogStatus>::sse_decode(deserializer);
+        let mut var_requestTime = <String>::sse_decode(deserializer);
+        let mut var_responseTime = <Option<String>>::sse_decode(deserializer);
+        let mut var_durationMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_promptTokens = <Option<i64>>::sse_decode(deserializer);
+        let mut var_completionTokens = <Option<i64>>::sse_decode(deserializer);
+        let mut var_totalTokens = <Option<i64>>::sse_decode(deserializer);
+        let mut var_stopReason = <Option<String>>::sse_decode(deserializer);
+        let mut var_redacted = <bool>::sse_decode(deserializer);
+        let mut var_payloadTruncated = <bool>::sse_decode(deserializer);
+        let mut var_requestPreviewJson = <Option<String>>::sse_decode(deserializer);
+        let mut var_responsePreviewJson = <Option<String>>::sse_decode(deserializer);
+        return crate::frb_api::RequestLog {
+            log_id: var_logId,
+            session_id: var_sessionId,
+            provider: var_provider,
+            model: var_model,
+            status: var_status,
+            request_time: var_requestTime,
+            response_time: var_responseTime,
+            duration_ms: var_durationMs,
+            prompt_tokens: var_promptTokens,
+            completion_tokens: var_completionTokens,
+            total_tokens: var_totalTokens,
+            stop_reason: var_stopReason,
+            redacted: var_redacted,
+            payload_truncated: var_payloadTruncated,
+            request_preview_json: var_requestPreviewJson,
+            response_preview_json: var_responsePreviewJson,
+        };
+    }
+}
+
+impl SseDecode for crate::frb_api::RequestLogStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::frb_api::RequestLogStatus::Success,
+            1 => crate::frb_api::RequestLogStatus::Error,
+            _ => unreachable!("Invalid variant for RequestLogStatus: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::frb_api::RequestLogSummary {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_logId = <String>::sse_decode(deserializer);
+        let mut var_sessionId = <String>::sse_decode(deserializer);
+        let mut var_provider = <String>::sse_decode(deserializer);
+        let mut var_model = <String>::sse_decode(deserializer);
+        let mut var_status = <crate::frb_api::RequestLogStatus>::sse_decode(deserializer);
+        let mut var_requestTime = <String>::sse_decode(deserializer);
+        let mut var_durationMs = <Option<i64>>::sse_decode(deserializer);
+        let mut var_redacted = <bool>::sse_decode(deserializer);
+        let mut var_payloadTruncated = <bool>::sse_decode(deserializer);
+        return crate::frb_api::RequestLogSummary {
+            log_id: var_logId,
+            session_id: var_sessionId,
+            provider: var_provider,
+            model: var_model,
+            status: var_status,
+            request_time: var_requestTime,
+            duration_ms: var_durationMs,
+            redacted: var_redacted,
+            payload_truncated: var_payloadTruncated,
+        };
     }
 }
 
@@ -912,21 +1165,24 @@ fn pde_ffi_dispatcher_primary_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__frb_api__create_message_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__frb_api__create_session_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__frb_api__delete_messages_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__frb_api__delete_session_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__frb_api__list_messages_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__frb_api__list_sessions_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__frb_api__load_session_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__frb_api__rename_session_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__frb_api__save_session_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__frb_api__set_message_status_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__frb_api__set_message_visibility_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__frb_api__set_workspace_dir_impl(port, ptr, rust_vec_len, data_len),
-        13 => {
+        2 => wire__crate__frb_api__create_request_log_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__frb_api__create_session_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__frb_api__delete_messages_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__frb_api__delete_session_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__frb_api__get_request_log_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__frb_api__list_messages_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__frb_api__list_request_logs_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__frb_api__list_sessions_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__frb_api__load_session_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__frb_api__rename_session_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__frb_api__save_session_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__frb_api__set_message_status_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__frb_api__set_message_visibility_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__frb_api__set_workspace_dir_impl(port, ptr, rust_vec_len, data_len),
+        16 => {
             wire__crate__frb_api__streaming_status_default_impl(port, ptr, rust_vec_len, data_len)
         }
-        14 => wire__crate__frb_api__update_message_content_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__frb_api__update_message_content_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -966,6 +1222,40 @@ impl flutter_rust_bridge::IntoIntoDart<crate::frb_api::CreateMessageRequest>
     for crate::frb_api::CreateMessageRequest
 {
     fn into_into_dart(self) -> crate::frb_api::CreateMessageRequest {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::frb_api::CreateRequestLogRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.session_id.into_into_dart().into_dart(),
+            self.provider.into_into_dart().into_dart(),
+            self.model.into_into_dart().into_dart(),
+            self.status.into_into_dart().into_dart(),
+            self.request_time.into_into_dart().into_dart(),
+            self.response_time.into_into_dart().into_dart(),
+            self.duration_ms.into_into_dart().into_dart(),
+            self.prompt_tokens.into_into_dart().into_dart(),
+            self.completion_tokens.into_into_dart().into_dart(),
+            self.total_tokens.into_into_dart().into_dart(),
+            self.stop_reason.into_into_dart().into_dart(),
+            self.redacted.into_into_dart().into_dart(),
+            self.payload_truncated.into_into_dart().into_dart(),
+            self.request_preview_json.into_into_dart().into_dart(),
+            self.response_preview_json.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::frb_api::CreateRequestLogRequest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::frb_api::CreateRequestLogRequest>
+    for crate::frb_api::CreateRequestLogRequest
+{
+    fn into_into_dart(self) -> crate::frb_api::CreateRequestLogRequest {
         self
     }
 }
@@ -1106,6 +1396,85 @@ impl flutter_rust_bridge::IntoIntoDart<crate::frb_api::MessageStatus>
     for crate::frb_api::MessageStatus
 {
     fn into_into_dart(self) -> crate::frb_api::MessageStatus {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::frb_api::RequestLog {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.log_id.into_into_dart().into_dart(),
+            self.session_id.into_into_dart().into_dart(),
+            self.provider.into_into_dart().into_dart(),
+            self.model.into_into_dart().into_dart(),
+            self.status.into_into_dart().into_dart(),
+            self.request_time.into_into_dart().into_dart(),
+            self.response_time.into_into_dart().into_dart(),
+            self.duration_ms.into_into_dart().into_dart(),
+            self.prompt_tokens.into_into_dart().into_dart(),
+            self.completion_tokens.into_into_dart().into_dart(),
+            self.total_tokens.into_into_dart().into_dart(),
+            self.stop_reason.into_into_dart().into_dart(),
+            self.redacted.into_into_dart().into_dart(),
+            self.payload_truncated.into_into_dart().into_dart(),
+            self.request_preview_json.into_into_dart().into_dart(),
+            self.response_preview_json.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::frb_api::RequestLog {}
+impl flutter_rust_bridge::IntoIntoDart<crate::frb_api::RequestLog> for crate::frb_api::RequestLog {
+    fn into_into_dart(self) -> crate::frb_api::RequestLog {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::frb_api::RequestLogStatus {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Success => 0.into_dart(),
+            Self::Error => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::frb_api::RequestLogStatus
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::frb_api::RequestLogStatus>
+    for crate::frb_api::RequestLogStatus
+{
+    fn into_into_dart(self) -> crate::frb_api::RequestLogStatus {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::frb_api::RequestLogSummary {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.log_id.into_into_dart().into_dart(),
+            self.session_id.into_into_dart().into_dart(),
+            self.provider.into_into_dart().into_dart(),
+            self.model.into_into_dart().into_dart(),
+            self.status.into_into_dart().into_dart(),
+            self.request_time.into_into_dart().into_dart(),
+            self.duration_ms.into_into_dart().into_dart(),
+            self.redacted.into_into_dart().into_dart(),
+            self.payload_truncated.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::frb_api::RequestLogSummary
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::frb_api::RequestLogSummary>
+    for crate::frb_api::RequestLogSummary
+{
+    fn into_into_dart(self) -> crate::frb_api::RequestLogSummary {
         self
     }
 }
@@ -1260,6 +1629,27 @@ impl SseEncode for crate::frb_api::CreateMessageRequest {
     }
 }
 
+impl SseEncode for crate::frb_api::CreateRequestLogRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.session_id, serializer);
+        <String>::sse_encode(self.provider, serializer);
+        <String>::sse_encode(self.model, serializer);
+        <crate::frb_api::RequestLogStatus>::sse_encode(self.status, serializer);
+        <String>::sse_encode(self.request_time, serializer);
+        <Option<String>>::sse_encode(self.response_time, serializer);
+        <Option<i64>>::sse_encode(self.duration_ms, serializer);
+        <Option<i64>>::sse_encode(self.prompt_tokens, serializer);
+        <Option<i64>>::sse_encode(self.completion_tokens, serializer);
+        <Option<i64>>::sse_encode(self.total_tokens, serializer);
+        <Option<String>>::sse_encode(self.stop_reason, serializer);
+        <bool>::sse_encode(self.redacted, serializer);
+        <bool>::sse_encode(self.payload_truncated, serializer);
+        <Option<String>>::sse_encode(self.request_preview_json, serializer);
+        <Option<String>>::sse_encode(self.response_preview_json, serializer);
+    }
+}
+
 impl SseEncode for crate::frb_api::CreateSessionRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1325,6 +1715,16 @@ impl SseEncode for Vec<u8> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <u8>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::frb_api::RequestLogSummary> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::frb_api::RequestLogSummary>::sse_encode(item, serializer);
         }
     }
 }
@@ -1417,6 +1817,16 @@ impl SseEncode for Option<i64> {
     }
 }
 
+impl SseEncode for Option<crate::frb_api::RequestLogStatus> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::frb_api::RequestLogStatus>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<u32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1424,6 +1834,59 @@ impl SseEncode for Option<u32> {
         if let Some(value) = self {
             <u32>::sse_encode(value, serializer);
         }
+    }
+}
+
+impl SseEncode for crate::frb_api::RequestLog {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.log_id, serializer);
+        <String>::sse_encode(self.session_id, serializer);
+        <String>::sse_encode(self.provider, serializer);
+        <String>::sse_encode(self.model, serializer);
+        <crate::frb_api::RequestLogStatus>::sse_encode(self.status, serializer);
+        <String>::sse_encode(self.request_time, serializer);
+        <Option<String>>::sse_encode(self.response_time, serializer);
+        <Option<i64>>::sse_encode(self.duration_ms, serializer);
+        <Option<i64>>::sse_encode(self.prompt_tokens, serializer);
+        <Option<i64>>::sse_encode(self.completion_tokens, serializer);
+        <Option<i64>>::sse_encode(self.total_tokens, serializer);
+        <Option<String>>::sse_encode(self.stop_reason, serializer);
+        <bool>::sse_encode(self.redacted, serializer);
+        <bool>::sse_encode(self.payload_truncated, serializer);
+        <Option<String>>::sse_encode(self.request_preview_json, serializer);
+        <Option<String>>::sse_encode(self.response_preview_json, serializer);
+    }
+}
+
+impl SseEncode for crate::frb_api::RequestLogStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::frb_api::RequestLogStatus::Success => 0,
+                crate::frb_api::RequestLogStatus::Error => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::frb_api::RequestLogSummary {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.log_id, serializer);
+        <String>::sse_encode(self.session_id, serializer);
+        <String>::sse_encode(self.provider, serializer);
+        <String>::sse_encode(self.model, serializer);
+        <crate::frb_api::RequestLogStatus>::sse_encode(self.status, serializer);
+        <String>::sse_encode(self.request_time, serializer);
+        <Option<i64>>::sse_encode(self.duration_ms, serializer);
+        <bool>::sse_encode(self.redacted, serializer);
+        <bool>::sse_encode(self.payload_truncated, serializer);
     }
 }
 

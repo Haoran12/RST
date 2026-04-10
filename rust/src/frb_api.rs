@@ -44,6 +44,13 @@ pub enum MessageStatus {
     Error,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RequestLogStatus {
+    Success,
+    Error,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSummary {
@@ -140,6 +147,78 @@ pub struct CreateMessageRequest {
 #[serde(rename_all = "camelCase")]
 pub struct DeleteMessagesResult {
     pub deleted_message_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestLog {
+    pub log_id: String,
+    pub session_id: String,
+    pub provider: String,
+    pub model: String,
+    pub status: RequestLogStatus,
+    pub request_time: String,
+    #[serde(default)]
+    pub response_time: Option<String>,
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+    #[serde(default)]
+    pub prompt_tokens: Option<i64>,
+    #[serde(default)]
+    pub completion_tokens: Option<i64>,
+    #[serde(default)]
+    pub total_tokens: Option<i64>,
+    #[serde(default)]
+    pub stop_reason: Option<String>,
+    pub redacted: bool,
+    pub payload_truncated: bool,
+    #[serde(default)]
+    pub request_preview_json: Option<String>,
+    #[serde(default)]
+    pub response_preview_json: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestLogSummary {
+    pub log_id: String,
+    pub session_id: String,
+    pub provider: String,
+    pub model: String,
+    pub status: RequestLogStatus,
+    pub request_time: String,
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+    pub redacted: bool,
+    pub payload_truncated: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateRequestLogRequest {
+    pub session_id: String,
+    pub provider: String,
+    pub model: String,
+    pub status: RequestLogStatus,
+    pub request_time: String,
+    #[serde(default)]
+    pub response_time: Option<String>,
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+    #[serde(default)]
+    pub prompt_tokens: Option<i64>,
+    #[serde(default)]
+    pub completion_tokens: Option<i64>,
+    #[serde(default)]
+    pub total_tokens: Option<i64>,
+    #[serde(default)]
+    pub stop_reason: Option<String>,
+    pub redacted: bool,
+    pub payload_truncated: bool,
+    #[serde(default)]
+    pub request_preview_json: Option<String>,
+    #[serde(default)]
+    pub response_preview_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -480,6 +559,115 @@ pub fn list_messages(session_id: String, limit: Option<u32>) -> Result<Vec<Messa
     Ok(messages)
 }
 
+pub fn create_request_log(seed: CreateRequestLogRequest) -> Result<RequestLog> {
+    let session_id = seed.session_id.trim().to_string();
+    if session_id.is_empty() {
+        return Err(anyhow!("validation_error: sessionId cannot be empty"));
+    }
+
+    let provider = seed.provider.trim().to_string();
+    if provider.is_empty() {
+        return Err(anyhow!("validation_error: provider cannot be empty"));
+    }
+
+    let model = seed.model.trim().to_string();
+    if model.is_empty() {
+        return Err(anyhow!("validation_error: model cannot be empty"));
+    }
+
+    let request_time = seed.request_time.trim().to_string();
+    if request_time.is_empty() {
+        return Err(anyhow!("validation_error: requestTime cannot be empty"));
+    }
+
+    let log = RequestLog {
+        log_id: Uuid::new_v4().to_string(),
+        session_id,
+        provider,
+        model,
+        status: seed.status,
+        request_time,
+        response_time: normalize_optional(seed.response_time),
+        duration_ms: seed.duration_ms,
+        prompt_tokens: seed.prompt_tokens,
+        completion_tokens: seed.completion_tokens,
+        total_tokens: seed.total_tokens,
+        stop_reason: normalize_optional(seed.stop_reason),
+        redacted: seed.redacted,
+        payload_truncated: seed.payload_truncated,
+        request_preview_json: normalize_optional(seed.request_preview_json),
+        response_preview_json: normalize_optional(seed.response_preview_json),
+    };
+
+    let path = request_log_file_path(&log.log_id)?;
+    write_request_log_file(&path, &log)?;
+    Ok(log)
+}
+
+pub fn list_request_logs(
+    session_id: Option<String>,
+    status: Option<RequestLogStatus>,
+    limit: Option<u32>,
+) -> Result<Vec<RequestLogSummary>> {
+    let session_filter = session_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let mut logs = Vec::new();
+    for path in request_log_paths()? {
+        let log = read_request_log_file(&path)?;
+        if let Some(filter) = session_filter.as_ref() {
+            if &log.session_id != filter {
+                continue;
+            }
+        }
+
+        if let Some(expected_status) = status {
+            if log.status != expected_status {
+                continue;
+            }
+        }
+
+        logs.push(RequestLogSummary {
+            log_id: log.log_id,
+            session_id: log.session_id,
+            provider: log.provider,
+            model: log.model,
+            status: log.status,
+            request_time: log.request_time,
+            duration_ms: log.duration_ms,
+            redacted: log.redacted,
+            payload_truncated: log.payload_truncated,
+        });
+    }
+
+    logs.sort_by(|a, b| b.request_time.cmp(&a.request_time));
+    if let Some(limit) = limit {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        logs.truncate(limit as usize);
+    }
+    Ok(logs)
+}
+
+pub fn get_request_log(log_id: String) -> Result<RequestLog> {
+    let normalized = log_id.trim();
+    if normalized.is_empty() {
+        return Err(anyhow!("validation_error: logId cannot be empty"));
+    }
+
+    let path = request_log_file_path(normalized)?;
+    if !path.exists() {
+        return Err(anyhow!(
+            "not_found: request log {} does not exist",
+            normalized
+        ));
+    }
+
+    read_request_log_file(&path)
+}
+
 pub fn set_workspace_dir(path: String) -> Result<String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
@@ -518,6 +706,12 @@ fn sessions_dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
+fn request_logs_dir() -> Result<PathBuf> {
+    let dir = workspace_root().join("request_logs");
+    fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
+    Ok(dir)
+}
+
 fn session_file_path(session_id: &str) -> Result<PathBuf> {
     Ok(sessions_dir()?.join(format!("{session_id}.json")))
 }
@@ -538,6 +732,26 @@ fn session_paths() -> Result<Vec<PathBuf>> {
     Ok(paths)
 }
 
+fn request_log_file_path(log_id: &str) -> Result<PathBuf> {
+    Ok(request_logs_dir()?.join(format!("{log_id}.json")))
+}
+
+fn request_log_paths() -> Result<Vec<PathBuf>> {
+    let logs_dir = request_logs_dir()?;
+    let entries = fs::read_dir(&logs_dir)
+        .with_context(|| format!("failed to read {}", logs_dir.display()))?;
+
+    let mut paths = Vec::new();
+    for entry in entries {
+        let entry = entry.with_context(|| "failed to iterate request_logs directory")?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            paths.push(path);
+        }
+    }
+    Ok(paths)
+}
+
 fn read_session_file(path: &Path) -> Result<SessionFile> {
     let raw =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
@@ -547,6 +761,19 @@ fn read_session_file(path: &Path) -> Result<SessionFile> {
 fn write_session_file(path: &Path, file: &SessionFile) -> Result<()> {
     let raw =
         serde_json::to_string_pretty(file).with_context(|| "failed to serialize session data")?;
+    fs::write(path, raw).with_context(|| format!("failed to write {}", path.display()))?;
+    Ok(())
+}
+
+fn read_request_log_file(path: &Path) -> Result<RequestLog> {
+    let raw =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    serde_json::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+fn write_request_log_file(path: &Path, log: &RequestLog) -> Result<()> {
+    let raw = serde_json::to_string_pretty(log)
+        .with_context(|| "failed to serialize request log data")?;
     fs::write(path, raw).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(())
 }
@@ -679,6 +906,12 @@ fn reconcile_inflight_state(file: &mut SessionFile) -> bool {
 
 fn now_rfc3339() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+fn normalize_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 fn migrate_workspace_if_needed(from: &Path, to: &Path) -> Result<()> {
@@ -871,5 +1104,48 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(legacy_root);
         let _ = std::fs::remove_dir_all(target_root);
+    }
+
+    #[test]
+    fn request_log_create_list_and_get() {
+        let _guard = test_lock();
+        let workspace_dir = std::env::temp_dir().join(format!("rst-logs-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let _created = create_request_log(CreateRequestLogRequest {
+            session_id: "session-a".to_string(),
+            provider: "openai_compatible".to_string(),
+            model: "gpt-5.4-mini".to_string(),
+            status: RequestLogStatus::Success,
+            request_time: "2026-04-10T10:00:00Z".to_string(),
+            response_time: Some("2026-04-10T10:00:01Z".to_string()),
+            duration_ms: Some(1000),
+            prompt_tokens: Some(12),
+            completion_tokens: Some(8),
+            total_tokens: Some(20),
+            stop_reason: Some("stop".to_string()),
+            redacted: true,
+            payload_truncated: false,
+            request_preview_json: Some("{\"ok\":true}".to_string()),
+            response_preview_json: Some("{\"ok\":true}".to_string()),
+        })
+        .expect("create_request_log should succeed");
+
+        let listed = list_request_logs(
+            Some("session-a".to_string()),
+            Some(RequestLogStatus::Success),
+            None,
+        )
+        .expect("list_request_logs should succeed");
+        assert_eq!(listed.len(), 1);
+
+        let loaded = get_request_log(listed[0].log_id.clone()).expect("get_request_log works");
+        assert_eq!(loaded.session_id, "session-a");
+        assert_eq!(loaded.status, RequestLogStatus::Success);
+        assert_eq!(loaded.model, "gpt-5.4-mini");
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
     }
 }

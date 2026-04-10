@@ -33,12 +33,20 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   );
 
   @protected
+  CreateRequestLogRequest dco_decode_box_autoadd_create_request_log_request(
+    dynamic raw,
+  );
+
+  @protected
   CreateSessionRequest dco_decode_box_autoadd_create_session_request(
     dynamic raw,
   );
 
   @protected
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
+
+  @protected
+  RequestLogStatus dco_decode_box_autoadd_request_log_status(dynamic raw);
 
   @protected
   SessionConfig dco_decode_box_autoadd_session_config(dynamic raw);
@@ -48,6 +56,9 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
 
   @protected
   CreateMessageRequest dco_decode_create_message_request(dynamic raw);
+
+  @protected
+  CreateRequestLogRequest dco_decode_create_request_log_request(dynamic raw);
 
   @protected
   CreateSessionRequest dco_decode_create_session_request(dynamic raw);
@@ -74,6 +85,9 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<RequestLogSummary> dco_decode_list_request_log_summary(dynamic raw);
+
+  @protected
   List<SessionSummary> dco_decode_list_session_summary(dynamic raw);
 
   @protected
@@ -95,7 +109,19 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
+  RequestLogStatus? dco_decode_opt_box_autoadd_request_log_status(dynamic raw);
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  RequestLog dco_decode_request_log(dynamic raw);
+
+  @protected
+  RequestLogStatus dco_decode_request_log_status(dynamic raw);
+
+  @protected
+  RequestLogSummary dco_decode_request_log_summary(dynamic raw);
 
   @protected
   SessionConfig dco_decode_session_config(dynamic raw);
@@ -136,12 +162,22 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   );
 
   @protected
+  CreateRequestLogRequest sse_decode_box_autoadd_create_request_log_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   CreateSessionRequest sse_decode_box_autoadd_create_session_request(
     SseDeserializer deserializer,
   );
 
   @protected
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
+
+  @protected
+  RequestLogStatus sse_decode_box_autoadd_request_log_status(
+    SseDeserializer deserializer,
+  );
 
   @protected
   SessionConfig sse_decode_box_autoadd_session_config(
@@ -153,6 +189,11 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
 
   @protected
   CreateMessageRequest sse_decode_create_message_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CreateRequestLogRequest sse_decode_create_request_log_request(
     SseDeserializer deserializer,
   );
 
@@ -187,6 +228,11 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<RequestLogSummary> sse_decode_list_request_log_summary(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<SessionSummary> sse_decode_list_session_summary(
     SseDeserializer deserializer,
   );
@@ -212,7 +258,23 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
+  RequestLogStatus? sse_decode_opt_box_autoadd_request_log_status(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  RequestLog sse_decode_request_log(SseDeserializer deserializer);
+
+  @protected
+  RequestLogStatus sse_decode_request_log_status(SseDeserializer deserializer);
+
+  @protected
+  RequestLogSummary sse_decode_request_log_summary(
+    SseDeserializer deserializer,
+  );
 
   @protected
   SessionConfig sse_decode_session_config(SseDeserializer deserializer);
@@ -259,6 +321,12 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_create_request_log_request(
+    CreateRequestLogRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_create_session_request(
     CreateSessionRequest self,
     SseSerializer serializer,
@@ -267,6 +335,12 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   @protected
   void sse_encode_box_autoadd_i_64(
     PlatformInt64 self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_request_log_status(
+    RequestLogStatus self,
     SseSerializer serializer,
   );
 
@@ -282,6 +356,12 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   @protected
   void sse_encode_create_message_request(
     CreateMessageRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_create_request_log_request(
+    CreateRequestLogRequest self,
     SseSerializer serializer,
   );
 
@@ -322,6 +402,12 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   );
 
   @protected
+  void sse_encode_list_request_log_summary(
+    List<RequestLogSummary> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_session_summary(
     List<SessionSummary> self,
     SseSerializer serializer,
@@ -352,7 +438,28 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_request_log_status(
+    RequestLogStatus? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_request_log(RequestLog self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_request_log_status(
+    RequestLogStatus self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_request_log_summary(
+    RequestLogSummary self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_session_config(SessionConfig self, SseSerializer serializer);

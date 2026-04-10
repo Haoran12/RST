@@ -65,7 +65,7 @@ class RustCore
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1991897616;
+  int get rustContentHash => -285336400;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,6 +81,10 @@ abstract class RustCoreApi extends BaseApi {
     required CreateMessageRequest message,
   });
 
+  Future<RequestLog> crateFrbApiCreateRequestLog({
+    required CreateRequestLogRequest seed,
+  });
+
   Future<SessionConfig> crateFrbApiCreateSession({
     required CreateSessionRequest seed,
   });
@@ -92,8 +96,16 @@ abstract class RustCoreApi extends BaseApi {
 
   Future<DeleteResult> crateFrbApiDeleteSession({required String sessionId});
 
+  Future<RequestLog> crateFrbApiGetRequestLog({required String logId});
+
   Future<List<MessageRecord>> crateFrbApiListMessages({
     required String sessionId,
+    int? limit,
+  });
+
+  Future<List<RequestLogSummary>> crateFrbApiListRequestLogs({
+    String? sessionId,
+    RequestLogStatus? status,
     int? limit,
   });
 
@@ -168,6 +180,36 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
       const TaskConstMeta(debugName: "create_message", argNames: ["message"]);
 
   @override
+  Future<RequestLog> crateFrbApiCreateRequestLog({
+    required CreateRequestLogRequest seed,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_create_request_log_request(seed, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_request_log,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateFrbApiCreateRequestLogConstMeta,
+        argValues: [seed],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateFrbApiCreateRequestLogConstMeta =>
+      const TaskConstMeta(debugName: "create_request_log", argNames: ["seed"]);
+
+  @override
   Future<SessionConfig> crateFrbApiCreateSession({
     required CreateSessionRequest seed,
   }) {
@@ -179,7 +221,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 3,
             port: port_,
           );
         },
@@ -211,7 +253,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -241,7 +283,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -260,6 +302,34 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
       const TaskConstMeta(debugName: "delete_session", argNames: ["sessionId"]);
 
   @override
+  Future<RequestLog> crateFrbApiGetRequestLog({required String logId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(logId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_request_log,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateFrbApiGetRequestLogConstMeta,
+        argValues: [logId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateFrbApiGetRequestLogConstMeta =>
+      const TaskConstMeta(debugName: "get_request_log", argNames: ["logId"]);
+
+  @override
   Future<List<MessageRecord>> crateFrbApiListMessages({
     required String sessionId,
     int? limit,
@@ -273,7 +343,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 7,
             port: port_,
           );
         },
@@ -294,6 +364,42 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   );
 
   @override
+  Future<List<RequestLogSummary>> crateFrbApiListRequestLogs({
+    String? sessionId,
+    RequestLogStatus? status,
+    int? limit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(sessionId, serializer);
+          sse_encode_opt_box_autoadd_request_log_status(status, serializer);
+          sse_encode_opt_box_autoadd_u_32(limit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_request_log_summary,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateFrbApiListRequestLogsConstMeta,
+        argValues: [sessionId, status, limit],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateFrbApiListRequestLogsConstMeta => const TaskConstMeta(
+    debugName: "list_request_logs",
+    argNames: ["sessionId", "status", "limit"],
+  );
+
+  @override
   Future<List<SessionSummary>> crateFrbApiListSessions() {
     return handler.executeNormal(
       NormalTask(
@@ -302,7 +408,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 9,
             port: port_,
           );
         },
@@ -332,7 +438,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 10,
             port: port_,
           );
         },
@@ -364,7 +470,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 11,
             port: port_,
           );
         },
@@ -396,7 +502,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 12,
             port: port_,
           );
         },
@@ -430,7 +536,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 13,
             port: port_,
           );
         },
@@ -465,7 +571,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 14,
             port: port_,
           );
         },
@@ -496,7 +602,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 15,
             port: port_,
           );
         },
@@ -523,7 +629,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 16,
             port: port_,
           );
         },
@@ -555,7 +661,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 17,
             port: port_,
           );
         },
@@ -603,6 +709,14 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   }
 
   @protected
+  CreateRequestLogRequest dco_decode_box_autoadd_create_request_log_request(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_create_request_log_request(raw);
+  }
+
+  @protected
   CreateSessionRequest dco_decode_box_autoadd_create_session_request(
     dynamic raw,
   ) {
@@ -614,6 +728,12 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_i_64(raw);
+  }
+
+  @protected
+  RequestLogStatus dco_decode_box_autoadd_request_log_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_request_log_status(raw);
   }
 
   @protected
@@ -640,6 +760,31 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
       content: dco_decode_String(arr[2]),
       visible: dco_decode_bool(arr[3]),
       status: dco_decode_message_status(arr[4]),
+    );
+  }
+
+  @protected
+  CreateRequestLogRequest dco_decode_create_request_log_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    return CreateRequestLogRequest(
+      sessionId: dco_decode_String(arr[0]),
+      provider: dco_decode_String(arr[1]),
+      model: dco_decode_String(arr[2]),
+      status: dco_decode_request_log_status(arr[3]),
+      requestTime: dco_decode_String(arr[4]),
+      responseTime: dco_decode_opt_String(arr[5]),
+      durationMs: dco_decode_opt_box_autoadd_i_64(arr[6]),
+      promptTokens: dco_decode_opt_box_autoadd_i_64(arr[7]),
+      completionTokens: dco_decode_opt_box_autoadd_i_64(arr[8]),
+      totalTokens: dco_decode_opt_box_autoadd_i_64(arr[9]),
+      stopReason: dco_decode_opt_String(arr[10]),
+      redacted: dco_decode_bool(arr[11]),
+      payloadTruncated: dco_decode_bool(arr[12]),
+      requestPreviewJson: dco_decode_opt_String(arr[13]),
+      responsePreviewJson: dco_decode_opt_String(arr[14]),
     );
   }
 
@@ -709,6 +854,12 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   }
 
   @protected
+  List<RequestLogSummary> dco_decode_list_request_log_summary(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_request_log_summary).toList();
+  }
+
+  @protected
   List<SessionSummary> dco_decode_list_session_summary(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_session_summary).toList();
@@ -770,9 +921,66 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   }
 
   @protected
+  RequestLogStatus? dco_decode_opt_box_autoadd_request_log_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_request_log_status(raw);
+  }
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
+  }
+
+  @protected
+  RequestLog dco_decode_request_log(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 16)
+      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
+    return RequestLog(
+      logId: dco_decode_String(arr[0]),
+      sessionId: dco_decode_String(arr[1]),
+      provider: dco_decode_String(arr[2]),
+      model: dco_decode_String(arr[3]),
+      status: dco_decode_request_log_status(arr[4]),
+      requestTime: dco_decode_String(arr[5]),
+      responseTime: dco_decode_opt_String(arr[6]),
+      durationMs: dco_decode_opt_box_autoadd_i_64(arr[7]),
+      promptTokens: dco_decode_opt_box_autoadd_i_64(arr[8]),
+      completionTokens: dco_decode_opt_box_autoadd_i_64(arr[9]),
+      totalTokens: dco_decode_opt_box_autoadd_i_64(arr[10]),
+      stopReason: dco_decode_opt_String(arr[11]),
+      redacted: dco_decode_bool(arr[12]),
+      payloadTruncated: dco_decode_bool(arr[13]),
+      requestPreviewJson: dco_decode_opt_String(arr[14]),
+      responsePreviewJson: dco_decode_opt_String(arr[15]),
+    );
+  }
+
+  @protected
+  RequestLogStatus dco_decode_request_log_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return RequestLogStatus.values[raw as int];
+  }
+
+  @protected
+  RequestLogSummary dco_decode_request_log_summary(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return RequestLogSummary(
+      logId: dco_decode_String(arr[0]),
+      sessionId: dco_decode_String(arr[1]),
+      provider: dco_decode_String(arr[2]),
+      model: dco_decode_String(arr[3]),
+      status: dco_decode_request_log_status(arr[4]),
+      requestTime: dco_decode_String(arr[5]),
+      durationMs: dco_decode_opt_box_autoadd_i_64(arr[6]),
+      redacted: dco_decode_bool(arr[7]),
+      payloadTruncated: dco_decode_bool(arr[8]),
+    );
   }
 
   @protected
@@ -886,6 +1094,14 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   }
 
   @protected
+  CreateRequestLogRequest sse_decode_box_autoadd_create_request_log_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_create_request_log_request(deserializer));
+  }
+
+  @protected
   CreateSessionRequest sse_decode_box_autoadd_create_session_request(
     SseDeserializer deserializer,
   ) {
@@ -897,6 +1113,14 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_i_64(deserializer));
+  }
+
+  @protected
+  RequestLogStatus sse_decode_box_autoadd_request_log_status(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_request_log_status(deserializer));
   }
 
   @protected
@@ -929,6 +1153,45 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
       content: var_content,
       visible: var_visible,
       status: var_status,
+    );
+  }
+
+  @protected
+  CreateRequestLogRequest sse_decode_create_request_log_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sessionId = sse_decode_String(deserializer);
+    var var_provider = sse_decode_String(deserializer);
+    var var_model = sse_decode_String(deserializer);
+    var var_status = sse_decode_request_log_status(deserializer);
+    var var_requestTime = sse_decode_String(deserializer);
+    var var_responseTime = sse_decode_opt_String(deserializer);
+    var var_durationMs = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_promptTokens = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_completionTokens = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_totalTokens = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_stopReason = sse_decode_opt_String(deserializer);
+    var var_redacted = sse_decode_bool(deserializer);
+    var var_payloadTruncated = sse_decode_bool(deserializer);
+    var var_requestPreviewJson = sse_decode_opt_String(deserializer);
+    var var_responsePreviewJson = sse_decode_opt_String(deserializer);
+    return CreateRequestLogRequest(
+      sessionId: var_sessionId,
+      provider: var_provider,
+      model: var_model,
+      status: var_status,
+      requestTime: var_requestTime,
+      responseTime: var_responseTime,
+      durationMs: var_durationMs,
+      promptTokens: var_promptTokens,
+      completionTokens: var_completionTokens,
+      totalTokens: var_totalTokens,
+      stopReason: var_stopReason,
+      redacted: var_redacted,
+      payloadTruncated: var_payloadTruncated,
+      requestPreviewJson: var_requestPreviewJson,
+      responsePreviewJson: var_responsePreviewJson,
     );
   }
 
@@ -1010,6 +1273,20 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  List<RequestLogSummary> sse_decode_list_request_log_summary(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RequestLogSummary>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_request_log_summary(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -1098,6 +1375,19 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   }
 
   @protected
+  RequestLogStatus? sse_decode_opt_box_autoadd_request_log_status(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_request_log_status(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1106,6 +1396,79 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
     } else {
       return null;
     }
+  }
+
+  @protected
+  RequestLog sse_decode_request_log(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_logId = sse_decode_String(deserializer);
+    var var_sessionId = sse_decode_String(deserializer);
+    var var_provider = sse_decode_String(deserializer);
+    var var_model = sse_decode_String(deserializer);
+    var var_status = sse_decode_request_log_status(deserializer);
+    var var_requestTime = sse_decode_String(deserializer);
+    var var_responseTime = sse_decode_opt_String(deserializer);
+    var var_durationMs = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_promptTokens = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_completionTokens = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_totalTokens = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_stopReason = sse_decode_opt_String(deserializer);
+    var var_redacted = sse_decode_bool(deserializer);
+    var var_payloadTruncated = sse_decode_bool(deserializer);
+    var var_requestPreviewJson = sse_decode_opt_String(deserializer);
+    var var_responsePreviewJson = sse_decode_opt_String(deserializer);
+    return RequestLog(
+      logId: var_logId,
+      sessionId: var_sessionId,
+      provider: var_provider,
+      model: var_model,
+      status: var_status,
+      requestTime: var_requestTime,
+      responseTime: var_responseTime,
+      durationMs: var_durationMs,
+      promptTokens: var_promptTokens,
+      completionTokens: var_completionTokens,
+      totalTokens: var_totalTokens,
+      stopReason: var_stopReason,
+      redacted: var_redacted,
+      payloadTruncated: var_payloadTruncated,
+      requestPreviewJson: var_requestPreviewJson,
+      responsePreviewJson: var_responsePreviewJson,
+    );
+  }
+
+  @protected
+  RequestLogStatus sse_decode_request_log_status(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return RequestLogStatus.values[inner];
+  }
+
+  @protected
+  RequestLogSummary sse_decode_request_log_summary(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_logId = sse_decode_String(deserializer);
+    var var_sessionId = sse_decode_String(deserializer);
+    var var_provider = sse_decode_String(deserializer);
+    var var_model = sse_decode_String(deserializer);
+    var var_status = sse_decode_request_log_status(deserializer);
+    var var_requestTime = sse_decode_String(deserializer);
+    var var_durationMs = sse_decode_opt_box_autoadd_i_64(deserializer);
+    var var_redacted = sse_decode_bool(deserializer);
+    var var_payloadTruncated = sse_decode_bool(deserializer);
+    return RequestLogSummary(
+      logId: var_logId,
+      sessionId: var_sessionId,
+      provider: var_provider,
+      model: var_model,
+      status: var_status,
+      requestTime: var_requestTime,
+      durationMs: var_durationMs,
+      redacted: var_redacted,
+      payloadTruncated: var_payloadTruncated,
+    );
   }
 
   @protected
@@ -1241,6 +1604,15 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_create_request_log_request(
+    CreateRequestLogRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_create_request_log_request(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_create_session_request(
     CreateSessionRequest self,
     SseSerializer serializer,
@@ -1256,6 +1628,15 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_request_log_status(
+    RequestLogStatus self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_request_log_status(self, serializer);
   }
 
   @protected
@@ -1284,6 +1665,29 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
     sse_encode_String(self.content, serializer);
     sse_encode_bool(self.visible, serializer);
     sse_encode_message_status(self.status, serializer);
+  }
+
+  @protected
+  void sse_encode_create_request_log_request(
+    CreateRequestLogRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.sessionId, serializer);
+    sse_encode_String(self.provider, serializer);
+    sse_encode_String(self.model, serializer);
+    sse_encode_request_log_status(self.status, serializer);
+    sse_encode_String(self.requestTime, serializer);
+    sse_encode_opt_String(self.responseTime, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.durationMs, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.promptTokens, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.completionTokens, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.totalTokens, serializer);
+    sse_encode_opt_String(self.stopReason, serializer);
+    sse_encode_bool(self.redacted, serializer);
+    sse_encode_bool(self.payloadTruncated, serializer);
+    sse_encode_opt_String(self.requestPreviewJson, serializer);
+    sse_encode_opt_String(self.responsePreviewJson, serializer);
   }
 
   @protected
@@ -1358,6 +1762,18 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   }
 
   @protected
+  void sse_encode_list_request_log_summary(
+    List<RequestLogSummary> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_request_log_summary(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_session_summary(
     List<SessionSummary> self,
     SseSerializer serializer,
@@ -1429,6 +1845,19 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_request_log_status(
+    RequestLogStatus? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_request_log_status(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1436,6 +1865,53 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
     if (self != null) {
       sse_encode_box_autoadd_u_32(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_request_log(RequestLog self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.logId, serializer);
+    sse_encode_String(self.sessionId, serializer);
+    sse_encode_String(self.provider, serializer);
+    sse_encode_String(self.model, serializer);
+    sse_encode_request_log_status(self.status, serializer);
+    sse_encode_String(self.requestTime, serializer);
+    sse_encode_opt_String(self.responseTime, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.durationMs, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.promptTokens, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.completionTokens, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.totalTokens, serializer);
+    sse_encode_opt_String(self.stopReason, serializer);
+    sse_encode_bool(self.redacted, serializer);
+    sse_encode_bool(self.payloadTruncated, serializer);
+    sse_encode_opt_String(self.requestPreviewJson, serializer);
+    sse_encode_opt_String(self.responsePreviewJson, serializer);
+  }
+
+  @protected
+  void sse_encode_request_log_status(
+    RequestLogStatus self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_request_log_summary(
+    RequestLogSummary self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.logId, serializer);
+    sse_encode_String(self.sessionId, serializer);
+    sse_encode_String(self.provider, serializer);
+    sse_encode_String(self.model, serializer);
+    sse_encode_request_log_status(self.status, serializer);
+    sse_encode_String(self.requestTime, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.durationMs, serializer);
+    sse_encode_bool(self.redacted, serializer);
+    sse_encode_bool(self.payloadTruncated, serializer);
   }
 
   @protected

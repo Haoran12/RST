@@ -14,4 +14,6 @@ final sessionServiceProvider = Provider<SessionService>(
 final chatServiceProvider = Provider<ChatService>(
   (ref) => ChatService(ref.watch(rustBridgeProvider)),
 );
-final logServiceProvider = Provider<LogService>((_) => const LogService());
+final logServiceProvider = Provider<LogService>(
+  (ref) => LogService(ref.watch(rustBridgeProvider)),
+);

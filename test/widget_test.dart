@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +9,11 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: RstApp()));
 
     expect(find.text('聊天'), findsWidgets);
+
+    await tester.tap(find.byIcon(Icons.grid_view_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
     expect(find.text('Lore'), findsWidgets);
     expect(find.text('设置'), findsWidgets);
     expect(find.text('日志'), findsWidgets);

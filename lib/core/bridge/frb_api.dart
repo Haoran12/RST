@@ -6,9 +6,9 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `apply_status_side_effects`, `copy_dir_recursive`, `legacy_workspace_root`, `migrate_workspace_if_needed`, `mutate_message`, `now_rfc3339`, `read_session_file`, `reconcile_inflight_state`, `session_file_path`, `session_paths`, `sessions_dir`, `touch_session`, `validate_mode_binding`, `validate_session_name`, `workspace_root`, `write_session_file`
+// These functions are ignored because they are not marked as `pub`: `apply_status_side_effects`, `copy_dir_recursive`, `legacy_workspace_root`, `migrate_workspace_if_needed`, `mutate_message`, `normalize_optional`, `now_rfc3339`, `read_request_log_file`, `read_session_file`, `reconcile_inflight_state`, `request_log_file_path`, `request_log_paths`, `request_logs_dir`, `session_file_path`, `session_paths`, `sessions_dir`, `touch_session`, `validate_mode_binding`, `validate_session_name`, `workspace_root`, `write_request_log_file`, `write_session_file`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SessionFile`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<List<SessionSummary>> listSessions() =>
     RustCore.instance.api.crateFrbApiListSessions();
@@ -78,6 +78,22 @@ Future<List<MessageRecord>> listMessages({
   limit: limit,
 );
 
+Future<RequestLog> createRequestLog({required CreateRequestLogRequest seed}) =>
+    RustCore.instance.api.crateFrbApiCreateRequestLog(seed: seed);
+
+Future<List<RequestLogSummary>> listRequestLogs({
+  String? sessionId,
+  RequestLogStatus? status,
+  int? limit,
+}) => RustCore.instance.api.crateFrbApiListRequestLogs(
+  sessionId: sessionId,
+  status: status,
+  limit: limit,
+);
+
+Future<RequestLog> getRequestLog({required String logId}) =>
+    RustCore.instance.api.crateFrbApiGetRequestLog(logId: logId);
+
 Future<String> setWorkspaceDir({required String path}) =>
     RustCore.instance.api.crateFrbApiSetWorkspaceDir(path: path);
 
@@ -114,6 +130,81 @@ class CreateMessageRequest {
           content == other.content &&
           visible == other.visible &&
           status == other.status;
+}
+
+class CreateRequestLogRequest {
+  final String sessionId;
+  final String provider;
+  final String model;
+  final RequestLogStatus status;
+  final String requestTime;
+  final String? responseTime;
+  final PlatformInt64? durationMs;
+  final PlatformInt64? promptTokens;
+  final PlatformInt64? completionTokens;
+  final PlatformInt64? totalTokens;
+  final String? stopReason;
+  final bool redacted;
+  final bool payloadTruncated;
+  final String? requestPreviewJson;
+  final String? responsePreviewJson;
+
+  const CreateRequestLogRequest({
+    required this.sessionId,
+    required this.provider,
+    required this.model,
+    required this.status,
+    required this.requestTime,
+    this.responseTime,
+    this.durationMs,
+    this.promptTokens,
+    this.completionTokens,
+    this.totalTokens,
+    this.stopReason,
+    required this.redacted,
+    required this.payloadTruncated,
+    this.requestPreviewJson,
+    this.responsePreviewJson,
+  });
+
+  @override
+  int get hashCode =>
+      sessionId.hashCode ^
+      provider.hashCode ^
+      model.hashCode ^
+      status.hashCode ^
+      requestTime.hashCode ^
+      responseTime.hashCode ^
+      durationMs.hashCode ^
+      promptTokens.hashCode ^
+      completionTokens.hashCode ^
+      totalTokens.hashCode ^
+      stopReason.hashCode ^
+      redacted.hashCode ^
+      payloadTruncated.hashCode ^
+      requestPreviewJson.hashCode ^
+      responsePreviewJson.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CreateRequestLogRequest &&
+          runtimeType == other.runtimeType &&
+          sessionId == other.sessionId &&
+          provider == other.provider &&
+          model == other.model &&
+          status == other.status &&
+          requestTime == other.requestTime &&
+          responseTime == other.responseTime &&
+          durationMs == other.durationMs &&
+          promptTokens == other.promptTokens &&
+          completionTokens == other.completionTokens &&
+          totalTokens == other.totalTokens &&
+          stopReason == other.stopReason &&
+          redacted == other.redacted &&
+          payloadTruncated == other.payloadTruncated &&
+          requestPreviewJson == other.requestPreviewJson &&
+          responsePreviewJson == other.responsePreviewJson;
 }
 
 class CreateSessionRequest {
@@ -255,6 +346,138 @@ class MessageRecord {
 enum MessageRole { system, user, assistant }
 
 enum MessageStatus { pending, streaming, completed, error }
+
+class RequestLog {
+  final String logId;
+  final String sessionId;
+  final String provider;
+  final String model;
+  final RequestLogStatus status;
+  final String requestTime;
+  final String? responseTime;
+  final PlatformInt64? durationMs;
+  final PlatformInt64? promptTokens;
+  final PlatformInt64? completionTokens;
+  final PlatformInt64? totalTokens;
+  final String? stopReason;
+  final bool redacted;
+  final bool payloadTruncated;
+  final String? requestPreviewJson;
+  final String? responsePreviewJson;
+
+  const RequestLog({
+    required this.logId,
+    required this.sessionId,
+    required this.provider,
+    required this.model,
+    required this.status,
+    required this.requestTime,
+    this.responseTime,
+    this.durationMs,
+    this.promptTokens,
+    this.completionTokens,
+    this.totalTokens,
+    this.stopReason,
+    required this.redacted,
+    required this.payloadTruncated,
+    this.requestPreviewJson,
+    this.responsePreviewJson,
+  });
+
+  @override
+  int get hashCode =>
+      logId.hashCode ^
+      sessionId.hashCode ^
+      provider.hashCode ^
+      model.hashCode ^
+      status.hashCode ^
+      requestTime.hashCode ^
+      responseTime.hashCode ^
+      durationMs.hashCode ^
+      promptTokens.hashCode ^
+      completionTokens.hashCode ^
+      totalTokens.hashCode ^
+      stopReason.hashCode ^
+      redacted.hashCode ^
+      payloadTruncated.hashCode ^
+      requestPreviewJson.hashCode ^
+      responsePreviewJson.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RequestLog &&
+          runtimeType == other.runtimeType &&
+          logId == other.logId &&
+          sessionId == other.sessionId &&
+          provider == other.provider &&
+          model == other.model &&
+          status == other.status &&
+          requestTime == other.requestTime &&
+          responseTime == other.responseTime &&
+          durationMs == other.durationMs &&
+          promptTokens == other.promptTokens &&
+          completionTokens == other.completionTokens &&
+          totalTokens == other.totalTokens &&
+          stopReason == other.stopReason &&
+          redacted == other.redacted &&
+          payloadTruncated == other.payloadTruncated &&
+          requestPreviewJson == other.requestPreviewJson &&
+          responsePreviewJson == other.responsePreviewJson;
+}
+
+enum RequestLogStatus { success, error }
+
+class RequestLogSummary {
+  final String logId;
+  final String sessionId;
+  final String provider;
+  final String model;
+  final RequestLogStatus status;
+  final String requestTime;
+  final PlatformInt64? durationMs;
+  final bool redacted;
+  final bool payloadTruncated;
+
+  const RequestLogSummary({
+    required this.logId,
+    required this.sessionId,
+    required this.provider,
+    required this.model,
+    required this.status,
+    required this.requestTime,
+    this.durationMs,
+    required this.redacted,
+    required this.payloadTruncated,
+  });
+
+  @override
+  int get hashCode =>
+      logId.hashCode ^
+      sessionId.hashCode ^
+      provider.hashCode ^
+      model.hashCode ^
+      status.hashCode ^
+      requestTime.hashCode ^
+      durationMs.hashCode ^
+      redacted.hashCode ^
+      payloadTruncated.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RequestLogSummary &&
+          runtimeType == other.runtimeType &&
+          logId == other.logId &&
+          sessionId == other.sessionId &&
+          provider == other.provider &&
+          model == other.model &&
+          status == other.status &&
+          requestTime == other.requestTime &&
+          durationMs == other.durationMs &&
+          redacted == other.redacted &&
+          payloadTruncated == other.payloadTruncated;
+}
 
 class SessionConfig {
   final String sessionId;
