@@ -5,17 +5,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rst/app.dart';
 
 void main() {
-  testWidgets('renders app shell tabs', (WidgetTester tester) async {
+  testWidgets('renders drawer navigation items', (WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: RstApp()));
 
-    expect(find.text('聊天'), findsWidgets);
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.grid_view_rounded));
+    await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Lore'), findsWidgets);
-    expect(find.text('设置'), findsWidgets);
+    expect(find.text('会话管理'), findsOneWidget);
+    expect(find.text('世界书'), findsOneWidget);
+    expect(find.text('预设'), findsOneWidget);
+    expect(find.text('API配置'), findsOneWidget);
+    expect(find.text('外观'), findsOneWidget);
     expect(find.text('日志'), findsWidgets);
   });
 }

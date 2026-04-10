@@ -37,6 +37,21 @@ cargo check --manifest-path rust/Cargo.toml
 pwsh ./scripts/check_dev_version.ps1
 ```
 
+## Android Native Build Prerequisites
+
+Android APK now auto-builds Rust native libraries during Gradle `preBuild` and packages `librst_core.so` for:
+
+- `arm64-v8a`
+- `armeabi-v7a`
+- `x86_64`
+
+One-time setup on a new machine:
+
+```bash
+cargo install cargo-ndk
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+```
+
 ## Generate FRB Bridge
 
 ```powershell
