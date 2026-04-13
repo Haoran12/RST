@@ -10,6 +10,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
+import 'session_settings_editor_page.dart';
 
 class SessionManagementPage extends ConsumerStatefulWidget {
   const SessionManagementPage({super.key});
@@ -158,41 +159,42 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
   }
 
   Future<void> _openCreateDialog(BuildContext context) async {
+    final startupRuntime = ref.read(apiServiceProvider).loadStartupRuntime();
     final apiOptions = await ref.read(apiConfigCatalogProvider.future);
     final presetOptions = await ref.read(presetCatalogProvider.future);
     if (!context.mounted) {
       return;
     }
     final worldBookOptions = ref.read(worldBookOptionsProvider);
+    final appearanceOptions = ref.read(appearanceOptionsProvider);
     final sessionService = ref.read(sessionServiceProvider);
 
-    const sessionName = '新会话';
-    frb.SessionMode selectedMode = frb.SessionMode.rst;
-    String selectedApiId = apiOptions.isNotEmpty
-        ? apiOptions.first.apiId
-        : ref.read(apiServiceProvider).loadStartupRuntime().apiConfig.apiId;
-    String selectedPresetId = presetOptions.isNotEmpty
-        ? presetOptions.first.presetId
-        : ref
-              .read(apiServiceProvider)
-              .loadStartupRuntime()
-              .presetConfig
-              .presetId;
-    String? selectedWorldBookId = worldBookOptions.isNotEmpty
-        ? worldBookOptions.first.id
-        : null;
+    final initialDraft = SessionSettingsDraft(
+      sessionName: '新会话',
+      userDescription: startupRuntime.defaultUserDescription,
+      worldDescription: startupRuntime.defaultScene,
+      characterDescription: startupRuntime.defaultLores,
+      schedulerMode: SchedulerMode.rst,
+      apiConfigId: apiOptions.isNotEmpty
+          ? apiOptions.first.apiId
+          : startupRuntime.apiConfig.apiId,
+      presetId: presetOptions.isNotEmpty
+          ? presetOptions.first.presetId
+          : startupRuntime.presetConfig.presetId,
+      worldBookId: worldBookOptions.isNotEmpty
+          ? worldBookOptions.first.id
+          : null,
+      appearanceId: appearanceOptions.isNotEmpty
+          ? appearanceOptions.first.id
+          : 'appearance-default',
+      backgroundImagePath: '',
+    );
 
     final saved = await _openSessionEditor(
       context,
       title: '新建会话',
       actionLabel: '创建',
-      initialDraft: _SessionEditorDraft(
-        sessionName: sessionName,
-        mode: selectedMode,
-        apiConfigId: selectedApiId,
-        presetId: selectedPresetId,
-        worldBookId: selectedWorldBookId,
-      ),
+      initialDraft: initialDraft,
       apiOptions: _toEntries(
         apiOptions,
         selector: (item) => item.apiId,
@@ -208,23 +210,25 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         selector: (item) => item.id,
         labelSelector: (item) => item.name,
       ),
+      appearanceOptions: _toEntries(
+        appearanceOptions,
+        selector: (item) => item.id,
+        labelSelector: (item) => item.name,
+      ),
     );
-
     if (saved == null) {
       return;
     }
 
+    final mode = _modeFromScheduler(saved.schedulerMode);
     final created = await sessionService.createSession(
       sessionName: saved.sessionName,
-      mode: saved.mode == frb.SessionMode.rst
-          ? SessionMode.rst
-          : SessionMode.st,
+      mode: mode == frb.SessionMode.rst ? SessionMode.rst : SessionMode.st,
       mainApiConfigId: saved.apiConfigId,
       presetId: saved.presetId,
-      stWorldBookId: saved.mode == frb.SessionMode.st
-          ? saved.worldBookId
-          : null,
+      stWorldBookId: mode == frb.SessionMode.st ? saved.worldBookId : null,
     );
+    _applySessionScopedSettings(sessionId: created.sessionId, draft: saved);
     ref.read(currentSessionIdProvider.notifier).state = created.sessionId;
     ref.read(workspaceReloadTickProvider.notifier).state++;
     ref.read(appTabProvider.notifier).state = AppTab.chat;
@@ -237,97 +241,167 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     if (!context.mounted) {
       return;
     }
-
+    final startupRuntime = ref.read(apiServiceProvider).loadStartupRuntime();
     final apiOptions = await ref.read(apiConfigCatalogProvider.future);
     final presetOptions = await ref.read(presetCatalogProvider.future);
     if (!context.mounted) {
       return;
     }
     final worldBookOptions = ref.read(worldBookOptionsProvider);
+    final appearanceOptions = ref.read(appearanceOptionsProvider);
 
-    final sessionName = loaded.config.sessionName;
-    frb.SessionMode selectedMode = loaded.config.mode;
-    String selectedApiId = loaded.config.mainApiConfigId;
-    String selectedPresetId = loaded.config.presetId;
-    String? selectedWorldBookId = loaded.config.stWorldBookId;
+    final config = loaded.config;
+    final schedulerMap = ref.read(sessionSchedulerModeProvider);
+    final appearanceMap = ref.read(sessionAppearanceProvider);
+    final backgroundMap = ref.read(sessionBackgroundImageProvider);
+    final rstDataMap = ref.read(sessionRstDataProvider);
+    final appearanceFallback = appearanceOptions.isNotEmpty
+        ? appearanceOptions.first.id
+        : 'appearance-default';
+    final rstData = rstDataMap[config.sessionId];
+
+    final initialDraft = SessionSettingsDraft(
+      sessionName: config.sessionName,
+      userDescription:
+          rstData?.userDescription ?? startupRuntime.defaultUserDescription,
+      worldDescription: rstData?.scene ?? startupRuntime.defaultScene,
+      characterDescription: rstData?.lores ?? startupRuntime.defaultLores,
+      schedulerMode: schedulerMap[config.sessionId] ?? _deriveScheduler(config),
+      apiConfigId: config.mainApiConfigId,
+      presetId: config.presetId,
+      worldBookId: config.stWorldBookId,
+      appearanceId: appearanceMap[config.sessionId] ?? appearanceFallback,
+      backgroundImagePath: backgroundMap[config.sessionId] ?? '',
+    );
 
     final saved = await _openSessionEditor(
       context,
       title: '编辑会话',
       actionLabel: '保存',
-      initialDraft: _SessionEditorDraft(
-        sessionName: sessionName,
-        mode: selectedMode,
-        apiConfigId: selectedApiId,
-        presetId: selectedPresetId,
-        worldBookId: selectedWorldBookId,
-      ),
+      initialDraft: initialDraft,
       apiOptions: _toEntries(
         apiOptions,
         selector: (item) => item.apiId,
         labelSelector: (item) => item.name,
-        fallbackId: loaded.config.mainApiConfigId,
+        fallbackId: config.mainApiConfigId,
       ),
       presetOptions: _toEntries(
         presetOptions,
         selector: (item) => item.presetId,
         labelSelector: (item) => item.name,
-        fallbackId: loaded.config.presetId,
+        fallbackId: config.presetId,
       ),
       worldBookOptions: _toEntries(
         worldBookOptions,
         selector: (item) => item.id,
         labelSelector: (item) => item.name,
+        fallbackId: config.stWorldBookId,
+      ),
+      appearanceOptions: _toEntries(
+        appearanceOptions,
+        selector: (item) => item.id,
+        labelSelector: (item) => item.name,
+        fallbackId: initialDraft.appearanceId,
       ),
     );
-
     if (saved == null) {
       return;
     }
 
-    final config = loaded.config;
+    final mode = _modeFromScheduler(saved.schedulerMode);
     await sessionService.saveSession(
       frb.SessionConfig(
         sessionId: config.sessionId,
         sessionName: saved.sessionName,
-        mode: saved.mode,
+        mode: mode,
         mainApiConfigId: saved.apiConfigId,
         presetId: saved.presetId,
-        stWorldBookId: saved.mode == frb.SessionMode.st
-            ? saved.worldBookId
-            : null,
+        stWorldBookId: mode == frb.SessionMode.st ? saved.worldBookId : null,
         createdAt: config.createdAt,
         updatedAt: config.updatedAt,
       ),
     );
+    _applySessionScopedSettings(sessionId: config.sessionId, draft: saved);
     ref.read(workspaceReloadTickProvider.notifier).state++;
     _reload();
   }
 
-  Future<_SessionEditorDraft?> _openSessionEditor(
+  Future<SessionSettingsDraft?> _openSessionEditor(
     BuildContext context, {
     required String title,
     required String actionLabel,
-    required _SessionEditorDraft initialDraft,
-    required List<_OptionEntry> apiOptions,
-    required List<_OptionEntry> presetOptions,
-    required List<_OptionEntry> worldBookOptions,
+    required SessionSettingsDraft initialDraft,
+    required List<SessionSettingsOptionEntry> apiOptions,
+    required List<SessionSettingsOptionEntry> presetOptions,
+    required List<SessionSettingsOptionEntry> worldBookOptions,
+    required List<SessionSettingsOptionEntry> appearanceOptions,
   }) async {
-    final saved = await Navigator.of(context).push<_SessionEditorDraft>(
-      MaterialPageRoute<_SessionEditorDraft>(
+    final saved = await Navigator.of(context).push<SessionSettingsDraft>(
+      MaterialPageRoute<SessionSettingsDraft>(
         fullscreenDialog: true,
-        builder: (context) => _SessionEditorPage(
+        builder: (context) => SessionSettingsEditorPage(
           title: title,
           actionLabel: actionLabel,
           initialDraft: initialDraft,
           apiOptions: apiOptions,
           presetOptions: presetOptions,
           worldBookOptions: worldBookOptions,
+          appearanceOptions: appearanceOptions,
         ),
       ),
     );
     ref.read(appTabProvider.notifier).state = AppTab.chat;
     return saved;
+  }
+
+  void _applySessionScopedSettings({
+    required String sessionId,
+    required SessionSettingsDraft draft,
+  }) {
+    ref
+        .read(sessionSchedulerModeProvider.notifier)
+        .state = <String, SchedulerMode>{
+      ...ref.read(sessionSchedulerModeProvider),
+      sessionId: draft.schedulerMode,
+    };
+    ref.read(sessionAppearanceProvider.notifier).state = <String, String>{
+      ...ref.read(sessionAppearanceProvider),
+      sessionId: draft.appearanceId,
+    };
+
+    final background = draft.backgroundImagePath.trim();
+    final backgroundMap = <String, String>{
+      ...ref.read(sessionBackgroundImageProvider),
+    };
+    if (background.isEmpty) {
+      backgroundMap.remove(sessionId);
+    } else {
+      backgroundMap[sessionId] = background;
+    }
+    ref.read(sessionBackgroundImageProvider.notifier).state = backgroundMap;
+
+    ref.read(sessionRstDataProvider.notifier).state = <String, SessionRstData>{
+      ...ref.read(sessionRstDataProvider),
+      sessionId: SessionRstData(
+        userDescription: draft.userDescription.trim(),
+        scene: draft.worldDescription.trim(),
+        lores: draft.characterDescription.trim(),
+      ),
+    };
+  }
+
+  SchedulerMode _deriveScheduler(frb.SessionConfig config) {
+    if (config.mode == frb.SessionMode.rst) {
+      return SchedulerMode.rst;
+    }
+    return SchedulerMode.direct;
+  }
+
+  frb.SessionMode _modeFromScheduler(SchedulerMode schedulerMode) {
+    if (schedulerMode == SchedulerMode.rst) {
+      return frb.SessionMode.rst;
+    }
+    return frb.SessionMode.st;
   }
 
   Future<void> _deleteSession(
@@ -352,7 +426,6 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         ],
       ),
     );
-
     if (confirmed != true) {
       return;
     }
@@ -365,7 +438,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     _reload();
   }
 
-  List<_OptionEntry> _toEntries<T>(
+  List<SessionSettingsOptionEntry> _toEntries<T>(
     List<T> options, {
     required String Function(T item) selector,
     required String Function(T item) labelSelector,
@@ -374,316 +447,25 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
   }) {
     final items = options
         .map(
-          (item) =>
-              _OptionEntry(id: selector(item), label: labelSelector(item)),
+          (item) => SessionSettingsOptionEntry(
+            id: selector(item),
+            label: labelSelector(item),
+          ),
         )
         .toList(growable: true);
-    if (fallbackId != null && !items.any((item) => item.id == fallbackId)) {
-      items.add(
-        _OptionEntry(id: fallbackId, label: fallbackLabel ?? fallbackId),
-      );
+    if (fallbackId == null || fallbackId.isEmpty) {
+      return items;
     }
+    if (items.any((item) => item.id == fallbackId)) {
+      return items;
+    }
+    items.insert(
+      0,
+      SessionSettingsOptionEntry(
+        id: fallbackId,
+        label: fallbackLabel ?? '$fallbackId (未在列表)',
+      ),
+    );
     return items;
   }
-}
-
-class _SessionEditorDraft {
-  const _SessionEditorDraft({
-    required this.sessionName,
-    required this.mode,
-    required this.apiConfigId,
-    required this.presetId,
-    this.worldBookId,
-  });
-
-  final String sessionName;
-  final frb.SessionMode mode;
-  final String apiConfigId;
-  final String presetId;
-  final String? worldBookId;
-}
-
-class _SessionEditorPage extends StatefulWidget {
-  const _SessionEditorPage({
-    required this.title,
-    required this.actionLabel,
-    required this.initialDraft,
-    required this.apiOptions,
-    required this.presetOptions,
-    required this.worldBookOptions,
-  });
-
-  final String title;
-  final String actionLabel;
-  final _SessionEditorDraft initialDraft;
-  final List<_OptionEntry> apiOptions;
-  final List<_OptionEntry> presetOptions;
-  final List<_OptionEntry> worldBookOptions;
-
-  @override
-  State<_SessionEditorPage> createState() => _SessionEditorPageState();
-}
-
-class _SessionEditorPageState extends State<_SessionEditorPage> {
-  late final TextEditingController _nameController;
-  late frb.SessionMode _selectedMode;
-  late String _selectedApiId;
-  late String _selectedPresetId;
-  String? _selectedWorldBookId;
-  late final String _initialName;
-  late final frb.SessionMode _initialMode;
-  late final String _initialApiId;
-  late final String _initialPresetId;
-  late final String? _initialWorldBookId;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(
-      text: widget.initialDraft.sessionName,
-    );
-    _selectedMode = widget.initialDraft.mode;
-    _initialMode = widget.initialDraft.mode;
-    _selectedApiId = widget.initialDraft.apiConfigId;
-    _initialApiId = widget.initialDraft.apiConfigId;
-    _selectedPresetId = widget.initialDraft.presetId;
-    _initialPresetId = widget.initialDraft.presetId;
-    _selectedWorldBookId = widget.initialDraft.worldBookId;
-    _initialWorldBookId = widget.initialDraft.worldBookId;
-    _initialName = widget.initialDraft.sessionName;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope<_SessionEditorDraft>(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) {
-          return;
-        }
-        final shouldClose = await _handleAttemptDismiss();
-        if (!mounted || !shouldClose) {
-          return;
-        }
-        Navigator.of(this.context).pop();
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            tooltip: '返回聊天',
-            onPressed: () async {
-              final shouldClose = await _handleAttemptDismiss();
-              if (!mounted || !shouldClose) {
-                return;
-              }
-              Navigator.of(this.context).pop();
-            },
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-          title: Text(widget.title),
-          actions: [
-            TextButton(onPressed: _submit, child: Text(widget.actionLabel)),
-            const SizedBox(width: 4),
-          ],
-        ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 760),
-                child: GlassPanelCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(labelText: '会话名称'),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<frb.SessionMode>(
-                        initialValue: _selectedMode,
-                        items: const [
-                          DropdownMenuItem(
-                            value: frb.SessionMode.rst,
-                            child: Text('RST'),
-                          ),
-                          DropdownMenuItem(
-                            value: frb.SessionMode.st,
-                            child: Text('ST'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() {
-                            _selectedMode = value;
-                          });
-                        },
-                        decoration: const InputDecoration(labelText: '模式'),
-                      ),
-                      const SizedBox(height: 12),
-                      _OptionSelector(
-                        label: 'API配置',
-                        value: _selectedApiId,
-                        options: widget.apiOptions,
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() {
-                            _selectedApiId = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _OptionSelector(
-                        label: '预设',
-                        value: _selectedPresetId,
-                        options: widget.presetOptions,
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() {
-                            _selectedPresetId = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _OptionSelector(
-                        label: '世界书（仅 ST）',
-                        value: _selectedWorldBookId,
-                        options: widget.worldBookOptions,
-                        allowNull: true,
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedWorldBookId = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: _submit,
-                        child: Text(widget.actionLabel),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _submit() {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('会话名称不能为空')));
-      return;
-    }
-
-    Navigator.of(context).pop(
-      _SessionEditorDraft(
-        sessionName: name,
-        mode: _selectedMode,
-        apiConfigId: _selectedApiId,
-        presetId: _selectedPresetId,
-        worldBookId: _selectedWorldBookId,
-      ),
-    );
-  }
-
-  Future<bool> _handleAttemptDismiss() async {
-    if (!_isDirty()) {
-      return true;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('放弃未保存的修改？'),
-        content: const Text('你已经修改了会话信息，现在返回会丢失本次填写。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('继续编辑'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('放弃修改'),
-          ),
-        ],
-      ),
-    );
-    return confirmed == true;
-  }
-
-  bool _isDirty() {
-    return _nameController.text != _initialName ||
-        _selectedMode != _initialMode ||
-        _selectedApiId != _initialApiId ||
-        _selectedPresetId != _initialPresetId ||
-        _selectedWorldBookId != _initialWorldBookId;
-  }
-}
-
-class _OptionSelector extends StatelessWidget {
-  const _OptionSelector({
-    required this.label,
-    required this.value,
-    required this.options,
-    required this.onChanged,
-    this.allowNull = false,
-  });
-
-  final String label;
-  final String? value;
-  final List<_OptionEntry> options;
-  final ValueChanged<String?> onChanged;
-  final bool allowNull;
-
-  @override
-  Widget build(BuildContext context) {
-    final values = options.map((item) => item.id).toSet();
-    final selected = value != null && values.contains(value) ? value : null;
-
-    final dropdownItems = <DropdownMenuItem<String?>>[];
-    if (allowNull) {
-      dropdownItems.add(
-        const DropdownMenuItem<String?>(value: null, child: Text('不绑定')),
-      );
-    }
-    dropdownItems.addAll(
-      options.map(
-        (item) =>
-            DropdownMenuItem<String?>(value: item.id, child: Text(item.label)),
-      ),
-    );
-
-    return DropdownButtonFormField<String?>(
-      initialValue: selected,
-      items: dropdownItems,
-      onChanged: onChanged,
-      decoration: InputDecoration(labelText: label),
-    );
-  }
-}
-
-class _OptionEntry {
-  const _OptionEntry({required this.id, required this.label});
-
-  final String id;
-  final String label;
 }

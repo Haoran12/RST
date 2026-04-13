@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_selector/file_selector.dart';
 
 import '../../core/bridge/frb_api.dart' as frb;
 import '../../features/chat/presentation/chat_page.dart';
 import '../../features/log/presentation/log_page.dart';
 import '../../features/session/presentation/session_management_page.dart';
+import '../../features/session/presentation/session_settings_editor_page.dart';
 import '../../features/settings/presentation/api_config_management_page.dart';
 import '../../features/settings/presentation/preset_management_page.dart';
 import '../../features/settings/presentation/resource_management_page.dart';
 import '../models/workspace_config.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_scaffold.dart';
-import '../../shared/widgets/buttons.dart';
 import '../../shared/widgets/glass_panel_card.dart';
 import '../providers/app_state.dart';
 import '../providers/config_catalog_providers.dart';
@@ -413,46 +412,15 @@ class _SessionQuickSettingsSheet extends ConsumerStatefulWidget {
 class _SessionQuickSettingsSheetState
     extends ConsumerState<_SessionQuickSettingsSheet> {
   bool _loading = true;
-  bool _saving = false;
   String? _error;
   frb.SessionConfig? _config;
-  SchedulerMode _schedulerMode = SchedulerMode.rst;
-  String _apiConfigId = '';
-  String _presetId = '';
-  String? _worldBookId;
-  String _appearanceId = '';
-  String _backgroundImagePath = '';
-  SchedulerMode _initialSchedulerMode = SchedulerMode.rst;
-  String _initialApiConfigId = '';
-  String _initialPresetId = '';
-  String? _initialWorldBookId;
-  String _initialAppearanceId = '';
-  String _initialBackgroundImagePath = '';
-  String _initialRstUserDescription = '';
-  String _initialRstScene = '';
-  String _initialRstLores = '';
-  late final TextEditingController _rstUserDescriptionController;
-  late final TextEditingController _rstSceneController;
-  late final TextEditingController _rstLoresController;
-  late final TextEditingController _backgroundImageController;
+  SessionSettingsDraft? _draft;
+  int _editorVersion = 0;
 
   @override
   void initState() {
     super.initState();
-    _rstUserDescriptionController = TextEditingController();
-    _rstSceneController = TextEditingController();
-    _rstLoresController = TextEditingController();
-    _backgroundImageController = TextEditingController();
     _loadCurrentSession();
-  }
-
-  @override
-  void dispose() {
-    _rstUserDescriptionController.dispose();
-    _rstSceneController.dispose();
-    _rstLoresController.dispose();
-    _backgroundImageController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadCurrentSession() async {
@@ -464,27 +432,10 @@ class _SessionQuickSettingsSheetState
       final sessionService = ref.read(sessionServiceProvider);
       final sessions = await sessionService.listSessions();
       if (sessions.isEmpty) {
-        _rstUserDescriptionController.clear();
-        _rstSceneController.clear();
-        _rstLoresController.clear();
-        _backgroundImageController.clear();
         setState(() {
           _config = null;
-          _schedulerMode = SchedulerMode.rst;
-          _apiConfigId = '';
-          _presetId = '';
-          _worldBookId = null;
-          _appearanceId = '';
-          _backgroundImagePath = '';
-          _initialSchedulerMode = SchedulerMode.rst;
-          _initialApiConfigId = '';
-          _initialPresetId = '';
-          _initialWorldBookId = null;
-          _initialAppearanceId = '';
-          _initialBackgroundImagePath = '';
-          _initialRstUserDescription = '';
-          _initialRstScene = '';
-          _initialRstLores = '';
+          _draft = null;
+          _editorVersion++;
           _loading = false;
         });
         return;
@@ -510,30 +461,23 @@ class _SessionQuickSettingsSheetState
       final startupRuntime = ref.read(apiServiceProvider).loadStartupRuntime();
       final rstData = rstDataMap[config.sessionId];
 
-      _rstUserDescriptionController.text =
-          rstData?.userDescription ?? startupRuntime.defaultUserDescription;
-      _rstSceneController.text = rstData?.scene ?? startupRuntime.defaultScene;
-      _rstLoresController.text = rstData?.lores ?? startupRuntime.defaultLores;
-      _backgroundImageController.text = backgroundMap[config.sessionId] ?? '';
-
       setState(() {
         _config = config;
-        _schedulerMode =
-            schedulerMap[config.sessionId] ?? _deriveScheduler(config);
-        _apiConfigId = config.mainApiConfigId;
-        _presetId = config.presetId;
-        _worldBookId = config.stWorldBookId;
-        _appearanceId = appearanceMap[config.sessionId] ?? defaultAppearanceId;
-        _backgroundImagePath = backgroundMap[config.sessionId] ?? '';
-        _initialSchedulerMode = _schedulerMode;
-        _initialApiConfigId = _apiConfigId;
-        _initialPresetId = _presetId;
-        _initialWorldBookId = _worldBookId;
-        _initialAppearanceId = _appearanceId;
-        _initialBackgroundImagePath = _backgroundImagePath;
-        _initialRstUserDescription = _rstUserDescriptionController.text;
-        _initialRstScene = _rstSceneController.text;
-        _initialRstLores = _rstLoresController.text;
+        _draft = SessionSettingsDraft(
+          sessionName: config.sessionName,
+          userDescription:
+              rstData?.userDescription ?? startupRuntime.defaultUserDescription,
+          worldDescription: rstData?.scene ?? startupRuntime.defaultScene,
+          characterDescription: rstData?.lores ?? startupRuntime.defaultLores,
+          schedulerMode:
+              schedulerMap[config.sessionId] ?? _deriveScheduler(config),
+          apiConfigId: config.mainApiConfigId,
+          presetId: config.presetId,
+          worldBookId: config.stWorldBookId,
+          appearanceId: appearanceMap[config.sessionId] ?? defaultAppearanceId,
+          backgroundImagePath: backgroundMap[config.sessionId] ?? '',
+        );
+        _editorVersion++;
         _loading = false;
       });
     } catch (error) {
@@ -551,128 +495,80 @@ class _SessionQuickSettingsSheetState
     return SchedulerMode.direct;
   }
 
-  Future<void> _pickBackgroundImage() async {
-    try {
-      const images = XTypeGroup(
-        label: 'images',
-        extensions: <String>['png', 'jpg', 'jpeg', 'webp', 'bmp'],
-      );
-      final selected = await openFile(
-        acceptedTypeGroups: <XTypeGroup>[images],
-        confirmButtonText: '选择背景图',
-      );
-      if (!mounted || selected == null) {
-        return;
-      }
-      setState(() {
-        _backgroundImagePath = selected.path;
-        _backgroundImageController.text = selected.path;
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _error = '选择背景图失败: $error';
-      });
+  frb.SessionMode _modeFromScheduler(SchedulerMode mode) {
+    if (mode == SchedulerMode.rst) {
+      return frb.SessionMode.rst;
     }
+    return frb.SessionMode.st;
   }
 
-  void _clearBackgroundImage() {
-    setState(() {
-      _backgroundImagePath = '';
-      _backgroundImageController.clear();
-    });
-  }
-
-  Future<void> _save() async {
+  Future<void> _save(SessionSettingsDraft draft) async {
     final config = _config;
     if (config == null) {
       return;
     }
+    final mode = _modeFromScheduler(draft.schedulerMode);
+    final saved = await ref
+        .read(sessionServiceProvider)
+        .saveSession(
+          frb.SessionConfig(
+            sessionId: config.sessionId,
+            sessionName: draft.sessionName,
+            mode: mode,
+            mainApiConfigId: draft.apiConfigId,
+            presetId: draft.presetId,
+            stWorldBookId: mode == frb.SessionMode.st
+                ? draft.worldBookId
+                : null,
+            createdAt: config.createdAt,
+            updatedAt: config.updatedAt,
+          ),
+        );
 
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
+    ref
+        .read(sessionSchedulerModeProvider.notifier)
+        .state = <String, SchedulerMode>{
+      ...ref.read(sessionSchedulerModeProvider),
+      saved.sessionId: draft.schedulerMode,
+    };
+    ref.read(sessionAppearanceProvider.notifier).state = <String, String>{
+      ...ref.read(sessionAppearanceProvider),
+      saved.sessionId: draft.appearanceId,
+    };
 
-    try {
-      final mode = _schedulerMode == SchedulerMode.rst
-          ? frb.SessionMode.rst
-          : frb.SessionMode.st;
-      final saved = await ref
-          .read(sessionServiceProvider)
-          .saveSession(
-            frb.SessionConfig(
-              sessionId: config.sessionId,
-              sessionName: config.sessionName,
-              mode: mode,
-              mainApiConfigId: _apiConfigId,
-              presetId: _presetId,
-              stWorldBookId: mode == frb.SessionMode.st ? _worldBookId : null,
-              createdAt: config.createdAt,
-              updatedAt: config.updatedAt,
-            ),
-          );
-
-      final schedulerState = <String, SchedulerMode>{
-        ...ref.read(sessionSchedulerModeProvider),
-        saved.sessionId: _schedulerMode,
-      };
-      ref.read(sessionSchedulerModeProvider.notifier).state = schedulerState;
-
-      final appearanceState = <String, String>{
-        ...ref.read(sessionAppearanceProvider),
-        saved.sessionId: _appearanceId,
-      };
-      ref.read(sessionAppearanceProvider.notifier).state = appearanceState;
-
-      final normalizedBackgroundPath = _backgroundImagePath.trim();
-      final backgroundState = <String, String>{
-        ...ref.read(sessionBackgroundImageProvider),
-      };
-      if (normalizedBackgroundPath.isEmpty) {
-        backgroundState.remove(saved.sessionId);
-      } else {
-        backgroundState[saved.sessionId] = normalizedBackgroundPath;
-      }
-      ref.read(sessionBackgroundImageProvider.notifier).state = backgroundState;
-
-      final rstDataState = <String, SessionRstData>{
-        ...ref.read(sessionRstDataProvider),
-        saved.sessionId: SessionRstData(
-          userDescription: _rstUserDescriptionController.text.trim(),
-          scene: _rstSceneController.text.trim(),
-          lores: _rstLoresController.text.trim(),
-        ),
-      };
-      ref.read(sessionRstDataProvider.notifier).state = rstDataState;
-
-      ref.read(workspaceReloadTickProvider.notifier).state++;
-
-      setState(() {
-        _config = saved;
-        _initialSchedulerMode = _schedulerMode;
-        _initialApiConfigId = _apiConfigId;
-        _initialPresetId = _presetId;
-        _initialWorldBookId = _worldBookId;
-        _initialAppearanceId = _appearanceId;
-        _initialBackgroundImagePath = _backgroundImagePath;
-        _initialRstUserDescription = _rstUserDescriptionController.text;
-        _initialRstScene = _rstSceneController.text;
-        _initialRstLores = _rstLoresController.text;
-      });
-    } catch (error) {
-      setState(() {
-        _error = error.toString();
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-        });
-      }
+    final normalizedBackgroundPath = draft.backgroundImagePath.trim();
+    final backgroundState = <String, String>{
+      ...ref.read(sessionBackgroundImageProvider),
+    };
+    if (normalizedBackgroundPath.isEmpty) {
+      backgroundState.remove(saved.sessionId);
+    } else {
+      backgroundState[saved.sessionId] = normalizedBackgroundPath;
     }
+    ref.read(sessionBackgroundImageProvider.notifier).state = backgroundState;
+
+    ref.read(sessionRstDataProvider.notifier).state = <String, SessionRstData>{
+      ...ref.read(sessionRstDataProvider),
+      saved.sessionId: SessionRstData(
+        userDescription: draft.userDescription.trim(),
+        scene: draft.worldDescription.trim(),
+        lores: draft.characterDescription.trim(),
+      ),
+    };
+    ref.read(workspaceReloadTickProvider.notifier).state++;
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _config = saved;
+      _draft = draft;
+    });
+  }
+
+  void _attemptCloseToChat() {
+    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    Navigator.of(context).pop();
   }
 
   @override
@@ -681,13 +577,12 @@ class _SessionQuickSettingsSheetState
     final presetOptions = ref.watch(presetCatalogProvider);
     final worldBookOptions = ref.watch(worldBookOptionsProvider);
     final appearanceOptions = ref.watch(appearanceOptionsProvider);
-    const listPadding = EdgeInsets.fromLTRB(16, 10, 16, 16);
     late final Widget body;
     if (_loading) {
       body = const Center(child: CircularProgressIndicator());
-    } else if (_config == null) {
+    } else if (_config == null || _draft == null) {
       body = Padding(
-        padding: listPadding,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -703,330 +598,59 @@ class _SessionQuickSettingsSheetState
               ],
             ),
             const SizedBox(height: 12),
+            if (_error != null) ...[
+              Text(
+                _error!,
+                style: const TextStyle(color: AppColors.error, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+            ],
             const GlassPanelCard(child: Text('暂无可设置会话，请先到“会话管理”创建会话。')),
           ],
         ),
       );
     } else {
       final config = _config!;
+      final draft = _draft!;
       final apiEntries = _ensureStoredOption<StoredApiConfig>(
-        selectedId: config.mainApiConfigId,
+        selectedId: draft.apiConfigId,
         source: apiOptions.valueOrNull ?? const <StoredApiConfig>[],
         idSelector: (item) => item.apiId,
         nameSelector: (item) => item.name,
       );
       final presetEntries = _ensureStoredOption<StoredPresetConfig>(
-        selectedId: config.presetId,
+        selectedId: draft.presetId,
         source: presetOptions.valueOrNull ?? const <StoredPresetConfig>[],
         idSelector: (item) => item.presetId,
         nameSelector: (item) => item.name,
       );
       final worldEntries = _ensureManagedOption(
-        config.stWorldBookId,
+        draft.worldBookId,
         worldBookOptions,
       );
       final appearanceEntries = _ensureManagedOption(
-        _appearanceId,
+        draft.appearanceId,
         appearanceOptions,
       );
 
-      body = ListView(
-        padding: listPadding,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                tooltip: '返回聊天',
-                onPressed: () => _attemptCloseToChat(),
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-              const SizedBox(width: 6),
-              Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
-            ],
-          ),
-          const SizedBox(height: 8),
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  config.sessionName,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('调度器模式', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<SchedulerMode>(
-                  initialValue: _schedulerMode,
-                  items: const [
-                    DropdownMenuItem(
-                      value: SchedulerMode.direct,
-                      child: Text('direct'),
-                    ),
-                    DropdownMenuItem(
-                      value: SchedulerMode.rst,
-                      child: Text('RST'),
-                    ),
-                    DropdownMenuItem(
-                      value: SchedulerMode.agent,
-                      child: Text('Agent'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _schedulerMode = value;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '本会话 RST Data',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _rstUserDescriptionController,
-                  minLines: 2,
-                  maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: 'user_description',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _rstSceneController,
-                  minLines: 2,
-                  maxLines: 5,
-                  decoration: const InputDecoration(labelText: 'scene'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _rstLoresController,
-                  minLines: 2,
-                  maxLines: 6,
-                  decoration: const InputDecoration(labelText: 'lores'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('会话背景图', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _backgroundImageController,
-                  decoration: const InputDecoration(
-                    labelText: '图片路径',
-                    hintText: '未设置时使用默认背景',
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      _backgroundImagePath = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    PrimaryPillButton(
-                      label: '选择图片',
-                      onPressed: _saving ? null : _pickBackgroundImage,
-                    ),
-                    SecondaryOutlineButton(
-                      label: '清空',
-                      onPressed: _saving ? null : _clearBackgroundImage,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('会话绑定项', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                if (apiOptions.hasError || presetOptions.hasError)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Text(
-                      '${apiOptions.error ?? presetOptions.error}',
-                      style: const TextStyle(
-                        color: AppColors.error,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                _OptionSelector(
-                  label: 'API配置',
-                  value: _apiConfigId,
-                  options: apiEntries,
-                  enabled: !apiOptions.isLoading,
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _apiConfigId = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: '预设',
-                  value: _presetId,
-                  options: presetEntries,
-                  enabled: !presetOptions.isLoading,
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _presetId = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: '世界书',
-                  value: _worldBookId,
-                  options: worldEntries,
-                  allowNull: true,
-                  onChanged: (value) {
-                    setState(() {
-                      _worldBookId = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: '外观',
-                  value: _appearanceId,
-                  options: appearanceEntries,
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _appearanceId = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    PrimaryPillButton(
-                      label: _saving ? '保存中...' : '保存设置',
-                      onPressed: _saving ? null : _save,
-                    ),
-                    SecondaryOutlineButton(
-                      label: '刷新',
-                      onPressed: _saving ? null : _loadCurrentSession,
-                    ),
-                  ],
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _error!,
-                    style: const TextStyle(
-                      color: AppColors.error,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
+      body = SessionSettingsEditorPage(
+        key: ValueKey<String>('${config.sessionId}-$_editorVersion'),
+        title: '当前会话设置',
+        actionLabel: '保存设置',
+        initialDraft: draft,
+        apiOptions: apiEntries,
+        presetOptions: presetEntries,
+        worldBookOptions: worldEntries,
+        appearanceOptions: appearanceEntries,
+        popAfterSubmit: false,
+        onSubmit: _save,
       );
     }
 
-    return PopScope<void>(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) {
-          return;
-        }
-        await _attemptCloseToChat();
-      },
-      child: body,
-    );
+    return body;
   }
 
-  Future<void> _attemptCloseToChat() async {
-    final shouldClose = await _handleAttemptDismiss();
-    if (!mounted || !shouldClose) {
-      return;
-    }
-    ref.read(appTabProvider.notifier).state = AppTab.chat;
-    Navigator.of(context).pop();
-  }
-
-  Future<bool> _handleAttemptDismiss() async {
-    if (!_isDirty()) {
-      return true;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('放弃未保存的修改？'),
-        content: const Text('你已经修改了当前会话设置，现在返回会丢失本次填写。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('继续编辑'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('放弃修改'),
-          ),
-        ],
-      ),
-    );
-    return confirmed == true;
-  }
-
-  bool _isDirty() {
-    return _schedulerMode != _initialSchedulerMode ||
-        _apiConfigId != _initialApiConfigId ||
-        _presetId != _initialPresetId ||
-        _worldBookId != _initialWorldBookId ||
-        _appearanceId != _initialAppearanceId ||
-        _backgroundImagePath != _initialBackgroundImagePath ||
-        _rstUserDescriptionController.text != _initialRstUserDescription ||
-        _rstSceneController.text != _initialRstScene ||
-        _rstLoresController.text != _initialRstLores;
-  }
-
-  List<_SelectorEntry> _ensureStoredOption<T>({
+  List<SessionSettingsOptionEntry> _ensureStoredOption<T>({
     required String? selectedId,
     required List<T> source,
     required String Function(T item) idSelector,
@@ -1035,32 +659,38 @@ class _SessionQuickSettingsSheetState
     if (selectedId == null || selectedId.isEmpty) {
       return source
           .map(
-            (item) =>
-                _SelectorEntry(id: idSelector(item), name: nameSelector(item)),
+            (item) => SessionSettingsOptionEntry(
+              id: idSelector(item),
+              label: nameSelector(item),
+            ),
           )
           .toList(growable: false);
     }
     final entries = source
         .map(
-          (item) =>
-              _SelectorEntry(id: idSelector(item), name: nameSelector(item)),
+          (item) => SessionSettingsOptionEntry(
+            id: idSelector(item),
+            label: nameSelector(item),
+          ),
         )
         .toList(growable: true);
     if (entries.any((item) => item.id == selectedId)) {
       return entries;
     }
-    return <_SelectorEntry>[
-      _SelectorEntry(id: selectedId, name: '$selectedId (未在列表)'),
+    return <SessionSettingsOptionEntry>[
+      SessionSettingsOptionEntry(id: selectedId, label: '$selectedId (未在列表)'),
       ...entries,
     ];
   }
 
-  List<_SelectorEntry> _ensureManagedOption(
+  List<SessionSettingsOptionEntry> _ensureManagedOption(
     String? selectedId,
     List<ManagedOption> source,
   ) {
     final entries = source
-        .map((item) => _SelectorEntry(id: item.id, name: item.name))
+        .map(
+          (item) => SessionSettingsOptionEntry(id: item.id, label: item.name),
+        )
         .toList(growable: true);
     if (selectedId == null || selectedId.isEmpty) {
       return entries;
@@ -1068,62 +698,11 @@ class _SessionQuickSettingsSheetState
     if (entries.any((item) => item.id == selectedId)) {
       return entries;
     }
-    return <_SelectorEntry>[
-      _SelectorEntry(id: selectedId, name: '$selectedId (未在列表)'),
+    return <SessionSettingsOptionEntry>[
+      SessionSettingsOptionEntry(id: selectedId, label: '$selectedId (未在列表)'),
       ...entries,
     ];
   }
-}
-
-class _OptionSelector extends StatelessWidget {
-  const _OptionSelector({
-    required this.label,
-    required this.value,
-    required this.options,
-    required this.onChanged,
-    this.allowNull = false,
-    this.enabled = true,
-  });
-
-  final String label;
-  final String? value;
-  final List<_SelectorEntry> options;
-  final ValueChanged<String?> onChanged;
-  final bool allowNull;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final optionIds = options.map((item) => item.id).toSet();
-    final selected = value != null && optionIds.contains(value) ? value : null;
-
-    final items = <DropdownMenuItem<String?>>[];
-    if (allowNull) {
-      items.add(
-        const DropdownMenuItem<String?>(value: null, child: Text('不绑定')),
-      );
-    }
-    items.addAll(
-      options.map(
-        (item) =>
-            DropdownMenuItem<String?>(value: item.id, child: Text(item.name)),
-      ),
-    );
-
-    return DropdownButtonFormField<String?>(
-      initialValue: selected,
-      items: items,
-      onChanged: enabled ? onChanged : null,
-      decoration: InputDecoration(labelText: label),
-    );
-  }
-}
-
-class _SelectorEntry {
-  const _SelectorEntry({required this.id, required this.name});
-
-  final String id;
-  final String name;
 }
 
 class _DrawerNavItem {

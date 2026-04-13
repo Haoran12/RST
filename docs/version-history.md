@@ -1,5 +1,11 @@
 # Version History
 
+## 0.1.0+11 (2026-04-13)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+11-release.apk`
+- Notes: Unified session settings editor across left-side session management and right-side quick settings drawer, with consistent cards and sub-editors for base config, worldbook, and appearance.
+
 ## 0.1.0+10 (2026-04-13)
 
 - Build type: Android APK release
