@@ -495,12 +495,6 @@ class _SessionQuickSettingsSheetState
       appearanceOptions,
     );
 
-    final schedulerLabel = switch (_schedulerMode) {
-      SchedulerMode.direct => '关键词识别：按规则快速命中',
-      SchedulerMode.rst => 'RST LLM确认：由模型确认注入策略',
-      SchedulerMode.agent => 'Agent多人物独立思维：分角色推理后汇总',
-    };
-
     return ListView(
       padding: listPadding,
       children: [
@@ -522,14 +516,6 @@ class _SessionQuickSettingsSheetState
               Text(
                 config.sessionName,
                 style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'session_id: ${config.sessionId}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textMuted,
-                ),
               ),
             ],
           ),
@@ -566,14 +552,6 @@ class _SessionQuickSettingsSheetState
                   });
                 },
               ),
-              const SizedBox(height: 8),
-              Text(
-                schedulerLabel,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 12,
-                ),
-              ),
             ],
           ),
         ),
@@ -593,7 +571,6 @@ class _SessionQuickSettingsSheetState
                 maxLines: 5,
                 decoration: const InputDecoration(
                   labelText: 'user_description',
-                  helperText: '用于描述用户身份、关系和发言风格。',
                 ),
               ),
               const SizedBox(height: 10),
@@ -601,20 +578,14 @@ class _SessionQuickSettingsSheetState
                 controller: _rstSceneController,
                 minLines: 2,
                 maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'scene',
-                  helperText: '用于描述当前场景、时间线与环境状态。',
-                ),
+                decoration: const InputDecoration(labelText: 'scene'),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: _rstLoresController,
                 minLines: 2,
                 maxLines: 6,
-                decoration: const InputDecoration(
-                  labelText: 'lores',
-                  helperText: '用于填写本会话的 Lore 注入文本。',
-                ),
+                decoration: const InputDecoration(labelText: 'lores'),
               ),
             ],
           ),

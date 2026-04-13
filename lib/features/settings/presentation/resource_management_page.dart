@@ -287,11 +287,6 @@ class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(section.title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 4),
-            Text(
-              section.description,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
             const SizedBox(height: 12),
             ...section.fields.map(
               (field) => Padding(
@@ -314,20 +309,14 @@ class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
           maxLines: 5,
           readOnly: field.readOnly,
           onChanged: (value) => _updateField(field.key, value),
-          decoration: InputDecoration(
-            labelText: field.label,
-            helperText: field.helperText,
-          ),
+          decoration: InputDecoration(labelText: field.label),
         );
       case ManagedFieldType.text:
         return TextField(
           controller: TextEditingController(text: '${field.value ?? ''}'),
           readOnly: field.readOnly,
           onChanged: (value) => _updateField(field.key, value),
-          decoration: InputDecoration(
-            labelText: field.label,
-            helperText: field.helperText,
-          ),
+          decoration: InputDecoration(labelText: field.label),
         );
       case ManagedFieldType.integer:
         return TextField(
@@ -335,10 +324,7 @@ class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
           readOnly: field.readOnly,
           keyboardType: TextInputType.number,
           onChanged: (value) => _updateField(field.key, int.tryParse(value)),
-          decoration: InputDecoration(
-            labelText: field.label,
-            helperText: field.helperText,
-          ),
+          decoration: InputDecoration(labelText: field.label),
         );
       case ManagedFieldType.decimal:
         return TextField(
@@ -346,10 +332,7 @@ class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
           readOnly: field.readOnly,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           onChanged: (value) => _updateField(field.key, double.tryParse(value)),
-          decoration: InputDecoration(
-            labelText: field.label,
-            helperText: field.helperText,
-          ),
+          decoration: InputDecoration(labelText: field.label),
         );
       case ManagedFieldType.select:
       case ManagedFieldType.color:
@@ -370,10 +353,7 @@ class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
                     _updateField(field.key, value);
                   }
                 },
-          decoration: InputDecoration(
-            labelText: field.label,
-            helperText: field.helperText,
-          ),
+          decoration: InputDecoration(labelText: field.label),
         );
       case ManagedFieldType.toggle:
         return SwitchListTile(
@@ -382,7 +362,6 @@ class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
               ? null
               : (value) => _updateField(field.key, value),
           title: Text(field.label),
-          subtitle: field.helperText == null ? null : Text(field.helperText!),
           contentPadding: EdgeInsets.zero,
         );
     }

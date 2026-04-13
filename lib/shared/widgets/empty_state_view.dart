@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import 'buttons.dart';
 import 'glass_panel_card.dart';
 
@@ -26,10 +25,10 @@ class EmptyStateView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          const Text('暂无可展示内容', style: TextStyle(color: AppColors.textMuted)),
-          const SizedBox(height: 4),
-          Text(description),
+          if (description.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(description),
+          ],
           const SizedBox(height: 12),
           PrimaryPillButton(label: actionLabel, onPressed: onAction),
         ],

@@ -279,14 +279,6 @@ class _ApiConfigEditorDialogState
                                 widget.title,
                                 style: Theme.of(context).textTheme.titleLarge,
                               ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                '按连接信息 -> 连接验证 -> 模型选择的顺序填写，减少误触和白填。',
-                                style: TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontSize: 12,
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -319,7 +311,6 @@ class _ApiConfigEditorDialogState
                         children: [
                           _EditorSection(
                             title: '连接信息',
-                            description: '先选平台，再给这条连接起一个容易识别的名字。',
                             child: Column(
                               children: [
                                 TextField(
@@ -377,8 +368,6 @@ class _ApiConfigEditorDialogState
                           const SizedBox(height: 12),
                           _EditorSection(
                             title: '连接验证',
-                            description:
-                                '按 Tavo 的使用节奏，先粘贴 URL 和 Key，再去拉取可用模型列表。',
                             child: Column(
                               children: [
                                 TextField(
@@ -388,8 +377,6 @@ class _ApiConfigEditorDialogState
                                   enableSuggestions: false,
                                   decoration: const InputDecoration(
                                     labelText: 'Base URL',
-                                    helperText:
-                                        '例如 https://api.openai.com 或 http://localhost:1234/v1',
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -399,8 +386,6 @@ class _ApiConfigEditorDialogState
                                   enableSuggestions: false,
                                   decoration: const InputDecoration(
                                     labelText: 'Request Path',
-                                    helperText:
-                                        'OpenAI 默认 /v1/responses，兼容接口默认 /v1/chat/completions',
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -412,7 +397,6 @@ class _ApiConfigEditorDialogState
                                   enableSuggestions: false,
                                   decoration: InputDecoration(
                                     labelText: 'API Key',
-                                    helperText: '直接粘贴完整 key 即可，保存后会立刻用于实际请求。',
                                     suffixIcon: IconButton(
                                       tooltip: _obscureApiKey
                                           ? '显示 API Key'
@@ -505,7 +489,6 @@ class _ApiConfigEditorDialogState
                           const SizedBox(height: 12),
                           _EditorSection(
                             title: '模型选择',
-                            description: '先从接口返回的模型里选；如果目标服务不支持列表接口，再手动填写模型名。',
                             child: Column(
                               children: [
                                 if (_availableModels.isNotEmpty) ...[
@@ -586,8 +569,6 @@ class _ApiConfigEditorDialogState
                                   enableSuggestions: false,
                                   decoration: const InputDecoration(
                                     labelText: 'Model',
-                                    helperText:
-                                        '支持手动输入，例如 gpt-4.1-mini、deepseek-chat、llama3-8b',
                                   ),
                                 ),
                               ],
@@ -596,14 +577,12 @@ class _ApiConfigEditorDialogState
                           const SizedBox(height: 12),
                           _EditorSection(
                             title: '高级项',
-                            description: '只在确实需要时再填，避免把常用操作藏进过多字段。',
                             child: TextField(
                               controller: _headersController,
                               minLines: 2,
                               maxLines: 5,
                               decoration: const InputDecoration(
                                 labelText: 'Custom Headers',
-                                helperText: '每行一个，格式为 Header: Value',
                               ),
                             ),
                           ),
@@ -784,14 +763,9 @@ class _ApiConfigEditorDialogState
 }
 
 class _EditorSection extends StatelessWidget {
-  const _EditorSection({
-    required this.title,
-    required this.description,
-    required this.child,
-  });
+  const _EditorSection({required this.title, required this.child});
 
   final String title;
-  final String description;
   final Widget child;
 
   @override
@@ -802,11 +776,6 @@ class _EditorSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            description,
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-          ),
           const SizedBox(height: 12),
           child,
         ],

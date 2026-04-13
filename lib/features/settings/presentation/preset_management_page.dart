@@ -326,7 +326,6 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
                       maxLines: 5,
                       decoration: const InputDecoration(
                         labelText: 'Stop Sequences',
-                        helperText: '每行一个停止序列',
                       ),
                     ),
                     const SizedBox(height: 10),

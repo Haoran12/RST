@@ -349,7 +349,7 @@ List<ManagedOptionSection> _buildWorldBookSections() {
     ),
     ManagedOptionSection(
       title: '检索与触发',
-      description: '参照 RSTv2 的 Lore 使用习惯，把触发词、优先级和标签集中管理。',
+      description: '集中配置触发词、优先级和标签。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'keyword_rule',
@@ -413,7 +413,7 @@ List<ManagedOptionSection> _buildPresetSections() {
   return const <ManagedOptionSection>[
     ManagedOptionSection(
       title: 'Prompt 骨架',
-      description: '参照 RSTv2 的 Preset 结构，保留 Main_Prompt 与额外系统约束。',
+      description: '配置 Main_Prompt 与额外系统约束。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'preset_mode',
@@ -438,7 +438,7 @@ List<ManagedOptionSection> _buildPresetSections() {
     ),
     ManagedOptionSection(
       title: '系统条目开关',
-      description: '这些条目对应 RSTv2 的内置 Preset entries，可排序、可禁用但不可删除。',
+      description: '管理内置条目开关与顺序。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'builtin_order',
@@ -447,7 +447,7 @@ List<ManagedOptionSection> _buildPresetSections() {
           value:
               'Main_Prompt\nlores\nuser_description\nchat_history\nscene\nuser_input',
           readOnly: true,
-          helperText: '当前版本先支持查看与整体编辑，后续可继续扩展拖拽排序。',
+          helperText: '用于查看当前条目顺序。',
         ),
         ManagedOptionField(
           key: 'lores_enabled',
@@ -471,7 +471,7 @@ List<ManagedOptionSection> _buildPresetSections() {
     ),
     ManagedOptionSection(
       title: '空输入策略',
-      description: '对齐 RSTv2 里的 user_input 规则，让 continue 与上一轮用户消息都可控。',
+      description: '配置空输入时的处理行为。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'empty_input_behavior',
@@ -522,7 +522,7 @@ List<ManagedOptionSection> _buildApiConfigSections() {
   return const <ManagedOptionSection>[
     ManagedOptionSection(
       title: 'Provider',
-      description: '来源、地址和鉴权信息，保持与 RSTv2 的 API Config 面板一致。',
+      description: '配置来源、地址和鉴权信息。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'provider',
@@ -628,7 +628,7 @@ List<ManagedOptionSection> _buildAppearanceSections() {
   return const <ManagedOptionSection>[
     ManagedOptionSection(
       title: '主题',
-      description: '保持 Tavo 式配置中心节奏，但配色继续沿用 RST 自己的冷色体系。',
+      description: '配置主题模式和卡片效果。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'theme_mode',
@@ -647,7 +647,7 @@ List<ManagedOptionSection> _buildAppearanceSections() {
     ),
     ManagedOptionSection(
       title: '字体',
-      description: '参考 RSTv2 的 Appearance 面板，把字体预设、自定义字体组和字号缩放放在一起。',
+      description: '配置字体预设、字体组与字号缩放。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'font_preset',
@@ -675,7 +675,7 @@ List<ManagedOptionSection> _buildAppearanceSections() {
     ),
     ManagedOptionSection(
       title: 'Markdown Styles',
-      description: '段落、标题、斜体和引号文字颜色参照 RSTv2 的外观设置项。',
+      description: '配置段落、标题、斜体和引号文字颜色。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'markdown_paragraph_color',
