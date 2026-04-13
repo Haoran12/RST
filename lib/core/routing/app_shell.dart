@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_selector/file_selector.dart';
 
 import '../../core/bridge/frb_api.dart' as frb;
 import '../../features/chat/presentation/chat_page.dart';
@@ -108,8 +109,15 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTab = ref.watch(appTabProvider);
     final currentIndex = _tabToIndex[currentTab] ?? 0;
+    final currentSessionId = ref.watch(currentSessionIdProvider);
+    final sessionBackgroundMap = ref.watch(sessionBackgroundImageProvider);
+    final backgroundImagePath =
+        currentTab == AppTab.chat && currentSessionId != null
+        ? sessionBackgroundMap[currentSessionId]
+        : null;
 
     return AppScaffold(
+      backgroundImagePath: backgroundImagePath,
       headerCenter: const _CurrentSessionHeaderTitle(),
       headerTrailing: const _SessionQuickSettingsTrigger(),
       drawer: Drawer(
@@ -276,6 +284,8 @@ Future<void> _showSessionQuickSettingsBottomSheet(BuildContext context) async {
     context: context,
     useSafeArea: true,
     isScrollControlled: true,
+    isDismissible: false,
+    enableDrag: false,
     backgroundColor: AppColors.backgroundElevated,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -411,9 +421,20 @@ class _SessionQuickSettingsSheetState
   String _presetId = '';
   String? _worldBookId;
   String _appearanceId = '';
+  String _backgroundImagePath = '';
+  SchedulerMode _initialSchedulerMode = SchedulerMode.rst;
+  String _initialApiConfigId = '';
+  String _initialPresetId = '';
+  String? _initialWorldBookId;
+  String _initialAppearanceId = '';
+  String _initialBackgroundImagePath = '';
+  String _initialRstUserDescription = '';
+  String _initialRstScene = '';
+  String _initialRstLores = '';
   late final TextEditingController _rstUserDescriptionController;
   late final TextEditingController _rstSceneController;
   late final TextEditingController _rstLoresController;
+  late final TextEditingController _backgroundImageController;
 
   @override
   void initState() {
@@ -421,6 +442,7 @@ class _SessionQuickSettingsSheetState
     _rstUserDescriptionController = TextEditingController();
     _rstSceneController = TextEditingController();
     _rstLoresController = TextEditingController();
+    _backgroundImageController = TextEditingController();
     _loadCurrentSession();
   }
 
@@ -429,6 +451,7 @@ class _SessionQuickSettingsSheetState
     _rstUserDescriptionController.dispose();
     _rstSceneController.dispose();
     _rstLoresController.dispose();
+    _backgroundImageController.dispose();
     super.dispose();
   }
 
@@ -441,8 +464,27 @@ class _SessionQuickSettingsSheetState
       final sessionService = ref.read(sessionServiceProvider);
       final sessions = await sessionService.listSessions();
       if (sessions.isEmpty) {
+        _rstUserDescriptionController.clear();
+        _rstSceneController.clear();
+        _rstLoresController.clear();
+        _backgroundImageController.clear();
         setState(() {
           _config = null;
+          _schedulerMode = SchedulerMode.rst;
+          _apiConfigId = '';
+          _presetId = '';
+          _worldBookId = null;
+          _appearanceId = '';
+          _backgroundImagePath = '';
+          _initialSchedulerMode = SchedulerMode.rst;
+          _initialApiConfigId = '';
+          _initialPresetId = '';
+          _initialWorldBookId = null;
+          _initialAppearanceId = '';
+          _initialBackgroundImagePath = '';
+          _initialRstUserDescription = '';
+          _initialRstScene = '';
+          _initialRstLores = '';
           _loading = false;
         });
         return;
@@ -459,6 +501,7 @@ class _SessionQuickSettingsSheetState
       final config = loaded.config;
       final schedulerMap = ref.read(sessionSchedulerModeProvider);
       final appearanceMap = ref.read(sessionAppearanceProvider);
+      final backgroundMap = ref.read(sessionBackgroundImageProvider);
       final rstDataMap = ref.read(sessionRstDataProvider);
       final appearanceOptions = ref.read(appearanceOptionsProvider);
       final defaultAppearanceId = appearanceOptions.isNotEmpty
@@ -471,6 +514,7 @@ class _SessionQuickSettingsSheetState
           rstData?.userDescription ?? startupRuntime.defaultUserDescription;
       _rstSceneController.text = rstData?.scene ?? startupRuntime.defaultScene;
       _rstLoresController.text = rstData?.lores ?? startupRuntime.defaultLores;
+      _backgroundImageController.text = backgroundMap[config.sessionId] ?? '';
 
       setState(() {
         _config = config;
@@ -480,6 +524,16 @@ class _SessionQuickSettingsSheetState
         _presetId = config.presetId;
         _worldBookId = config.stWorldBookId;
         _appearanceId = appearanceMap[config.sessionId] ?? defaultAppearanceId;
+        _backgroundImagePath = backgroundMap[config.sessionId] ?? '';
+        _initialSchedulerMode = _schedulerMode;
+        _initialApiConfigId = _apiConfigId;
+        _initialPresetId = _presetId;
+        _initialWorldBookId = _worldBookId;
+        _initialAppearanceId = _appearanceId;
+        _initialBackgroundImagePath = _backgroundImagePath;
+        _initialRstUserDescription = _rstUserDescriptionController.text;
+        _initialRstScene = _rstSceneController.text;
+        _initialRstLores = _rstLoresController.text;
         _loading = false;
       });
     } catch (error) {
@@ -495,6 +549,40 @@ class _SessionQuickSettingsSheetState
       return SchedulerMode.rst;
     }
     return SchedulerMode.direct;
+  }
+
+  Future<void> _pickBackgroundImage() async {
+    try {
+      const images = XTypeGroup(
+        label: 'images',
+        extensions: <String>['png', 'jpg', 'jpeg', 'webp', 'bmp'],
+      );
+      final selected = await openFile(
+        acceptedTypeGroups: <XTypeGroup>[images],
+        confirmButtonText: '选择背景图',
+      );
+      if (!mounted || selected == null) {
+        return;
+      }
+      setState(() {
+        _backgroundImagePath = selected.path;
+        _backgroundImageController.text = selected.path;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = '选择背景图失败: $error';
+      });
+    }
+  }
+
+  void _clearBackgroundImage() {
+    setState(() {
+      _backgroundImagePath = '';
+      _backgroundImageController.clear();
+    });
   }
 
   Future<void> _save() async {
@@ -539,6 +627,17 @@ class _SessionQuickSettingsSheetState
       };
       ref.read(sessionAppearanceProvider.notifier).state = appearanceState;
 
+      final normalizedBackgroundPath = _backgroundImagePath.trim();
+      final backgroundState = <String, String>{
+        ...ref.read(sessionBackgroundImageProvider),
+      };
+      if (normalizedBackgroundPath.isEmpty) {
+        backgroundState.remove(saved.sessionId);
+      } else {
+        backgroundState[saved.sessionId] = normalizedBackgroundPath;
+      }
+      ref.read(sessionBackgroundImageProvider.notifier).state = backgroundState;
+
       final rstDataState = <String, SessionRstData>{
         ...ref.read(sessionRstDataProvider),
         saved.sessionId: SessionRstData(
@@ -553,6 +652,15 @@ class _SessionQuickSettingsSheetState
 
       setState(() {
         _config = saved;
+        _initialSchedulerMode = _schedulerMode;
+        _initialApiConfigId = _apiConfigId;
+        _initialPresetId = _presetId;
+        _initialWorldBookId = _worldBookId;
+        _initialAppearanceId = _appearanceId;
+        _initialBackgroundImagePath = _backgroundImagePath;
+        _initialRstUserDescription = _rstUserDescriptionController.text;
+        _initialRstScene = _rstSceneController.text;
+        _initialRstLores = _rstLoresController.text;
       });
     } catch (error) {
       setState(() {
@@ -574,24 +682,24 @@ class _SessionQuickSettingsSheetState
     final worldBookOptions = ref.watch(worldBookOptionsProvider);
     final appearanceOptions = ref.watch(appearanceOptionsProvider);
     const listPadding = EdgeInsets.fromLTRB(16, 10, 16, 16);
-
+    late final Widget body;
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_config == null) {
-      return Padding(
+      body = const Center(child: CircularProgressIndicator());
+    } else if (_config == null) {
+      body = Padding(
         padding: listPadding,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
-                const Spacer(),
                 IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
+                  tooltip: '返回聊天',
+                  onPressed: () => _attemptCloseToChat(),
+                  icon: const Icon(Icons.arrow_back_rounded),
                 ),
+                const SizedBox(width: 6),
+                Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
               ],
             ),
             const SizedBox(height: 12),
@@ -599,225 +707,323 @@ class _SessionQuickSettingsSheetState
           ],
         ),
       );
-    }
+    } else {
+      final config = _config!;
+      final apiEntries = _ensureStoredOption<StoredApiConfig>(
+        selectedId: config.mainApiConfigId,
+        source: apiOptions.valueOrNull ?? const <StoredApiConfig>[],
+        idSelector: (item) => item.apiId,
+        nameSelector: (item) => item.name,
+      );
+      final presetEntries = _ensureStoredOption<StoredPresetConfig>(
+        selectedId: config.presetId,
+        source: presetOptions.valueOrNull ?? const <StoredPresetConfig>[],
+        idSelector: (item) => item.presetId,
+        nameSelector: (item) => item.name,
+      );
+      final worldEntries = _ensureManagedOption(
+        config.stWorldBookId,
+        worldBookOptions,
+      );
+      final appearanceEntries = _ensureManagedOption(
+        _appearanceId,
+        appearanceOptions,
+      );
 
-    final config = _config!;
-    final apiEntries = _ensureStoredOption<StoredApiConfig>(
-      selectedId: config.mainApiConfigId,
-      source: apiOptions.valueOrNull ?? const <StoredApiConfig>[],
-      idSelector: (item) => item.apiId,
-      nameSelector: (item) => item.name,
-    );
-    final presetEntries = _ensureStoredOption<StoredPresetConfig>(
-      selectedId: config.presetId,
-      source: presetOptions.valueOrNull ?? const <StoredPresetConfig>[],
-      idSelector: (item) => item.presetId,
-      nameSelector: (item) => item.name,
-    );
-    final worldEntries = _ensureManagedOption(
-      config.stWorldBookId,
-      worldBookOptions,
-    );
-    final appearanceEntries = _ensureManagedOption(
-      _appearanceId,
-      appearanceOptions,
-    );
-
-    return ListView(
-      padding: listPadding,
-      children: [
-        Row(
-          children: [
-            Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            IconButton(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        GlassPanelCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      body = ListView(
+        padding: listPadding,
+        children: [
+          Row(
             children: [
-              Text(
-                config.sessionName,
-                style: Theme.of(context).textTheme.titleMedium,
+              IconButton(
+                tooltip: '返回聊天',
+                onPressed: () => _attemptCloseToChat(),
+                icon: const Icon(Icons.arrow_back_rounded),
               ),
+              const SizedBox(width: 6),
+              Text('当前会话设置', style: Theme.of(context).textTheme.titleLarge),
             ],
           ),
-        ),
-        const SizedBox(height: 10),
-        GlassPanelCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('调度器模式', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<SchedulerMode>(
-                initialValue: _schedulerMode,
-                items: const [
-                  DropdownMenuItem(
-                    value: SchedulerMode.direct,
-                    child: Text('direct'),
-                  ),
-                  DropdownMenuItem(
-                    value: SchedulerMode.rst,
-                    child: Text('RST'),
-                  ),
-                  DropdownMenuItem(
-                    value: SchedulerMode.agent,
-                    child: Text('Agent'),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _schedulerMode = value;
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        GlassPanelCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '本会话 RST Data',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _rstUserDescriptionController,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'user_description',
+          const SizedBox(height: 8),
+          GlassPanelCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  config.sessionName,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _rstSceneController,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(labelText: 'scene'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _rstLoresController,
-                minLines: 2,
-                maxLines: 6,
-                decoration: const InputDecoration(labelText: 'lores'),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-        GlassPanelCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('会话绑定项', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 10),
-              if (apiOptions.hasError || presetOptions.hasError)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(
-                    '${apiOptions.error ?? presetOptions.error}',
+          const SizedBox(height: 10),
+          GlassPanelCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('调度器模式', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<SchedulerMode>(
+                  initialValue: _schedulerMode,
+                  items: const [
+                    DropdownMenuItem(
+                      value: SchedulerMode.direct,
+                      child: Text('direct'),
+                    ),
+                    DropdownMenuItem(
+                      value: SchedulerMode.rst,
+                      child: Text('RST'),
+                    ),
+                    DropdownMenuItem(
+                      value: SchedulerMode.agent,
+                      child: Text('Agent'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _schedulerMode = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          GlassPanelCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '本会话 RST Data',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _rstUserDescriptionController,
+                  minLines: 2,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'user_description',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _rstSceneController,
+                  minLines: 2,
+                  maxLines: 5,
+                  decoration: const InputDecoration(labelText: 'scene'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _rstLoresController,
+                  minLines: 2,
+                  maxLines: 6,
+                  decoration: const InputDecoration(labelText: 'lores'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          GlassPanelCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('会话背景图', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _backgroundImageController,
+                  decoration: const InputDecoration(
+                    labelText: '图片路径',
+                    hintText: '未设置时使用默认背景',
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _backgroundImagePath = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    PrimaryPillButton(
+                      label: '选择图片',
+                      onPressed: _saving ? null : _pickBackgroundImage,
+                    ),
+                    SecondaryOutlineButton(
+                      label: '清空',
+                      onPressed: _saving ? null : _clearBackgroundImage,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          GlassPanelCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('会话绑定项', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 10),
+                if (apiOptions.hasError || presetOptions.hasError)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      '${apiOptions.error ?? presetOptions.error}',
+                      style: const TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                _OptionSelector(
+                  label: 'API配置',
+                  value: _apiConfigId,
+                  options: apiEntries,
+                  enabled: !apiOptions.isLoading,
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _apiConfigId = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                _OptionSelector(
+                  label: '预设',
+                  value: _presetId,
+                  options: presetEntries,
+                  enabled: !presetOptions.isLoading,
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _presetId = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                _OptionSelector(
+                  label: '世界书',
+                  value: _worldBookId,
+                  options: worldEntries,
+                  allowNull: true,
+                  onChanged: (value) {
+                    setState(() {
+                      _worldBookId = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                _OptionSelector(
+                  label: '外观',
+                  value: _appearanceId,
+                  options: appearanceEntries,
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _appearanceId = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    PrimaryPillButton(
+                      label: _saving ? '保存中...' : '保存设置',
+                      onPressed: _saving ? null : _save,
+                    ),
+                    SecondaryOutlineButton(
+                      label: '刷新',
+                      onPressed: _saving ? null : _loadCurrentSession,
+                    ),
+                  ],
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    _error!,
                     style: const TextStyle(
                       color: AppColors.error,
                       fontSize: 12,
                     ),
                   ),
-                ),
-              _OptionSelector(
-                label: 'API配置',
-                value: _apiConfigId,
-                options: apiEntries,
-                enabled: !apiOptions.isLoading,
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _apiConfigId = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 10),
-              _OptionSelector(
-                label: '预设',
-                value: _presetId,
-                options: presetEntries,
-                enabled: !presetOptions.isLoading,
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _presetId = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 10),
-              _OptionSelector(
-                label: '世界书',
-                value: _worldBookId,
-                options: worldEntries,
-                allowNull: true,
-                onChanged: (value) {
-                  setState(() {
-                    _worldBookId = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 10),
-              _OptionSelector(
-                label: '外观',
-                value: _appearanceId,
-                options: appearanceEntries,
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _appearanceId = value;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  PrimaryPillButton(
-                    label: _saving ? '保存中...' : '保存设置',
-                    onPressed: _saving ? null : _save,
-                  ),
-                  SecondaryOutlineButton(
-                    label: '刷新',
-                    onPressed: _saving ? null : _loadCurrentSession,
-                  ),
                 ],
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _error!,
-                  style: const TextStyle(color: AppColors.error, fontSize: 12),
-                ),
               ],
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        await _attemptCloseToChat();
+      },
+      child: body,
     );
+  }
+
+  Future<void> _attemptCloseToChat() async {
+    final shouldClose = await _handleAttemptDismiss();
+    if (!mounted || !shouldClose) {
+      return;
+    }
+    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    Navigator.of(context).pop();
+  }
+
+  Future<bool> _handleAttemptDismiss() async {
+    if (!_isDirty()) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('放弃未保存的修改？'),
+        content: const Text('你已经修改了当前会话设置，现在返回会丢失本次填写。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('放弃修改'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  bool _isDirty() {
+    return _schedulerMode != _initialSchedulerMode ||
+        _apiConfigId != _initialApiConfigId ||
+        _presetId != _initialPresetId ||
+        _worldBookId != _initialWorldBookId ||
+        _appearanceId != _initialAppearanceId ||
+        _backgroundImagePath != _initialBackgroundImagePath ||
+        _rstUserDescriptionController.text != _initialRstUserDescription ||
+        _rstSceneController.text != _initialRstScene ||
+        _rstLoresController.text != _initialRstLores;
   }
 
   List<_SelectorEntry> _ensureStoredOption<T>({

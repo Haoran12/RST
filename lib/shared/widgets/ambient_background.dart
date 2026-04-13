@@ -1,14 +1,24 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
 class AmbientBackground extends StatelessWidget {
-  const AmbientBackground({super.key, required this.child});
+  const AmbientBackground({
+    super.key,
+    required this.child,
+    this.backgroundImagePath,
+  });
 
   final Widget child;
+  final String? backgroundImagePath;
 
   @override
   Widget build(BuildContext context) {
+    final imagePath = backgroundImagePath?.trim() ?? '';
+    final hasBackgroundImage = imagePath.isNotEmpty;
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -19,6 +29,23 @@ class AmbientBackground extends StatelessWidget {
       ),
       child: Stack(
         children: [
+          if (hasBackgroundImage)
+            Positioned.fill(
+              child: Image.file(
+                File(imagePath),
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    const SizedBox.shrink(),
+              ),
+            ),
+          if (hasBackgroundImage)
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.52),
+                ),
+              ),
+            ),
           Positioned(
             top: -80,
             right: -20,

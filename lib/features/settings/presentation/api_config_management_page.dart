@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/common.dart';
 import '../../../core/models/workspace_config.dart';
+import '../../../core/providers/app_state.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -128,6 +129,7 @@ class ApiConfigManagementPage extends ConsumerWidget {
         ),
       ),
     );
+    ref.read(appTabProvider.notifier).state = AppTab.chat;
     if (saved == null) {
       return;
     }
@@ -271,6 +273,18 @@ class _ApiConfigEditorDialogState
                   children: [
                     Row(
                       children: [
+                        IconButton(
+                          tooltip: '返回聊天',
+                          onPressed: () async {
+                            final shouldClose = await _handleAttemptDismiss();
+                            if (!mounted || !shouldClose) {
+                              return;
+                            }
+                            Navigator.of(this.context).pop();
+                          },
+                          icon: const Icon(Icons.arrow_back_rounded),
+                        ),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -281,17 +295,6 @@ class _ApiConfigEditorDialogState
                               ),
                             ],
                           ),
-                        ),
-                        IconButton(
-                          tooltip: '关闭',
-                          onPressed: () async {
-                            final shouldClose = await _handleAttemptDismiss();
-                            if (!mounted || !shouldClose) {
-                              return;
-                            }
-                            Navigator.of(this.context).pop();
-                          },
-                          icon: const Icon(Icons.close),
                         ),
                       ],
                     ),

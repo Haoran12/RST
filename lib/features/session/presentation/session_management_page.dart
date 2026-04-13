@@ -312,8 +312,8 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     required List<_OptionEntry> apiOptions,
     required List<_OptionEntry> presetOptions,
     required List<_OptionEntry> worldBookOptions,
-  }) {
-    return Navigator.of(context).push<_SessionEditorDraft>(
+  }) async {
+    final saved = await Navigator.of(context).push<_SessionEditorDraft>(
       MaterialPageRoute<_SessionEditorDraft>(
         fullscreenDialog: true,
         builder: (context) => _SessionEditorPage(
@@ -326,6 +326,8 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         ),
       ),
     );
+    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    return saved;
   }
 
   Future<void> _deleteSession(
@@ -428,6 +430,11 @@ class _SessionEditorPageState extends State<_SessionEditorPage> {
   late String _selectedApiId;
   late String _selectedPresetId;
   String? _selectedWorldBookId;
+  late final String _initialName;
+  late final frb.SessionMode _initialMode;
+  late final String _initialApiId;
+  late final String _initialPresetId;
+  late final String? _initialWorldBookId;
 
   @override
   void initState() {
@@ -436,9 +443,14 @@ class _SessionEditorPageState extends State<_SessionEditorPage> {
       text: widget.initialDraft.sessionName,
     );
     _selectedMode = widget.initialDraft.mode;
+    _initialMode = widget.initialDraft.mode;
     _selectedApiId = widget.initialDraft.apiConfigId;
+    _initialApiId = widget.initialDraft.apiConfigId;
     _selectedPresetId = widget.initialDraft.presetId;
+    _initialPresetId = widget.initialDraft.presetId;
     _selectedWorldBookId = widget.initialDraft.worldBookId;
+    _initialWorldBookId = widget.initialDraft.worldBookId;
+    _initialName = widget.initialDraft.sessionName;
   }
 
   @override
@@ -449,97 +461,121 @@ class _SessionEditorPageState extends State<_SessionEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          TextButton(onPressed: _submit, child: Text(widget.actionLabel)),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: GlassPanelCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(labelText: '会话名称'),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<frb.SessionMode>(
-                      initialValue: _selectedMode,
-                      items: const [
-                        DropdownMenuItem(
-                          value: frb.SessionMode.rst,
-                          child: Text('RST'),
-                        ),
-                        DropdownMenuItem(
-                          value: frb.SessionMode.st,
-                          child: Text('ST'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) {
-                          return;
-                        }
-                        setState(() {
-                          _selectedMode = value;
-                        });
-                      },
-                      decoration: const InputDecoration(labelText: '模式'),
-                    ),
-                    const SizedBox(height: 12),
-                    _OptionSelector(
-                      label: 'API配置',
-                      value: _selectedApiId,
-                      options: widget.apiOptions,
-                      onChanged: (value) {
-                        if (value == null) {
-                          return;
-                        }
-                        setState(() {
-                          _selectedApiId = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _OptionSelector(
-                      label: '预设',
-                      value: _selectedPresetId,
-                      options: widget.presetOptions,
-                      onChanged: (value) {
-                        if (value == null) {
-                          return;
-                        }
-                        setState(() {
-                          _selectedPresetId = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _OptionSelector(
-                      label: '世界书（仅 ST）',
-                      value: _selectedWorldBookId,
-                      options: widget.worldBookOptions,
-                      allowNull: true,
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedWorldBookId = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: _submit,
-                      child: Text(widget.actionLabel),
-                    ),
-                  ],
+    return PopScope<_SessionEditorDraft>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        final shouldClose = await _handleAttemptDismiss();
+        if (!mounted || !shouldClose) {
+          return;
+        }
+        Navigator.of(this.context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: '返回聊天',
+            onPressed: () async {
+              final shouldClose = await _handleAttemptDismiss();
+              if (!mounted || !shouldClose) {
+                return;
+              }
+              Navigator.of(this.context).pop();
+            },
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          title: Text(widget.title),
+          actions: [
+            TextButton(onPressed: _submit, child: Text(widget.actionLabel)),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: GlassPanelCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(labelText: '会话名称'),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<frb.SessionMode>(
+                        initialValue: _selectedMode,
+                        items: const [
+                          DropdownMenuItem(
+                            value: frb.SessionMode.rst,
+                            child: Text('RST'),
+                          ),
+                          DropdownMenuItem(
+                            value: frb.SessionMode.st,
+                            child: Text('ST'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedMode = value;
+                          });
+                        },
+                        decoration: const InputDecoration(labelText: '模式'),
+                      ),
+                      const SizedBox(height: 12),
+                      _OptionSelector(
+                        label: 'API配置',
+                        value: _selectedApiId,
+                        options: widget.apiOptions,
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedApiId = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _OptionSelector(
+                        label: '预设',
+                        value: _selectedPresetId,
+                        options: widget.presetOptions,
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedPresetId = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _OptionSelector(
+                        label: '世界书（仅 ST）',
+                        value: _selectedWorldBookId,
+                        options: widget.worldBookOptions,
+                        allowNull: true,
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedWorldBookId = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: _submit,
+                        child: Text(widget.actionLabel),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -567,6 +603,39 @@ class _SessionEditorPageState extends State<_SessionEditorPage> {
         worldBookId: _selectedWorldBookId,
       ),
     );
+  }
+
+  Future<bool> _handleAttemptDismiss() async {
+    if (!_isDirty()) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('放弃未保存的修改？'),
+        content: const Text('你已经修改了会话信息，现在返回会丢失本次填写。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('放弃修改'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  bool _isDirty() {
+    return _nameController.text != _initialName ||
+        _selectedMode != _initialMode ||
+        _selectedApiId != _initialApiId ||
+        _selectedPresetId != _initialPresetId ||
+        _selectedWorldBookId != _initialWorldBookId;
   }
 }
 

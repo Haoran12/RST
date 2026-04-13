@@ -9,16 +9,19 @@ class AppScaffold extends StatelessWidget {
     required this.drawer,
     this.headerCenter,
     this.headerTrailing,
+    this.backgroundImagePath,
   });
 
   final Widget child;
   final Widget drawer;
   final Widget? headerCenter;
   final Widget? headerTrailing;
+  final String? backgroundImagePath;
 
   @override
   Widget build(BuildContext context) {
     return AmbientBackground(
+      backgroundImagePath: backgroundImagePath,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         drawer: drawer,

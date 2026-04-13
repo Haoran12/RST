@@ -599,7 +599,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return value.toDouble();
     }
     if (value is String) {
-      return double.tryParse(value) ?? fallback;
+      final normalized = value.trim().replaceAll(',', '.');
+      return double.tryParse(normalized) ?? fallback;
     }
     return fallback;
   }

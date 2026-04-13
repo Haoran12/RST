@@ -262,6 +262,10 @@ final sessionAppearanceProvider = StateProvider<Map<String, String>>(
   (_) => <String, String>{},
 );
 
+final sessionBackgroundImageProvider = StateProvider<Map<String, String>>(
+  (_) => <String, String>{},
+);
+
 class SessionRstData {
   const SessionRstData({
     required this.userDescription,
