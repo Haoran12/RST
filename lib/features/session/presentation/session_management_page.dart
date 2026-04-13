@@ -72,45 +72,20 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
 
           final sessions = snapshot.data ?? const <frb.SessionSummary>[];
           final cards = <Widget>[
-            GlassPanelCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Text('会话管理', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 6),
-                  const Text('创建、切换、重命名、删除会话。当前会话详细配置请使用右上角按钮。'),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      PrimaryPillButton(
-                        label: '新建会话',
-                        onPressed: () => _openCreateDialog(context),
-                      ),
-                      const SizedBox(width: 8),
-                      SecondaryOutlineButton(
-                        label: '打开当前聊天',
-                        onPressed: sessions.isEmpty
-                            ? null
-                            : () {
-                                final targetSessionId =
-                                    currentSessionId ??
-                                    sessions.first.sessionId;
-                                ref
-                                        .read(currentSessionIdProvider.notifier)
-                                        .state =
-                                    targetSessionId;
-                                ref.read(appTabProvider.notifier).state =
-                                    AppTab.chat;
-                              },
-                      ),
-                      const SizedBox(width: 8),
-                      SecondaryOutlineButton(label: '刷新', onPressed: _reload),
-                    ],
+                  PrimaryPillButton(
+                    label: '新建会话',
+                    onPressed: () => _openCreateDialog(context),
                   ),
+                  SecondaryOutlineButton(label: '刷新', onPressed: _reload),
                 ],
               ),
             ),
-            const SizedBox(height: 10),
           ];
 
           if (sessions.isEmpty) {
@@ -128,101 +103,47 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
               cards.add(
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: GlassPanelCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                session.sessionName,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      ref.read(currentSessionIdProvider.notifier).state =
+                          session.sessionId;
+                    },
+                    child: GlassPanelCard(
+                      backgroundColor: selected
+                          ? AppColors.surfaceActive.withValues(alpha: 0.92)
+                          : null,
+                      borderColor: selected
+                          ? AppColors.accentSecondary
+                          : AppColors.borderSubtle,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              session.sessionName,
+                              style: Theme.of(context).textTheme.titleMedium,
                             ),
-                            if (selected)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.accentSecondary.withValues(
-                                    alpha: 0.2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(
-                                    color: AppColors.accentSecondary,
-                                  ),
-                                ),
-                                child: const Text(
-                                  '当前会话',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'id: ${session.sessionId} · mode: ${session.mode.name.toUpperCase()}',
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'updated: ${_formatTime(session.updatedAt)}',
-                          style: const TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            PrimaryPillButton(
-                              label: '进入聊天',
-                              onPressed: () {
-                                ref
-                                        .read(currentSessionIdProvider.notifier)
-                                        .state =
-                                    session.sessionId;
-                                ref.read(appTabProvider.notifier).state =
-                                    AppTab.chat;
-                              },
+                          IconButton(
+                            tooltip: '编辑',
+                            onPressed: () =>
+                                _openEditDialog(context, session.sessionId),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                          IconButton(
+                            tooltip: '删除',
+                            onPressed: () => _deleteSession(
+                              context,
+                              session.sessionId,
+                              session.sessionName,
                             ),
-                            const SizedBox(width: 8),
-                            SecondaryOutlineButton(
-                              label: selected ? '已选中' : '设为当前',
-                              onPressed: selected
-                                  ? null
-                                  : () {
-                                      ref
-                                          .read(
-                                            currentSessionIdProvider.notifier,
-                                          )
-                                          .state = session
-                                          .sessionId;
-                                    },
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: AppColors.error,
                             ),
-                            const SizedBox(width: 8),
-                            SecondaryOutlineButton(
-                              label: '编辑',
-                              onPressed: () =>
-                                  _openEditDialog(context, session.sessionId),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: () => _deleteSession(
-                                context,
-                                session.sessionId,
-                                session.sessionName,
-                              ),
-                              child: const Text(
-                                '删除',
-                                style: TextStyle(color: AppColors.error),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -245,7 +166,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     final worldBookOptions = ref.read(worldBookOptionsProvider);
     final sessionService = ref.read(sessionServiceProvider);
 
-    final nameController = TextEditingController(text: '新会话');
+    const sessionName = '新会话';
     frb.SessionMode selectedMode = frb.SessionMode.rst;
     String selectedApiId = apiOptions.isNotEmpty
         ? apiOptions.first.apiId
@@ -261,131 +182,47 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         ? worldBookOptions.first.id
         : null;
 
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocalState) => AlertDialog(
-          title: const Text('新建会话'),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: '会话名称'),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<frb.SessionMode>(
-                  initialValue: selectedMode,
-                  items: const [
-                    DropdownMenuItem(
-                      value: frb.SessionMode.rst,
-                      child: Text('RST'),
-                    ),
-                    DropdownMenuItem(
-                      value: frb.SessionMode.st,
-                      child: Text('ST'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setLocalState(() {
-                      selectedMode = value;
-                    });
-                  },
-                  decoration: const InputDecoration(labelText: '模式'),
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: 'API配置',
-                  value: selectedApiId,
-                  options: _toEntries(
-                    apiOptions,
-                    selector: (item) => item.apiId,
-                    labelSelector: (item) => item.name,
-                  ),
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setLocalState(() {
-                      selectedApiId = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: '预设',
-                  value: selectedPresetId,
-                  options: _toEntries(
-                    presetOptions,
-                    selector: (item) => item.presetId,
-                    labelSelector: (item) => item.name,
-                  ),
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setLocalState(() {
-                      selectedPresetId = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: '世界书（仅 ST）',
-                  value: selectedWorldBookId,
-                  options: _toEntries(
-                    worldBookOptions,
-                    selector: (item) => item.id,
-                    labelSelector: (item) => item.name,
-                  ),
-                  allowNull: true,
-                  onChanged: (value) => setLocalState(() {
-                    selectedWorldBookId = value;
-                  }),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('创建'),
-            ),
-          ],
-        ),
+    final saved = await _openSessionEditor(
+      context,
+      title: '新建会话',
+      actionLabel: '创建',
+      initialDraft: _SessionEditorDraft(
+        sessionName: sessionName,
+        mode: selectedMode,
+        apiConfigId: selectedApiId,
+        presetId: selectedPresetId,
+        worldBookId: selectedWorldBookId,
+      ),
+      apiOptions: _toEntries(
+        apiOptions,
+        selector: (item) => item.apiId,
+        labelSelector: (item) => item.name,
+      ),
+      presetOptions: _toEntries(
+        presetOptions,
+        selector: (item) => item.presetId,
+        labelSelector: (item) => item.name,
+      ),
+      worldBookOptions: _toEntries(
+        worldBookOptions,
+        selector: (item) => item.id,
+        labelSelector: (item) => item.name,
       ),
     );
 
-    if (!context.mounted) {
-      return;
-    }
-    if (saved != true) {
-      return;
-    }
-
-    final name = nameController.text.trim();
-    if (name.isEmpty) {
+    if (saved == null) {
       return;
     }
 
     final created = await sessionService.createSession(
-      sessionName: name,
-      mode: selectedMode == frb.SessionMode.rst
+      sessionName: saved.sessionName,
+      mode: saved.mode == frb.SessionMode.rst
           ? SessionMode.rst
           : SessionMode.st,
-      mainApiConfigId: selectedApiId,
-      presetId: selectedPresetId,
-      stWorldBookId: selectedMode == frb.SessionMode.st
-          ? selectedWorldBookId
+      mainApiConfigId: saved.apiConfigId,
+      presetId: saved.presetId,
+      stWorldBookId: saved.mode == frb.SessionMode.st
+          ? saved.worldBookId
           : null,
     );
     ref.read(currentSessionIdProvider.notifier).state = created.sessionId;
@@ -408,129 +245,43 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     }
     final worldBookOptions = ref.read(worldBookOptionsProvider);
 
-    final nameController = TextEditingController(
-      text: loaded.config.sessionName,
-    );
+    final sessionName = loaded.config.sessionName;
     frb.SessionMode selectedMode = loaded.config.mode;
     String selectedApiId = loaded.config.mainApiConfigId;
     String selectedPresetId = loaded.config.presetId;
     String? selectedWorldBookId = loaded.config.stWorldBookId;
 
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocalState) => AlertDialog(
-          title: const Text('编辑会话'),
-          content: SizedBox(
-            width: 380,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: '会话名称'),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<frb.SessionMode>(
-                  initialValue: selectedMode,
-                  items: const [
-                    DropdownMenuItem(
-                      value: frb.SessionMode.rst,
-                      child: Text('RST'),
-                    ),
-                    DropdownMenuItem(
-                      value: frb.SessionMode.st,
-                      child: Text('ST'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setLocalState(() {
-                      selectedMode = value;
-                    });
-                  },
-                  decoration: const InputDecoration(labelText: '模式'),
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: 'API配置',
-                  value: selectedApiId,
-                  options: _toEntries(
-                    apiOptions,
-                    selector: (item) => item.apiId,
-                    labelSelector: (item) => item.name,
-                    fallbackId: loaded.config.mainApiConfigId,
-                  ),
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setLocalState(() {
-                      selectedApiId = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: '预设',
-                  value: selectedPresetId,
-                  options: _toEntries(
-                    presetOptions,
-                    selector: (item) => item.presetId,
-                    labelSelector: (item) => item.name,
-                    fallbackId: loaded.config.presetId,
-                  ),
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setLocalState(() {
-                      selectedPresetId = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                _OptionSelector(
-                  label: '世界书（仅 ST）',
-                  value: selectedWorldBookId,
-                  options: _toEntries(
-                    worldBookOptions,
-                    selector: (item) => item.id,
-                    labelSelector: (item) => item.name,
-                  ),
-                  allowNull: true,
-                  onChanged: (value) => setLocalState(() {
-                    selectedWorldBookId = value;
-                  }),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
+    final saved = await _openSessionEditor(
+      context,
+      title: '编辑会话',
+      actionLabel: '保存',
+      initialDraft: _SessionEditorDraft(
+        sessionName: sessionName,
+        mode: selectedMode,
+        apiConfigId: selectedApiId,
+        presetId: selectedPresetId,
+        worldBookId: selectedWorldBookId,
+      ),
+      apiOptions: _toEntries(
+        apiOptions,
+        selector: (item) => item.apiId,
+        labelSelector: (item) => item.name,
+        fallbackId: loaded.config.mainApiConfigId,
+      ),
+      presetOptions: _toEntries(
+        presetOptions,
+        selector: (item) => item.presetId,
+        labelSelector: (item) => item.name,
+        fallbackId: loaded.config.presetId,
+      ),
+      worldBookOptions: _toEntries(
+        worldBookOptions,
+        selector: (item) => item.id,
+        labelSelector: (item) => item.name,
       ),
     );
 
-    if (!context.mounted) {
-      return;
-    }
-    if (saved != true) {
-      return;
-    }
-
-    final name = nameController.text.trim();
-    if (name.isEmpty) {
+    if (saved == null) {
       return;
     }
 
@@ -538,12 +289,12 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     await sessionService.saveSession(
       frb.SessionConfig(
         sessionId: config.sessionId,
-        sessionName: name,
-        mode: selectedMode,
-        mainApiConfigId: selectedApiId,
-        presetId: selectedPresetId,
-        stWorldBookId: selectedMode == frb.SessionMode.st
-            ? selectedWorldBookId
+        sessionName: saved.sessionName,
+        mode: saved.mode,
+        mainApiConfigId: saved.apiConfigId,
+        presetId: saved.presetId,
+        stWorldBookId: saved.mode == frb.SessionMode.st
+            ? saved.worldBookId
             : null,
         createdAt: config.createdAt,
         updatedAt: config.updatedAt,
@@ -551,6 +302,30 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     );
     ref.read(workspaceReloadTickProvider.notifier).state++;
     _reload();
+  }
+
+  Future<_SessionEditorDraft?> _openSessionEditor(
+    BuildContext context, {
+    required String title,
+    required String actionLabel,
+    required _SessionEditorDraft initialDraft,
+    required List<_OptionEntry> apiOptions,
+    required List<_OptionEntry> presetOptions,
+    required List<_OptionEntry> worldBookOptions,
+  }) {
+    return Navigator.of(context).push<_SessionEditorDraft>(
+      MaterialPageRoute<_SessionEditorDraft>(
+        fullscreenDialog: true,
+        builder: (context) => _SessionEditorPage(
+          title: title,
+          actionLabel: actionLabel,
+          initialDraft: initialDraft,
+          apiOptions: apiOptions,
+          presetOptions: presetOptions,
+          worldBookOptions: worldBookOptions,
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteSession(
@@ -608,18 +383,190 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     }
     return items;
   }
+}
 
-  String _formatTime(String raw) {
-    final parsed = DateTime.tryParse(raw);
-    if (parsed == null) {
-      return raw;
+class _SessionEditorDraft {
+  const _SessionEditorDraft({
+    required this.sessionName,
+    required this.mode,
+    required this.apiConfigId,
+    required this.presetId,
+    this.worldBookId,
+  });
+
+  final String sessionName;
+  final frb.SessionMode mode;
+  final String apiConfigId;
+  final String presetId;
+  final String? worldBookId;
+}
+
+class _SessionEditorPage extends StatefulWidget {
+  const _SessionEditorPage({
+    required this.title,
+    required this.actionLabel,
+    required this.initialDraft,
+    required this.apiOptions,
+    required this.presetOptions,
+    required this.worldBookOptions,
+  });
+
+  final String title;
+  final String actionLabel;
+  final _SessionEditorDraft initialDraft;
+  final List<_OptionEntry> apiOptions;
+  final List<_OptionEntry> presetOptions;
+  final List<_OptionEntry> worldBookOptions;
+
+  @override
+  State<_SessionEditorPage> createState() => _SessionEditorPageState();
+}
+
+class _SessionEditorPageState extends State<_SessionEditorPage> {
+  late final TextEditingController _nameController;
+  late frb.SessionMode _selectedMode;
+  late String _selectedApiId;
+  late String _selectedPresetId;
+  String? _selectedWorldBookId;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(
+      text: widget.initialDraft.sessionName,
+    );
+    _selectedMode = widget.initialDraft.mode;
+    _selectedApiId = widget.initialDraft.apiConfigId;
+    _selectedPresetId = widget.initialDraft.presetId;
+    _selectedWorldBookId = widget.initialDraft.worldBookId;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          TextButton(onPressed: _submit, child: Text(widget.actionLabel)),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: GlassPanelCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(labelText: '会话名称'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<frb.SessionMode>(
+                      initialValue: _selectedMode,
+                      items: const [
+                        DropdownMenuItem(
+                          value: frb.SessionMode.rst,
+                          child: Text('RST'),
+                        ),
+                        DropdownMenuItem(
+                          value: frb.SessionMode.st,
+                          child: Text('ST'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setState(() {
+                          _selectedMode = value;
+                        });
+                      },
+                      decoration: const InputDecoration(labelText: '模式'),
+                    ),
+                    const SizedBox(height: 12),
+                    _OptionSelector(
+                      label: 'API配置',
+                      value: _selectedApiId,
+                      options: widget.apiOptions,
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setState(() {
+                          _selectedApiId = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _OptionSelector(
+                      label: '预设',
+                      value: _selectedPresetId,
+                      options: widget.presetOptions,
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setState(() {
+                          _selectedPresetId = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _OptionSelector(
+                      label: '世界书（仅 ST）',
+                      value: _selectedWorldBookId,
+                      options: widget.worldBookOptions,
+                      allowNull: true,
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedWorldBookId = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: _submit,
+                      child: Text(widget.actionLabel),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('会话名称不能为空')));
+      return;
     }
-    final local = parsed.toLocal();
-    final month = local.month.toString().padLeft(2, '0');
-    final day = local.day.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$month-$day $hour:$minute';
+
+    Navigator.of(context).pop(
+      _SessionEditorDraft(
+        sessionName: name,
+        mode: _selectedMode,
+        apiConfigId: _selectedApiId,
+        presetId: _selectedPresetId,
+        worldBookId: _selectedWorldBookId,
+      ),
+    );
   }
 }
 

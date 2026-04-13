@@ -1,5 +1,17 @@
 # Version History
 
+## 0.1.0+7 (2026-04-13)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+7-release.apk`
+- Notes: Simplified settings cards to Tavo-style item actions and added session-level RST data view/edit panel in quick settings drawer.
+
+## 0.1.0+6 (2026-04-13)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+6-release.apk`
+- Notes: Chat message bubble now supports per-message quick actions: delete, copy, and rewrite.
+
 ## 0.1.0+5 (2026-04-11)
 
 - Build type: Android APK release

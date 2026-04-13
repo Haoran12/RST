@@ -7,10 +7,12 @@ class FloatingComposer extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onSend,
+    this.focusNode,
     this.isSending = false,
   });
 
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final VoidCallback onSend;
   final bool isSending;
 
@@ -33,6 +35,7 @@ class FloatingComposer extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: controller,
+                  focusNode: focusNode,
                   minLines: 1,
                   maxLines: 4,
                   textInputAction: TextInputAction.newline,

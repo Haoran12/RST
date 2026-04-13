@@ -39,10 +39,8 @@ class AppShell extends ConsumerWidget {
       icon: Icons.menu_book_outlined,
       page: ResourceManagementPage(
         title: '世界书',
-        subtitle: '管理世界书对象，支持新建、编辑、删除。',
         emptyTitle: '暂无世界书',
         emptyDescription: '先创建世界书，再绑定到 ST 会话。',
-        icon: Icons.menu_book_outlined,
         optionType: ManagedOptionType.worldBook,
         optionsProvider: worldBookOptionsProvider,
       ),
@@ -65,10 +63,8 @@ class AppShell extends ConsumerWidget {
       icon: Icons.palette_outlined,
       page: ResourceManagementPage(
         title: '外观',
-        subtitle: '管理主题与外观方案，支持新建、编辑、删除。',
         emptyTitle: '暂无外观方案',
         emptyDescription: '创建后可绑定到当前会话。',
-        icon: Icons.palette_outlined,
         optionType: ManagedOptionType.appearance,
         optionsProvider: appearanceOptionsProvider,
       ),
@@ -157,7 +153,7 @@ Future<void> _showSessionQuickSettingsBottomSheet(BuildContext context) async {
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (context) => const FractionallySizedBox(
-      heightFactor: 0.88,
+      heightFactor: 1,
       child: _SessionQuickSettingsSheet(),
     ),
   );
@@ -287,11 +283,25 @@ class _SessionQuickSettingsSheetState
   String _presetId = '';
   String? _worldBookId;
   String _appearanceId = '';
+  late final TextEditingController _rstUserDescriptionController;
+  late final TextEditingController _rstSceneController;
+  late final TextEditingController _rstLoresController;
 
   @override
   void initState() {
     super.initState();
+    _rstUserDescriptionController = TextEditingController();
+    _rstSceneController = TextEditingController();
+    _rstLoresController = TextEditingController();
     _loadCurrentSession();
+  }
+
+  @override
+  void dispose() {
+    _rstUserDescriptionController.dispose();
+    _rstSceneController.dispose();
+    _rstLoresController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCurrentSession() async {
@@ -321,10 +331,18 @@ class _SessionQuickSettingsSheetState
       final config = loaded.config;
       final schedulerMap = ref.read(sessionSchedulerModeProvider);
       final appearanceMap = ref.read(sessionAppearanceProvider);
+      final rstDataMap = ref.read(sessionRstDataProvider);
       final appearanceOptions = ref.read(appearanceOptionsProvider);
       final defaultAppearanceId = appearanceOptions.isNotEmpty
           ? appearanceOptions.first.id
           : 'appearance-default';
+      final startupRuntime = ref.read(apiServiceProvider).loadStartupRuntime();
+      final rstData = rstDataMap[config.sessionId];
+
+      _rstUserDescriptionController.text =
+          rstData?.userDescription ?? startupRuntime.defaultUserDescription;
+      _rstSceneController.text = rstData?.scene ?? startupRuntime.defaultScene;
+      _rstLoresController.text = rstData?.lores ?? startupRuntime.defaultLores;
 
       setState(() {
         _config = config;
@@ -392,6 +410,17 @@ class _SessionQuickSettingsSheetState
         saved.sessionId: _appearanceId,
       };
       ref.read(sessionAppearanceProvider.notifier).state = appearanceState;
+
+      final rstDataState = <String, SessionRstData>{
+        ...ref.read(sessionRstDataProvider),
+        saved.sessionId: SessionRstData(
+          userDescription: _rstUserDescriptionController.text.trim(),
+          scene: _rstSceneController.text.trim(),
+          lores: _rstLoresController.text.trim(),
+        ),
+      };
+      ref.read(sessionRstDataProvider.notifier).state = rstDataState;
+
       ref.read(workspaceReloadTickProvider.notifier).state++;
 
       setState(() {
@@ -553,6 +582,48 @@ class _SessionQuickSettingsSheetState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                '本会话 RST Data',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _rstUserDescriptionController,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'user_description',
+                  helperText: '用于描述用户身份、关系和发言风格。',
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _rstSceneController,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'scene',
+                  helperText: '用于描述当前场景、时间线与环境状态。',
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _rstLoresController,
+                minLines: 2,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'lores',
+                  helperText: '用于填写本会话的 Lore 注入文本。',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        GlassPanelCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text('会话绑定项', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 10),
               if (apiOptions.hasError || presetOptions.hasError)
@@ -622,13 +693,14 @@ class _SessionQuickSettingsSheetState
                 },
               ),
               const SizedBox(height: 12),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   PrimaryPillButton(
                     label: _saving ? '保存中...' : '保存设置',
                     onPressed: _saving ? null : _save,
                   ),
-                  const SizedBox(width: 8),
                   SecondaryOutlineButton(
                     label: '刷新',
                     onPressed: _saving ? null : _loadCurrentSession,

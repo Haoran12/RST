@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/bridge/frb_api.dart' as frb;
@@ -28,6 +29,7 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _composerFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
   StartupChatRuntime? _runtime;
@@ -47,6 +49,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void dispose() {
     _controller.dispose();
+    _composerFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -211,9 +214,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               apiConfig: runtime.apiConfig,
               presetConfig: runtime.presetConfig,
               maxContextMessages: runtime.maxContextMessages,
-              sessionUserDescription: runtime.defaultUserDescription,
-              sessionScene: runtime.defaultScene,
-              sessionLores: runtime.defaultLores,
+              sessionUserDescription:
+                  ref
+                      .read(sessionRstDataProvider)[roundSessionId]
+                      ?.userDescription ??
+                  runtime.defaultUserDescription,
+              sessionScene:
+                  ref.read(sessionRstDataProvider)[roundSessionId]?.scene ??
+                  runtime.defaultScene,
+              sessionLores:
+                  ref.read(sessionRstDataProvider)[roundSessionId]?.lores ??
+                  runtime.defaultLores,
               onRoundPrepared: (metadata) {
                 if (!mounted || _session?.sessionId != roundSessionId) {
                   return;
@@ -285,6 +296,69 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
+  Future<void> _handleDeleteMessage(frb.MessageRecord message) async {
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+    try {
+      await ref
+          .read(rustBridgeProvider)
+          .deleteMessages(
+            sessionId: session.sessionId,
+            messageIds: <String>[message.messageId],
+          );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _messages = _messages
+            .where((item) => item.messageId != message.messageId)
+            .toList(growable: false);
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('消息已删除')));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('删除失败: $error')));
+    }
+  }
+
+  Future<void> _handleCopyMessage(frb.MessageRecord message) async {
+    final content = message.content.trim();
+    if (content.isEmpty) {
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: content));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+  }
+
+  void _handleRewriteMessage(frb.MessageRecord message) {
+    final source = message.content.trim();
+    if (source.isEmpty) {
+      return;
+    }
+    final nextInput = message.role == frb.MessageRole.user
+        ? source
+        : '请改写以下内容，保持原意并优化表达：\n$source';
+    _controller.value = TextEditingValue(
+      text: nextInput,
+      selection: TextSelection.collapsed(offset: nextInput.length),
+    );
+    _composerFocusNode.requestFocus();
+    _scrollToBottom(force: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<String?>(currentSessionIdProvider, (previous, next) {
@@ -348,23 +422,39 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             child: Column(
               children: [
                 GlassPanelCard(
-                  child: Row(
-                    children: [
-                      ModeChip(mode: modeLabel),
-                      const SizedBox(width: 10),
-                      StatusBadge(label: statusLabel, color: statusColor),
-                      const Spacer(),
-                      if (_isSending)
-                        const StreamingIndicator(label: '接收响应中...')
-                      else
-                        const Text(
-                          '等待发送',
-                          style: TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final trailing = _isSending
+                          ? const StreamingIndicator(label: '接收响应中...')
+                          : const Text(
+                              '等待发送',
+                              style: TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 12,
+                              ),
+                            );
+                      if (constraints.maxWidth < 460) {
+                        return Wrap(
+                          spacing: 10,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            ModeChip(mode: modeLabel),
+                            StatusBadge(label: statusLabel, color: statusColor),
+                            trailing,
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          ModeChip(mode: modeLabel),
+                          const SizedBox(width: 10),
+                          StatusBadge(label: statusLabel, color: statusColor),
+                          const Spacer(),
+                          trailing,
+                        ],
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -398,7 +488,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               const SizedBox(height: 10),
                           itemBuilder: (context, index) {
                             final message = _messages[index];
-                            return _MessageWithMetadata(message: message);
+                            final hasContent = message.content
+                                .trim()
+                                .isNotEmpty;
+                            final canDelete =
+                                message.status != frb.MessageStatus.pending &&
+                                message.status != frb.MessageStatus.streaming;
+                            return _MessageWithMetadata(
+                              message: message,
+                              onDelete: canDelete ? _handleDeleteMessage : null,
+                              onCopy: hasContent ? _handleCopyMessage : null,
+                              onRewrite: hasContent
+                                  ? _handleRewriteMessage
+                                  : null,
+                            );
                           },
                         ),
                 ),
@@ -408,6 +511,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ),
         FloatingComposer(
           controller: _controller,
+          focusNode: _composerFocusNode,
           isSending: _isSending,
           onSend: _handleSendPressed,
         ),
@@ -478,9 +582,17 @@ class _RuntimeMetaCard extends StatelessWidget {
 }
 
 class _MessageWithMetadata extends StatelessWidget {
-  const _MessageWithMetadata({required this.message});
+  const _MessageWithMetadata({
+    required this.message,
+    this.onDelete,
+    this.onCopy,
+    this.onRewrite,
+  });
 
   final frb.MessageRecord message;
+  final void Function(frb.MessageRecord message)? onDelete;
+  final void Function(frb.MessageRecord message)? onCopy;
+  final void Function(frb.MessageRecord message)? onRewrite;
 
   @override
   Widget build(BuildContext context) {
@@ -504,6 +616,9 @@ class _MessageWithMetadata extends StatelessWidget {
           role: role,
           content: message.content,
           hidden: !message.visible,
+          onDelete: onDelete == null ? null : () => onDelete!(message),
+          onCopy: onCopy == null ? null : () => onCopy!(message),
+          onRewrite: onRewrite == null ? null : () => onRewrite!(message),
         ),
         const SizedBox(height: 4),
         Padding(

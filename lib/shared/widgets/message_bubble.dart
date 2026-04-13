@@ -9,14 +9,22 @@ class MessageBubble extends StatelessWidget {
     required this.role,
     required this.content,
     this.hidden = false,
+    this.onDelete,
+    this.onCopy,
+    this.onRewrite,
   });
 
   final String role;
   final String content;
   final bool hidden;
+  final VoidCallback? onDelete;
+  final VoidCallback? onCopy;
+  final VoidCallback? onRewrite;
 
   bool get _isUser => role == 'user';
   bool get _isSystem => role == 'system';
+  bool get _hasActions =>
+      onDelete != null || onCopy != null || onRewrite != null;
 
   @override
   Widget build(BuildContext context) {
@@ -71,10 +79,72 @@ class MessageBubble extends StatelessWidget {
                     height: 1.45,
                   ),
                 ),
+                if (_hasActions) ...[
+                  const SizedBox(height: 8),
+                  const Divider(height: 1, color: AppColors.borderSubtle),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Wrap(
+                      spacing: 2,
+                      children: [
+                        if (onDelete != null)
+                          _QuickActionButton(
+                            icon: Icons.delete_outline_rounded,
+                            tooltip: '删除',
+                            onPressed: onDelete!,
+                          ),
+                        if (onCopy != null)
+                          _QuickActionButton(
+                            icon: Icons.content_copy_rounded,
+                            tooltip: '复制',
+                            onPressed: onCopy!,
+                          ),
+                        if (onRewrite != null)
+                          _QuickActionButton(
+                            icon: Icons.edit_note_rounded,
+                            tooltip: '改写',
+                            onPressed: onRewrite!,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _QuickActionButton extends StatelessWidget {
+  const _QuickActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onPressed,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          foregroundColor: AppColors.textMuted,
+          hoverColor: AppColors.surfaceActive.withValues(alpha: 0.4),
+          splashFactory: InkRipple.splashFactory,
+        ),
+        icon: Icon(icon, size: 16),
       ),
     );
   }

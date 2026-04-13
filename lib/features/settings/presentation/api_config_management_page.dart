@@ -22,32 +22,24 @@ class ApiConfigManagementPage extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: ListView(
         children: [
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Text('API配置', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                const Text('管理 Provider、模型与鉴权信息，保存后会直接影响实际请求。'),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    PrimaryPillButton(
-                      label: '新建配置',
-                      onPressed: () => _openEditor(context, ref),
-                    ),
-                    const SizedBox(width: 8),
-                    SecondaryOutlineButton(
-                      label: '刷新',
-                      onPressed: () =>
-                          ref.read(apiConfigCatalogProvider.notifier).refresh(),
-                    ),
-                  ],
+                PrimaryPillButton(
+                  label: '新建配置',
+                  onPressed: () => _openEditor(context, ref),
+                ),
+                SecondaryOutlineButton(
+                  label: '刷新',
+                  onPressed: () =>
+                      ref.read(apiConfigCatalogProvider.notifier).refresh(),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
           ...configs.when(
             data: (items) => _buildList(context, ref, items),
             loading: () => const <Widget>[
@@ -92,56 +84,26 @@ class ApiConfigManagementPage extends ConsumerWidget {
           (config) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: GlassPanelCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text(
-                    config.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _providerLabel(config.providerType),
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
+                  Expanded(
+                    child: Text(
+                      config.name,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${config.baseUrl}${config.requestPath}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                    ),
+                  IconButton(
+                    tooltip: '编辑',
+                    onPressed: () => _openEditor(context, ref, source: config),
+                    icon: const Icon(Icons.edit_outlined),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'model: ${config.defaultModel} · key: ${config.apiKeyHint ?? "未设置"}',
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
+                  IconButton(
+                    tooltip: '删除',
+                    onPressed: () => _deleteConfig(context, ref, config),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.error,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      SecondaryOutlineButton(
-                        label: '编辑',
-                        onPressed: () =>
-                            _openEditor(context, ref, source: config),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: () => _deleteConfig(context, ref, config),
-                        child: const Text(
-                          '删除',
-                          style: TextStyle(color: AppColors.error),
-                        ),
-                      ),
-                    ],
                   ),
                 ],
               ),
@@ -157,16 +119,13 @@ class ApiConfigManagementPage extends ConsumerWidget {
     StoredApiConfig? source,
   }) async {
     final draft = source ?? ref.read(apiServiceProvider).buildApiConfigDraft();
-    final saved = await showModalBottomSheet<StoredApiConfig>(
-      context: context,
-      isScrollControlled: true,
-      isDismissible: false,
-      enableDrag: false,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _ApiConfigEditorDialog(
-        title: source == null ? '新建 API 配置' : '编辑 API 配置',
-        initialValue: draft,
+    final saved = await Navigator.of(context).push<StoredApiConfig>(
+      MaterialPageRoute<StoredApiConfig>(
+        fullscreenDialog: true,
+        builder: (context) => _ApiConfigEditorDialog(
+          title: source == null ? '新建 API 配置' : '编辑 API 配置',
+          initialValue: draft,
+        ),
       ),
     );
     if (saved == null) {
@@ -201,13 +160,6 @@ class ApiConfigManagementPage extends ConsumerWidget {
       return;
     }
     await ref.read(apiConfigCatalogProvider.notifier).delete(config.apiId);
-  }
-
-  String _providerLabel(ProviderType type) {
-    return switch (type) {
-      ProviderType.openai => 'OpenAI Responses',
-      ProviderType.openaiCompatible => 'OpenAI-Compatible Chat Completions',
-    };
   }
 }
 
@@ -308,27 +260,15 @@ class _ApiConfigEditorDialogState
         Navigator.of(this.context).pop();
       },
       child: FractionallySizedBox(
-        heightFactor: 0.96,
+        heightFactor: 1,
         child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.backgroundElevated,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
+          decoration: const BoxDecoration(color: AppColors.backgroundElevated),
           child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
                 child: Column(
                   children: [
-                    Container(
-                      width: 44,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.borderStrong,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
                     Row(
                       children: [
                         Expanded(
@@ -571,7 +511,11 @@ class _ApiConfigEditorDialogState
                                 if (_availableModels.isNotEmpty) ...[
                                   Align(
                                     alignment: Alignment.centerLeft,
-                                    child: Row(
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
                                       children: [
                                         Text(
                                           '可用模型',
@@ -579,7 +523,6 @@ class _ApiConfigEditorDialogState
                                             context,
                                           ).textTheme.labelLarge,
                                         ),
-                                        const SizedBox(width: 8),
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 8,

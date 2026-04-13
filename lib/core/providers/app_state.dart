@@ -257,6 +257,22 @@ final sessionAppearanceProvider = StateProvider<Map<String, String>>(
   (_) => <String, String>{},
 );
 
+class SessionRstData {
+  const SessionRstData({
+    required this.userDescription,
+    required this.scene,
+    required this.lores,
+  });
+
+  final String userDescription;
+  final String scene;
+  final String lores;
+}
+
+final sessionRstDataProvider = StateProvider<Map<String, SessionRstData>>(
+  (_) => <String, SessionRstData>{},
+);
+
 enum SchedulerMode { direct, rst, agent }
 
 final sessionSchedulerModeProvider = StateProvider<Map<String, SchedulerMode>>(

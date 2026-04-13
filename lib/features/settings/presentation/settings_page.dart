@@ -83,10 +83,11 @@ class _SettingsSection extends StatelessWidget {
           const SizedBox(height: 6),
           Text(subtitle),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: const [
               PrimaryPillButton(label: '进入', onPressed: null),
-              SizedBox(width: 8),
               SecondaryOutlineButton(label: '新建', onPressed: null),
             ],
           ),

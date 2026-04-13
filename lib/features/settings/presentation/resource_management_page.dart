@@ -11,19 +11,15 @@ class ResourceManagementPage extends ConsumerWidget {
   const ResourceManagementPage({
     super.key,
     required this.title,
-    required this.subtitle,
     required this.emptyTitle,
     required this.emptyDescription,
-    required this.icon,
     required this.optionType,
     required this.optionsProvider,
   });
 
   final String title;
-  final String subtitle;
   final String emptyTitle;
   final String emptyDescription;
-  final IconData icon;
   final ManagedOptionType optionType;
   final StateProvider<List<ManagedOption>> optionsProvider;
 
@@ -35,37 +31,19 @@ class ResourceManagementPage extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: ListView(
         children: [
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Row(
-                  children: [
-                    Icon(icon, color: AppColors.textMuted),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(subtitle),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    PrimaryPillButton(
-                      label: '新建',
-                      onPressed: () => _createOption(context, ref),
-                    ),
-                  ],
+                PrimaryPillButton(
+                  label: '新建',
+                  onPressed: () => _createOption(context, ref),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
           if (options.isEmpty)
             EmptyStateView(
               title: emptyTitle,
@@ -78,40 +56,26 @@ class ResourceManagementPage extends ConsumerWidget {
               (option) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: GlassPanelCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(
-                        option.name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(option.description),
-                      const SizedBox(height: 8),
-                      Text(
-                        'id: ${option.id} · sections: ${option.sections.length} · updated: ${_formatTime(option.updatedAt)}',
-                        style: const TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 12,
+                      Expanded(
+                        child: Text(
+                          option.name,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          SecondaryOutlineButton(
-                            label: '编辑',
-                            onPressed: () => _editOption(context, ref, option),
-                          ),
-                          TextButton(
-                            onPressed: () => _deleteOption(context, ref, option),
-                            child: const Text(
-                              '删除',
-                              style: TextStyle(color: AppColors.error),
-                            ),
-                          ),
-                        ],
+                      IconButton(
+                        tooltip: '编辑',
+                        onPressed: () => _editOption(context, ref, option),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                      IconButton(
+                        tooltip: '删除',
+                        onPressed: () => _deleteOption(context, ref, option),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: AppColors.error,
+                        ),
                       ),
                     ],
                   ),
@@ -130,11 +94,11 @@ class ResourceManagementPage extends ConsumerWidget {
       name: '新建${_typeLabel(optionType)}',
       description: '请填写描述信息。',
     );
-    final created = await showDialog<ManagedOption>(
-      context: context,
-      builder: (context) => _ManagedOptionEditorDialog(
-        title: '新建$title',
-        initialOption: initial,
+    final created = await Navigator.of(context).push<ManagedOption>(
+      MaterialPageRoute<ManagedOption>(
+        fullscreenDialog: true,
+        builder: (context) =>
+            _ManagedOptionEditorPage(title: '新建$title', initialOption: initial),
       ),
     );
     if (created == null) {
@@ -150,11 +114,11 @@ class ResourceManagementPage extends ConsumerWidget {
     WidgetRef ref,
     ManagedOption option,
   ) async {
-    final edited = await showDialog<ManagedOption>(
-      context: context,
-      builder: (context) => _ManagedOptionEditorDialog(
-        title: '编辑$title',
-        initialOption: option,
+    final edited = await Navigator.of(context).push<ManagedOption>(
+      MaterialPageRoute<ManagedOption>(
+        fullscreenDialog: true,
+        builder: (context) =>
+            _ManagedOptionEditorPage(title: '编辑$title', initialOption: option),
       ),
     );
     if (edited == null) {
@@ -208,18 +172,10 @@ class ResourceManagementPage extends ConsumerWidget {
       ManagedOptionType.appearance => '外观方案',
     };
   }
-
-  String _formatTime(DateTime value) {
-    final month = value.month.toString().padLeft(2, '0');
-    final day = value.day.toString().padLeft(2, '0');
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    return '$month-$day $hour:$minute';
-  }
 }
 
-class _ManagedOptionEditorDialog extends StatefulWidget {
-  const _ManagedOptionEditorDialog({
+class _ManagedOptionEditorPage extends StatefulWidget {
+  const _ManagedOptionEditorPage({
     required this.title,
     required this.initialOption,
   });
@@ -228,11 +184,11 @@ class _ManagedOptionEditorDialog extends StatefulWidget {
   final ManagedOption initialOption;
 
   @override
-  State<_ManagedOptionEditorDialog> createState() =>
-      _ManagedOptionEditorDialogState();
+  State<_ManagedOptionEditorPage> createState() =>
+      _ManagedOptionEditorPageState();
 }
 
-class _ManagedOptionEditorDialogState extends State<_ManagedOptionEditorDialog> {
+class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late ManagedOption _draft;
@@ -256,54 +212,69 @@ class _ManagedOptionEditorDialogState extends State<_ManagedOptionEditorDialog> 
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 560,
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          TextButton(onPressed: _submit, child: const Text('保存')),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: SafeArea(
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: '名称'),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: GlassPanelCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(labelText: '名称'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _descriptionController,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(labelText: '描述'),
+                    ),
+                    const SizedBox(height: 12),
+                    ..._draft.sections.map(_buildSection),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _submit,
+                        child: const Text('保存'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _descriptionController,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(labelText: '描述'),
-              ),
-              const SizedBox(height: 12),
-              ..._draft.sections.map(_buildSection),
-            ],
+            ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final name = _nameController.text.trim();
-            if (name.isEmpty) {
-              return;
-            }
-            Navigator.of(context).pop(
-              _draft.copyWith(
-                name: name,
-                description: _descriptionController.text.trim(),
-                updatedAt: DateTime.now(),
-              ),
-            );
-          },
-          child: const Text('保存'),
-        ),
-      ],
+    );
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('名称不能为空')));
+      return;
+    }
+    Navigator.of(context).pop(
+      _draft.copyWith(
+        name: name,
+        description: _descriptionController.text.trim(),
+        updatedAt: DateTime.now(),
+      ),
     );
   }
 

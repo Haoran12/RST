@@ -20,32 +20,24 @@ class PresetManagementPage extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: ListView(
         children: [
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Text('预设', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                const Text('管理主提示词与生成参数，保存后会被当前会话真实使用。'),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    PrimaryPillButton(
-                      label: '新建预设',
-                      onPressed: () => _openEditor(context, ref),
-                    ),
-                    const SizedBox(width: 8),
-                    SecondaryOutlineButton(
-                      label: '刷新',
-                      onPressed: () =>
-                          ref.read(presetCatalogProvider.notifier).refresh(),
-                    ),
-                  ],
+                PrimaryPillButton(
+                  label: '新建预设',
+                  onPressed: () => _openEditor(context, ref),
+                ),
+                SecondaryOutlineButton(
+                  label: '刷新',
+                  onPressed: () =>
+                      ref.read(presetCatalogProvider.notifier).refresh(),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
           ...presets.when(
             data: (items) => _buildList(context, ref, items),
             loading: () => const <Widget>[
@@ -90,53 +82,26 @@ class PresetManagementPage extends ConsumerWidget {
           (preset) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: GlassPanelCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text(
-                    preset.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  if (preset.description != null &&
-                      preset.description!.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(preset.description!),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    preset.mainPrompt,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
+                  Expanded(
+                    child: Text(
+                      preset.name,
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _summary(preset),
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                    ),
+                  IconButton(
+                    tooltip: '编辑',
+                    onPressed: () => _openEditor(context, ref, source: preset),
+                    icon: const Icon(Icons.edit_outlined),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      SecondaryOutlineButton(
-                        label: '编辑',
-                        onPressed: () =>
-                            _openEditor(context, ref, source: preset),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: () => _deletePreset(context, ref, preset),
-                        child: const Text(
-                          '删除',
-                          style: TextStyle(color: AppColors.error),
-                        ),
-                      ),
-                    ],
+                  IconButton(
+                    tooltip: '删除',
+                    onPressed: () => _deletePreset(context, ref, preset),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.error,
+                    ),
                   ),
                 ],
               ),
@@ -146,37 +111,19 @@ class PresetManagementPage extends ConsumerWidget {
         .toList(growable: false);
   }
 
-  String _summary(StoredPresetConfig preset) {
-    final parts = <String>['id: ${preset.presetId}'];
-    if (preset.temperature != null) {
-      parts.add('temp: ${preset.temperature}');
-    }
-    if (preset.topP != null) {
-      parts.add('top_p: ${preset.topP}');
-    }
-    if (preset.maxCompletionTokens != null) {
-      parts.add('max: ${preset.maxCompletionTokens}');
-    }
-    if (preset.reasoningEffort != null && preset.reasoningEffort!.isNotEmpty) {
-      parts.add('reasoning: ${preset.reasoningEffort}');
-    }
-    if (preset.stopSequences.isNotEmpty) {
-      parts.add('stop: ${preset.stopSequences.length}');
-    }
-    return parts.join(' · ');
-  }
-
   Future<void> _openEditor(
     BuildContext context,
     WidgetRef ref, {
     StoredPresetConfig? source,
   }) async {
     final draft = source ?? ref.read(apiServiceProvider).buildPresetDraft();
-    final saved = await showDialog<StoredPresetConfig>(
-      context: context,
-      builder: (context) => _PresetEditorDialog(
-        title: source == null ? '新建预设' : '编辑预设',
-        initialValue: draft,
+    final saved = await Navigator.of(context).push<StoredPresetConfig>(
+      MaterialPageRoute<StoredPresetConfig>(
+        fullscreenDialog: true,
+        builder: (context) => _PresetEditorPage(
+          title: source == null ? '新建预设' : '编辑预设',
+          initialValue: draft,
+        ),
       ),
     );
     if (saved == null) {
@@ -214,17 +161,17 @@ class PresetManagementPage extends ConsumerWidget {
   }
 }
 
-class _PresetEditorDialog extends StatefulWidget {
-  const _PresetEditorDialog({required this.title, required this.initialValue});
+class _PresetEditorPage extends StatefulWidget {
+  const _PresetEditorPage({required this.title, required this.initialValue});
 
   final String title;
   final StoredPresetConfig initialValue;
 
   @override
-  State<_PresetEditorDialog> createState() => _PresetEditorDialogState();
+  State<_PresetEditorPage> createState() => _PresetEditorPageState();
 }
 
-class _PresetEditorDialogState extends State<_PresetEditorDialog> {
+class _PresetEditorPageState extends State<_PresetEditorPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _mainPromptController;
@@ -286,184 +233,180 @@ class _PresetEditorDialogState extends State<_PresetEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 560,
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          TextButton(onPressed: _submit, child: const Text('保存')),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: SafeArea(
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: '名称'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _descriptionController,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(labelText: '描述'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _mainPromptController,
-                minLines: 5,
-                maxLines: 10,
-                decoration: const InputDecoration(labelText: 'Main Prompt'),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _temperatureController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: GlassPanelCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(labelText: '名称'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _descriptionController,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(labelText: '描述'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _mainPromptController,
+                      minLines: 5,
+                      maxLines: 10,
                       decoration: const InputDecoration(
-                        labelText: 'Temperature',
+                        labelText: 'Main Prompt',
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _topPController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                    const SizedBox(height: 10),
+                    _buildResponsivePair(
+                      TextField(
+                        controller: _temperatureController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Temperature',
+                        ),
                       ),
-                      decoration: const InputDecoration(labelText: 'Top P'),
+                      TextField(
+                        controller: _topPController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(labelText: 'Top P'),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _presencePenaltyController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                    const SizedBox(height: 10),
+                    _buildResponsivePair(
+                      TextField(
+                        controller: _presencePenaltyController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Presence Penalty',
+                        ),
                       ),
+                      TextField(
+                        controller: _frequencyPenaltyController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Frequency Penalty',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _maxTokensController,
+                      keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                        labelText: 'Presence Penalty',
+                        labelText: 'Max Completion Tokens',
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _frequencyPenaltyController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _stopSequencesController,
+                      minLines: 2,
+                      maxLines: 5,
                       decoration: const InputDecoration(
-                        labelText: 'Frequency Penalty',
+                        labelText: 'Stop Sequences',
+                        helperText: '每行一个停止序列',
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _maxTokensController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Max Completion Tokens',
+                    const SizedBox(height: 10),
+                    _buildResponsivePair(
+                      TextField(
+                        controller: _reasoningController,
+                        decoration: const InputDecoration(
+                          labelText: 'Reasoning Effort',
+                        ),
+                      ),
+                      TextField(
+                        controller: _verbosityController,
+                        decoration: const InputDecoration(
+                          labelText: 'Verbosity',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _submit, child: const Text('保存')),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _stopSequencesController,
-                minLines: 2,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Stop Sequences',
-                  helperText: '每行一个停止序列',
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _reasoningController,
-                      decoration: const InputDecoration(
-                        labelText: 'Reasoning Effort',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _verbosityController,
-                      decoration: const InputDecoration(labelText: 'Verbosity'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final name = _nameController.text.trim();
-            if (name.isEmpty) {
-              return;
-            }
-            Navigator.of(context).pop(
-              widget.initialValue.copyWith(
-                name: name,
-                description: _normalize(_descriptionController.text),
-                clearDescription:
-                    _normalize(_descriptionController.text) == null,
-                mainPrompt: _mainPromptController.text.trim(),
-                temperature: _tryParseDouble(_temperatureController.text),
-                clearTemperature: _temperatureController.text.trim().isEmpty,
-                topP: _tryParseDouble(_topPController.text),
-                clearTopP: _topPController.text.trim().isEmpty,
-                presencePenalty: _tryParseDouble(
-                  _presencePenaltyController.text,
-                ),
-                clearPresencePenalty: _presencePenaltyController.text
-                    .trim()
-                    .isEmpty,
-                frequencyPenalty: _tryParseDouble(
-                  _frequencyPenaltyController.text,
-                ),
-                clearFrequencyPenalty: _frequencyPenaltyController.text
-                    .trim()
-                    .isEmpty,
-                maxCompletionTokens: int.tryParse(
-                  _maxTokensController.text.trim(),
-                ),
-                clearMaxCompletionTokens: _maxTokensController.text
-                    .trim()
-                    .isEmpty,
-                stopSequences: _stopSequencesController.text
-                    .split('\n')
-                    .map((item) => item.trim())
-                    .where((item) => item.isNotEmpty)
-                    .toList(growable: false),
-                reasoningEffort: _normalize(_reasoningController.text),
-                clearReasoningEffort:
-                    _normalize(_reasoningController.text) == null,
-                verbosity: _normalize(_verbosityController.text),
-                clearVerbosity: _normalize(_verbosityController.text) == null,
-              ),
-            );
-          },
-          child: const Text('保存'),
-        ),
-      ],
+    );
+  }
+
+  Widget _buildResponsivePair(Widget left, Widget right) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 560) {
+          return Column(children: [left, const SizedBox(height: 10), right]);
+        }
+        return Row(
+          children: [
+            Expanded(child: left),
+            const SizedBox(width: 10),
+            Expanded(child: right),
+          ],
+        );
+      },
+    );
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('名称不能为空')));
+      return;
+    }
+    Navigator.of(context).pop(
+      widget.initialValue.copyWith(
+        name: name,
+        description: _normalize(_descriptionController.text),
+        clearDescription: _normalize(_descriptionController.text) == null,
+        mainPrompt: _mainPromptController.text.trim(),
+        temperature: _tryParseDouble(_temperatureController.text),
+        clearTemperature: _temperatureController.text.trim().isEmpty,
+        topP: _tryParseDouble(_topPController.text),
+        clearTopP: _topPController.text.trim().isEmpty,
+        presencePenalty: _tryParseDouble(_presencePenaltyController.text),
+        clearPresencePenalty: _presencePenaltyController.text.trim().isEmpty,
+        frequencyPenalty: _tryParseDouble(_frequencyPenaltyController.text),
+        clearFrequencyPenalty: _frequencyPenaltyController.text.trim().isEmpty,
+        maxCompletionTokens: int.tryParse(_maxTokensController.text.trim()),
+        clearMaxCompletionTokens: _maxTokensController.text.trim().isEmpty,
+        stopSequences: _stopSequencesController.text
+            .split('\n')
+            .map((item) => item.trim())
+            .where((item) => item.isNotEmpty)
+            .toList(growable: false),
+        reasoningEffort: _normalize(_reasoningController.text),
+        clearReasoningEffort: _normalize(_reasoningController.text) == null,
+        verbosity: _normalize(_verbosityController.text),
+        clearVerbosity: _normalize(_verbosityController.text) == null,
+      ),
     );
   }
 
