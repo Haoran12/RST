@@ -6,7 +6,7 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `apply_status_side_effects`, `copy_dir_recursive`, `legacy_workspace_root`, `migrate_workspace_if_needed`, `mutate_message`, `normalize_optional`, `now_rfc3339`, `read_request_log_file`, `read_session_file`, `reconcile_inflight_state`, `request_log_file_path`, `request_log_paths`, `request_logs_dir`, `session_file_path`, `session_paths`, `sessions_dir`, `touch_session`, `validate_mode_binding`, `validate_session_name`, `workspace_root`, `write_request_log_file`, `write_session_file`
+// These functions are ignored because they are not marked as `pub`: `apply_status_side_effects`, `copy_dir_recursive`, `legacy_workspace_root`, `migrate_workspace_if_needed`, `mutate_message`, `next_floor_no`, `normalize_optional`, `now_rfc3339`, `read_request_log_file`, `read_session_file`, `reconcile_inflight_state`, `reconcile_message_floors`, `request_log_file_path`, `request_log_paths`, `request_logs_dir`, `role_has_floor`, `session_file_path`, `session_paths`, `sessions_dir`, `touch_session`, `validate_mode_binding`, `validate_session_name`, `workspace_root`, `write_request_log_file`, `write_session_file`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SessionFile`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -296,6 +296,7 @@ class MessageRecord {
   final String messageId;
   final String sessionId;
   final MessageRole role;
+  final PlatformInt64? floorNo;
   final String content;
   final bool visible;
   final MessageStatus status;
@@ -307,6 +308,7 @@ class MessageRecord {
     required this.messageId,
     required this.sessionId,
     required this.role,
+    this.floorNo,
     required this.content,
     required this.visible,
     required this.status,
@@ -320,6 +322,7 @@ class MessageRecord {
       messageId.hashCode ^
       sessionId.hashCode ^
       role.hashCode ^
+      floorNo.hashCode ^
       content.hashCode ^
       visible.hashCode ^
       status.hashCode ^
@@ -335,6 +338,7 @@ class MessageRecord {
           messageId == other.messageId &&
           sessionId == other.sessionId &&
           role == other.role &&
+          floorNo == other.floorNo &&
           content == other.content &&
           visible == other.visible &&
           status == other.status &&

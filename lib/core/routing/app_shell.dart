@@ -81,12 +81,36 @@ class AppShell extends ConsumerWidget {
     for (var i = 0; i < _items.length; i++) _items[i].tab: i,
   };
 
+  static final _currentSessionNameProvider = FutureProvider<String>((
+    ref,
+  ) async {
+    ref.watch(workspaceReloadTickProvider);
+    final sessionService = ref.watch(sessionServiceProvider);
+    final sessions = await sessionService.listSessions();
+    if (sessions.isEmpty) {
+      return '暂无会话';
+    }
+
+    final currentSessionId = ref.watch(currentSessionIdProvider);
+    if (currentSessionId == null || currentSessionId.isEmpty) {
+      return sessions.first.sessionName;
+    }
+
+    for (final session in sessions) {
+      if (session.sessionId == currentSessionId) {
+        return session.sessionName;
+      }
+    }
+    return sessions.first.sessionName;
+  });
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTab = ref.watch(appTabProvider);
     final currentIndex = _tabToIndex[currentTab] ?? 0;
 
     return AppScaffold(
+      headerCenter: const _CurrentSessionHeaderTitle(),
       headerTrailing: const _SessionQuickSettingsTrigger(),
       drawer: Drawer(
         backgroundColor: AppColors.backgroundElevated,
@@ -138,6 +162,110 @@ class AppShell extends ConsumerWidget {
       child: KeyedSubtree(
         key: ValueKey(_items[currentIndex].tab),
         child: _items[currentIndex].page,
+      ),
+    );
+  }
+}
+
+class _CurrentSessionHeaderTitle extends ConsumerWidget {
+  const _CurrentSessionHeaderTitle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentTab = ref.watch(appTabProvider);
+    final status = currentTab == AppTab.chat
+        ? ref.watch(chatTopStatusProvider)
+        : ChatTopStatus.calm;
+    final sessionNameAsync = ref.watch(AppShell._currentSessionNameProvider);
+    final sessionName = sessionNameAsync.when(
+      data: (value) => value,
+      loading: () => '会话加载中',
+      error: (error, stackTrace) => '会话加载失败',
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              sessionName,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: AppColors.textStrong,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _TopStatusIndicator(status: status),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopStatusIndicator extends StatelessWidget {
+  const _TopStatusIndicator({required this.status});
+
+  final ChatTopStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (tooltip, borderColor, backgroundColor) = switch (status) {
+      ChatTopStatus.calm => ('平静', AppColors.success, AppColors.surfaceOverlay),
+      ChatTopStatus.waiting => (
+        '等待响应',
+        AppColors.accentSecondary,
+        AppColors.surfaceOverlay,
+      ),
+      ChatTopStatus.error => (
+        '程序异常',
+        AppColors.error,
+        AppColors.surfaceOverlay,
+      ),
+    };
+
+    return Tooltip(
+      message: tooltip,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 24,
+        height: 24,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: 1.1),
+        ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: switch (status) {
+            ChatTopStatus.calm => const Icon(
+              Icons.check_rounded,
+              key: ValueKey<String>('top-calm'),
+              size: 14,
+              color: AppColors.success,
+            ),
+            ChatTopStatus.waiting => const SizedBox(
+              key: ValueKey<String>('top-waiting'),
+              width: 11,
+              height: 11,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.accentSecondary,
+              ),
+            ),
+            ChatTopStatus.error => const Icon(
+              Icons.error_outline_rounded,
+              key: ValueKey<String>('top-error'),
+              size: 14,
+              color: AppColors.error,
+            ),
+          },
+        ),
       ),
     );
   }

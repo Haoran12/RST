@@ -10,6 +10,8 @@ enum AppTab {
   log,
 }
 
+enum ChatTopStatus { calm, waiting, error }
+
 enum ManagedOptionType { worldBook, preset, apiConfig, appearance }
 
 enum ManagedFieldType {
@@ -202,6 +204,9 @@ class ManagedOption {
 final appTabProvider = StateProvider<AppTab>((_) => AppTab.chat);
 final currentSessionIdProvider = StateProvider<String?>((_) => null);
 final workspaceReloadTickProvider = StateProvider<int>((_) => 0);
+final chatTopStatusProvider = StateProvider<ChatTopStatus>(
+  (_) => ChatTopStatus.calm,
+);
 
 final worldBookOptionsProvider = StateProvider<List<ManagedOption>>(
   (_) => <ManagedOption>[
@@ -675,7 +680,7 @@ List<ManagedOptionSection> _buildAppearanceSections() {
     ),
     ManagedOptionSection(
       title: 'Markdown Styles',
-      description: '配置段落、标题、斜体和引号文字颜色。',
+      description: '配置段落、标题、斜体、粗体、引号文字颜色与气泡透明度。',
       fields: <ManagedOptionField>[
         ManagedOptionField(
           key: 'markdown_paragraph_color',
@@ -699,11 +704,27 @@ List<ManagedOptionSection> _buildAppearanceSections() {
           choices: markdownColors,
         ),
         ManagedOptionField(
+          key: 'markdown_bold_color',
+          label: 'Bold Color',
+          type: ManagedFieldType.color,
+          value: '#F5F5F5',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
           key: 'markdown_quoted_color',
           label: 'Quoted Text Color',
           type: ManagedFieldType.color,
           value: '#FBBF24',
           choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'message_bubble_opacity',
+          label: 'Bubble Opacity',
+          type: ManagedFieldType.decimal,
+          value: 1.0,
+          min: 0.35,
+          max: 1.0,
+          step: 0.05,
         ),
       ],
     ),

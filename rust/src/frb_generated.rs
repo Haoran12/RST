@@ -874,6 +874,7 @@ impl SseDecode for crate::frb_api::MessageRecord {
         let mut var_messageId = <String>::sse_decode(deserializer);
         let mut var_sessionId = <String>::sse_decode(deserializer);
         let mut var_role = <crate::frb_api::MessageRole>::sse_decode(deserializer);
+        let mut var_floorNo = <Option<i64>>::sse_decode(deserializer);
         let mut var_content = <String>::sse_decode(deserializer);
         let mut var_visible = <bool>::sse_decode(deserializer);
         let mut var_status = <crate::frb_api::MessageStatus>::sse_decode(deserializer);
@@ -884,6 +885,7 @@ impl SseDecode for crate::frb_api::MessageRecord {
             message_id: var_messageId,
             session_id: var_sessionId,
             role: var_role,
+            floor_no: var_floorNo,
             content: var_content,
             visible: var_visible,
             status: var_status,
@@ -1342,6 +1344,7 @@ impl flutter_rust_bridge::IntoDart for crate::frb_api::MessageRecord {
             self.message_id.into_into_dart().into_dart(),
             self.session_id.into_into_dart().into_dart(),
             self.role.into_into_dart().into_dart(),
+            self.floor_no.into_into_dart().into_dart(),
             self.content.into_into_dart().into_dart(),
             self.visible.into_into_dart().into_dart(),
             self.status.into_into_dart().into_dart(),
@@ -1753,6 +1756,7 @@ impl SseEncode for crate::frb_api::MessageRecord {
         <String>::sse_encode(self.message_id, serializer);
         <String>::sse_encode(self.session_id, serializer);
         <crate::frb_api::MessageRole>::sse_encode(self.role, serializer);
+        <Option<i64>>::sse_encode(self.floor_no, serializer);
         <String>::sse_encode(self.content, serializer);
         <bool>::sse_encode(self.visible, serializer);
         <crate::frb_api::MessageStatus>::sse_encode(self.status, serializer);

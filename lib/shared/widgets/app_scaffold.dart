@@ -7,11 +7,13 @@ class AppScaffold extends StatelessWidget {
     super.key,
     required this.child,
     required this.drawer,
+    this.headerCenter,
     this.headerTrailing,
   });
 
   final Widget child;
   final Widget drawer;
+  final Widget? headerCenter;
   final Widget? headerTrailing;
 
   @override
@@ -34,8 +36,12 @@ class AppScaffold extends StatelessWidget {
                         icon: const Icon(Icons.menu_rounded),
                       ),
                     ),
-                    const Spacer(),
+                    if (headerCenter != null)
+                      Expanded(child: headerCenter!)
+                    else
+                      const Spacer(),
                     if (headerTrailing != null) ...[
+                      const SizedBox(width: 8),
                       headerTrailing!,
                     ],
                   ],

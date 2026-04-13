@@ -122,6 +122,10 @@ class ChatService {
   final Map<String, _ActiveStreamState> _activeStreams =
       <String, _ActiveStreamState>{};
 
+  Future<List<frb.MessageRecord>> _loadLatestMessages(String sessionId) {
+    return _rustBridge.listMessages(sessionId: sessionId);
+  }
+
   Future<SendRoundResult> sendRound(SendRoundRequest request) async {
     final sessionId = request.sessionId.trim();
     final userInput = request.userInput.trim();
@@ -129,9 +133,7 @@ class ChatService {
       throw ArgumentError.value(request.sessionId, 'sessionId');
     }
 
-    final existingMessages = await _rustBridge.listMessages(
-      sessionId: sessionId,
-    );
+    final existingMessages = await _loadLatestMessages(sessionId);
     final resolvedInput = _resolveUserInput(
       rawUserInput: userInput,
       visibleMessages: existingMessages,
@@ -152,10 +154,12 @@ class ChatService {
       );
       request.onMessageUpdated?.call(userMessage);
       excludedHistoryMessageIds.add(userMessage.messageId);
-      promptSourceMessages = await _rustBridge.listMessages(
-        sessionId: sessionId,
-      );
+      promptSourceMessages = await _loadLatestMessages(sessionId);
     }
+
+    // Always refresh from storage before prompt assembly so visibility/content
+    // changes made just before sending are reflected in this round.
+    promptSourceMessages = await _loadLatestMessages(sessionId);
 
     final promptResult = await _buildPromptMessagesForSession(
       presetConfig: request.presetConfig,
@@ -218,7 +222,7 @@ class ChatService {
       throw ArgumentError.value(request.sessionId, 'sessionId');
     }
 
-    final allMessages = await _rustBridge.listMessages(sessionId: sessionId);
+    final allMessages = await _loadLatestMessages(sessionId);
     final retryPair = _resolveRetryPair(
       allMessages: allMessages,
       explicitAssistantMessageId: request.assistantMessageId,
@@ -234,9 +238,10 @@ class ChatService {
     );
     request.onMessageUpdated?.call(retryPair.assistant);
 
+    final latestMessages = await _loadLatestMessages(sessionId);
     final promptResult = _buildPromptMessagesForRetry(
       presetConfig: request.presetConfig,
-      allMessages: allMessages,
+      allMessages: latestMessages,
       userMessageId: retryPair.user.messageId,
       assistantMessageId: retryPair.assistant.messageId,
       maxContextMessages: request.maxContextMessages,

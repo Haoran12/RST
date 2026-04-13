@@ -125,6 +125,8 @@ pub struct MessageRecord {
     pub message_id: String,
     pub session_id: String,
     pub role: MessageRole,
+    #[serde(default)]
+    pub floor_no: Option<i64>,
     pub content: String,
     pub visible: bool,
     pub status: MessageStatus,
@@ -360,7 +362,14 @@ pub fn load_session(session_id: String) -> Result<LoadSessionResult> {
 
     let mut file = read_session_file(&path)?;
 
+    let mut changed = false;
     if reconcile_inflight_state(&mut file) {
+        changed = true;
+    }
+    if reconcile_message_floors(&mut file.messages) {
+        changed = true;
+    }
+    if changed {
         write_session_file(&path, &file)?;
     }
 
@@ -384,11 +393,13 @@ pub fn create_message(message: CreateMessageRequest) -> Result<MessageRecord> {
     }
 
     let mut file = read_session_file(&path)?;
+    let _ = reconcile_message_floors(&mut file.messages);
     let now = now_rfc3339();
     let record = MessageRecord {
         message_id: Uuid::new_v4().to_string(),
         session_id: message.session_id,
         role: message.role,
+        floor_no: next_floor_no(&file.messages, message.role),
         content: message.content,
         visible: message.visible,
         status: message.status,
@@ -515,6 +526,7 @@ pub fn delete_messages(
             deleted_message_ids: deleted,
         });
     }
+    let _ = reconcile_message_floors(&mut file.messages);
 
     let now = now_rfc3339();
     if let Some(active_id) = file.runtime.active_message_id.as_ref() {
@@ -543,7 +555,10 @@ pub fn list_messages(session_id: String, limit: Option<u32>) -> Result<Vec<Messa
         return Err(anyhow!("not_found: session {} does not exist", session_id));
     }
 
-    let file = read_session_file(&path)?;
+    let mut file = read_session_file(&path)?;
+    if reconcile_message_floors(&mut file.messages) {
+        write_session_file(&path, &file)?;
+    }
     let mut messages = file.messages;
 
     if let Some(limit) = limit {
@@ -843,6 +858,46 @@ fn apply_status_side_effects(
     }
 }
 
+fn role_has_floor(role: MessageRole) -> bool {
+    matches!(role, MessageRole::User | MessageRole::Assistant)
+}
+
+fn next_floor_no(messages: &[MessageRecord], role: MessageRole) -> Option<i64> {
+    if !role_has_floor(role) {
+        return None;
+    }
+
+    let mut floor = 0_i64;
+    for message in messages {
+        if role_has_floor(message.role) {
+            floor += 1;
+        }
+    }
+    Some(floor)
+}
+
+fn reconcile_message_floors(messages: &mut [MessageRecord]) -> bool {
+    let mut changed = false;
+    let mut floor = 0_i64;
+
+    for message in messages {
+        let next_floor = if role_has_floor(message.role) {
+            let current = floor;
+            floor += 1;
+            Some(current)
+        } else {
+            None
+        };
+
+        if message.floor_no != next_floor {
+            message.floor_no = next_floor;
+            changed = true;
+        }
+    }
+
+    changed
+}
+
 fn mutate_message<F>(message_id: &str, mutator: F) -> Result<MessageRecord>
 where
     F: Fn(&mut SessionFile, &mut MessageRecord) -> Result<MessageRecord>,
@@ -1076,6 +1131,70 @@ mod tests {
             loaded_after_complete.runtime.streaming_status,
             StreamingStatus::Idle
         );
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
+    }
+
+    #[test]
+    fn message_mutations_persist_to_session_file() {
+        let _guard = test_lock();
+        let workspace_dir = std::env::temp_dir().join(format!("rst-frb-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let created = create_session(CreateSessionRequest {
+            session_name: "Persist Session".to_string(),
+            mode: SessionMode::Rst,
+            main_api_config_id: "api-default".to_string(),
+            preset_id: "preset-default".to_string(),
+            st_world_book_id: None,
+        })
+        .expect("create_session should succeed");
+
+        let user = create_message(CreateMessageRequest {
+            session_id: created.session_id.clone(),
+            role: MessageRole::User,
+            content: "user-content".to_string(),
+            visible: true,
+            status: MessageStatus::Completed,
+        })
+        .expect("create user message should succeed");
+
+        let assistant = create_message(CreateMessageRequest {
+            session_id: created.session_id.clone(),
+            role: MessageRole::Assistant,
+            content: "assistant-content".to_string(),
+            visible: true,
+            status: MessageStatus::Completed,
+        })
+        .expect("create assistant message should succeed");
+
+        update_message_content(
+            assistant.message_id.clone(),
+            "assistant-updated".to_string(),
+        )
+        .expect("update_message_content should succeed");
+        set_message_visibility(assistant.message_id.clone(), false)
+            .expect("set_message_visibility should succeed");
+        delete_messages(created.session_id.clone(), vec![user.message_id.clone()])
+            .expect("delete_messages should succeed");
+
+        let path = session_file_path(&created.session_id).expect("session_file_path should work");
+        let file = read_session_file(&path).expect("session file should be readable");
+        assert_eq!(file.messages.len(), 1);
+
+        let persisted = &file.messages[0];
+        assert_eq!(persisted.message_id, assistant.message_id);
+        assert_eq!(persisted.content, "assistant-updated");
+        assert!(!persisted.visible);
+        assert_eq!(persisted.floor_no, Some(0));
+
+        let listed = list_messages(created.session_id.clone(), None).expect("list_messages works");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].message_id, assistant.message_id);
+        assert!(!listed[0].visible);
+        assert_eq!(listed[0].content, "assistant-updated");
 
         let _ = std::fs::remove_dir_all(workspace_dir);
     }

@@ -14,11 +14,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/error_state_view.dart';
 import '../../../shared/widgets/floating_composer.dart';
-import '../../../shared/widgets/glass_panel_card.dart';
 import '../../../shared/widgets/message_bubble.dart';
-import '../../../shared/widgets/mode_chip.dart';
-import '../../../shared/widgets/status_badge.dart';
-import '../../../shared/widgets/streaming_indicator.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -35,7 +31,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   StartupChatRuntime? _runtime;
   frb.SessionConfig? _session;
   List<frb.MessageRecord> _messages = const <frb.MessageRecord>[];
-  RoundTripMetadata? _lastRoundMetadata;
   String? _errorText;
   bool _isBootstrapping = true;
   bool _isSending = false;
@@ -43,15 +38,35 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void initState() {
     super.initState();
+    _syncTopStatus();
     _bootstrap();
   }
 
   @override
   void dispose() {
+    ref.read(chatTopStatusProvider.notifier).state = ChatTopStatus.calm;
     _controller.dispose();
     _composerFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  ChatTopStatus _resolveTopStatus() {
+    if (_errorText != null) {
+      return ChatTopStatus.error;
+    }
+    if (_isSending) {
+      return ChatTopStatus.waiting;
+    }
+    return ChatTopStatus.calm;
+  }
+
+  void _syncTopStatus() {
+    final next = _resolveTopStatus();
+    final notifier = ref.read(chatTopStatusProvider.notifier);
+    if (notifier.state != next) {
+      notifier.state = next;
+    }
   }
 
   Future<void> _bootstrap({String? preferredSessionId}) async {
@@ -72,9 +87,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           _session = null;
           _isSending = false;
           _messages = const <frb.MessageRecord>[];
-          _lastRoundMetadata = null;
         }
       });
+      _syncTopStatus();
     }
 
     try {
@@ -134,6 +149,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _isBootstrapping = false;
         _isSending = false;
       });
+      _syncTopStatus();
       _scrollToBottom(force: true);
     } catch (error) {
       if (!mounted) {
@@ -144,6 +160,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _isBootstrapping = false;
         _isSending = false;
       });
+      _syncTopStatus();
     }
   }
 
@@ -194,6 +211,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       _isSending = true;
       _errorText = null;
     });
+    _syncTopStatus();
 
     try {
       final runtime = await ref
@@ -225,14 +243,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               sessionLores:
                   ref.read(sessionRstDataProvider)[roundSessionId]?.lores ??
                   runtime.defaultLores,
-              onRoundPrepared: (metadata) {
-                if (!mounted || _session?.sessionId != roundSessionId) {
-                  return;
-                }
-                setState(() {
-                  _lastRoundMetadata = metadata;
-                });
-              },
               onMessageUpdated: (message) {
                 if (!mounted || _session?.sessionId != roundSessionId) {
                   return;
@@ -251,11 +261,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       setState(() {
         _errorText = error.toString();
       });
+      _syncTopStatus();
     } finally {
       if (mounted && _session?.sessionId == roundSessionId) {
         setState(() {
           _isSending = false;
         });
+        _syncTopStatus();
         await _reloadMessages(sessionId: roundSessionId);
       }
     }
@@ -343,6 +355,30 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
   }
 
+  Future<void> _handleToggleVisibility(frb.MessageRecord message) async {
+    try {
+      final updated = await ref
+          .read(rustBridgeProvider)
+          .setMessageVisibility(
+            messageId: message.messageId,
+            visible: !message.visible,
+          );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _upsertMessage(updated);
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('设置可见性失败: $error')));
+    }
+  }
+
   void _handleRewriteMessage(frb.MessageRecord message) {
     final source = message.content.trim();
     if (source.isEmpty) {
@@ -393,8 +429,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
 
     final session = _session;
-    final runtime = _runtime;
-    if (session == null || runtime == null) {
+    if (session == null || _runtime == null) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
         child: EmptyStateView(
@@ -408,11 +443,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
     }
 
-    final modeLabel = session.mode == frb.SessionMode.rst ? 'RST' : 'ST';
-    final statusLabel = _isSending ? 'receiving' : 'idle';
-    final statusColor = _isSending
-        ? AppColors.accentSecondary
-        : AppColors.success;
+    final bubbleAppearance = _resolveBubbleAppearance(session.sessionId);
+    final floorByMessageId = _buildFloorByMessageId(_messages);
 
     return Column(
       children: [
@@ -421,48 +453,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
             child: Column(
               children: [
-                GlassPanelCard(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final trailing = _isSending
-                          ? const StreamingIndicator(label: '接收响应中...')
-                          : const Text(
-                              '等待发送',
-                              style: TextStyle(
-                                color: AppColors.textMuted,
-                                fontSize: 12,
-                              ),
-                            );
-                      if (constraints.maxWidth < 460) {
-                        return Wrap(
-                          spacing: 10,
-                          runSpacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            ModeChip(mode: modeLabel),
-                            StatusBadge(label: statusLabel, color: statusColor),
-                            trailing,
-                          ],
-                        );
-                      }
-                      return Row(
-                        children: [
-                          ModeChip(mode: modeLabel),
-                          const SizedBox(width: 10),
-                          StatusBadge(label: statusLabel, color: statusColor),
-                          const Spacer(),
-                          trailing,
-                        ],
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _RuntimeMetaCard(
-                  session: session,
-                  runtime: runtime,
-                  roundMetadata: _lastRoundMetadata,
-                ),
                 if (_errorText != null) ...[
                   const SizedBox(height: 10),
                   ErrorStateView(
@@ -496,6 +486,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 message.status != frb.MessageStatus.streaming;
                             return _MessageWithMetadata(
                               message: message,
+                              floorNo: floorByMessageId[message.messageId],
+                              appearance: bubbleAppearance,
+                              onToggleVisibility: _handleToggleVisibility,
                               onDelete: canDelete ? _handleDeleteMessage : null,
                               onCopy: hasContent ? _handleCopyMessage : null,
                               onRewrite: hasContent
@@ -518,78 +511,142 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ],
     );
   }
-}
 
-class _RuntimeMetaCard extends StatelessWidget {
-  const _RuntimeMetaCard({
-    required this.session,
-    required this.runtime,
-    required this.roundMetadata,
-  });
+  MessageBubbleAppearance _resolveBubbleAppearance(String sessionId) {
+    final appearanceBySession = ref.watch(sessionAppearanceProvider);
+    final appearanceOptions = ref.watch(appearanceOptionsProvider);
+    final selectedAppearanceId = appearanceBySession[sessionId];
 
-  final frb.SessionConfig session;
-  final StartupChatRuntime runtime;
-  final RoundTripMetadata? roundMetadata;
+    ManagedOption? selected;
+    if (selectedAppearanceId != null && selectedAppearanceId.isNotEmpty) {
+      for (final option in appearanceOptions) {
+        if (option.id == selectedAppearanceId) {
+          selected = option;
+          break;
+        }
+      }
+    }
+    selected ??= appearanceOptions.isNotEmpty ? appearanceOptions.first : null;
 
-  @override
-  Widget build(BuildContext context) {
-    final provider = runtime.apiConfig.providerType == ProviderType.openai
-        ? 'openai'
-        : 'openai_compatible';
+    final fontScale = _readDoubleField(
+      selected,
+      'font_scale',
+      1.0,
+    ).clamp(0.8, 1.6);
+    final bubbleOpacity = _readDoubleField(
+      selected,
+      'message_bubble_opacity',
+      1.0,
+    ).clamp(0.35, 1.0);
 
-    return GlassPanelCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Session: ${session.sessionName} (${session.sessionId})'),
-          const SizedBox(height: 4),
-          Text('API: ${runtime.apiConfig.name} · $provider'),
-          const SizedBox(height: 4),
-          Text('Model: ${runtime.apiConfig.defaultModel}'),
-          const SizedBox(height: 4),
-          Text('Preset: ${runtime.presetConfig.name}'),
-          if (roundMetadata != null) ...[
-            const SizedBox(height: 8),
-            const Divider(height: 1, color: AppColors.borderSubtle),
-            const SizedBox(height: 8),
-            Text(
-              'Prompt entries: ${roundMetadata!.prompt.entryOrder.join(' -> ')}',
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'user_input: "${roundMetadata!.prompt.userInput}" (${roundMetadata!.prompt.userInputSource})',
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'request_url: ${roundMetadata!.requestUrl}',
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'request_body: ${roundMetadata!.requestBodyPreview}',
-              maxLines: 5,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-            ),
-          ],
-        ],
+    return MessageBubbleAppearance(
+      paragraphColor: _readColorField(
+        selected,
+        'markdown_paragraph_color',
+        AppColors.textStrong,
       ),
+      headingColor: _readColorField(
+        selected,
+        'markdown_heading_color',
+        AppColors.textStrong,
+      ),
+      italicColor: _readColorField(
+        selected,
+        'markdown_italic_color',
+        AppColors.textSecondary,
+      ),
+      boldColor: _readColorField(
+        selected,
+        'markdown_bold_color',
+        AppColors.textStrong,
+      ),
+      quotedColor: _readColorField(
+        selected,
+        'markdown_quoted_color',
+        AppColors.warning,
+      ),
+      fontScale: fontScale,
+      bubbleOpacity: bubbleOpacity,
     );
+  }
+
+  Map<String, int> _buildFloorByMessageId(List<frb.MessageRecord> messages) {
+    final floors = <String, int>{};
+    var fallbackFloor = 0;
+    for (final message in messages) {
+      if (message.role != frb.MessageRole.user &&
+          message.role != frb.MessageRole.assistant) {
+        continue;
+      }
+      final persistedFloor = message.floorNo?.toInt();
+      if (persistedFloor != null) {
+        floors[message.messageId] = persistedFloor;
+        fallbackFloor = persistedFloor + 1;
+      } else {
+        floors[message.messageId] = fallbackFloor;
+        fallbackFloor += 1;
+      }
+    }
+    return floors;
+  }
+
+  double _readDoubleField(ManagedOption? option, String key, double fallback) {
+    if (option == null) {
+      return fallback;
+    }
+    final value = option.fieldValue(key);
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value) ?? fallback;
+    }
+    return fallback;
+  }
+
+  Color _readColorField(ManagedOption? option, String key, Color fallback) {
+    if (option == null) {
+      return fallback;
+    }
+    final value = option.fieldValue(key);
+    if (value is! String) {
+      return fallback;
+    }
+    return _parseHexColor(value, fallback);
+  }
+
+  Color _parseHexColor(String raw, Color fallback) {
+    final normalized = raw.trim();
+    if (normalized.isEmpty) {
+      return fallback;
+    }
+    var hex = normalized.startsWith('#') ? normalized.substring(1) : normalized;
+    if (hex.length == 6) {
+      hex = 'FF$hex';
+    }
+    final parsed = int.tryParse(hex, radix: 16);
+    if (parsed == null) {
+      return fallback;
+    }
+    return Color(parsed);
   }
 }
 
 class _MessageWithMetadata extends StatelessWidget {
   const _MessageWithMetadata({
     required this.message,
+    required this.floorNo,
+    required this.appearance,
+    required this.onToggleVisibility,
     this.onDelete,
     this.onCopy,
     this.onRewrite,
   });
 
   final frb.MessageRecord message;
+  final int? floorNo;
+  final MessageBubbleAppearance appearance;
+  final void Function(frb.MessageRecord message) onToggleVisibility;
   final void Function(frb.MessageRecord message)? onDelete;
   final void Function(frb.MessageRecord message)? onCopy;
   final void Function(frb.MessageRecord message)? onRewrite;
@@ -605,9 +662,7 @@ class _MessageWithMetadata extends StatelessWidget {
         ? CrossAxisAlignment.end
         : CrossAxisAlignment.start;
     final timestamp = _formatTime(message.updatedAt);
-    final shortId = message.messageId.length >= 8
-        ? message.messageId.substring(0, 8)
-        : message.messageId;
+    final headerMeta = floorNo == null ? timestamp : '$floorNo# · $timestamp';
 
     return Column(
       crossAxisAlignment: align,
@@ -615,18 +670,13 @@ class _MessageWithMetadata extends StatelessWidget {
         MessageBubble(
           role: role,
           content: message.content,
+          headerMeta: headerMeta,
+          appearance: appearance,
           hidden: !message.visible,
+          onToggleVisibility: () => onToggleVisibility(message),
           onDelete: onDelete == null ? null : () => onDelete!(message),
           onCopy: onCopy == null ? null : () => onCopy!(message),
           onRewrite: onRewrite == null ? null : () => onRewrite!(message),
-        ),
-        const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          child: Text(
-            'meta: $shortId · ${message.status.name} · $timestamp',
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
         ),
         if (message.errorMessage != null && message.errorMessage!.isNotEmpty)
           Padding(

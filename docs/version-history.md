@@ -1,5 +1,17 @@
 # Version History
 
+## 0.1.0+9 (2026-04-13)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+9-release.apk`
+- Notes: Composer now follows Tavo-style focused quick bar with fullscreen entry and symbol shortcuts for `()`, `""`, `*`, and `{}`.
+
+## 0.1.0+8 (2026-04-13)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+8-release.apk`
+- Notes: Chat UI now applies appearance-configured Markdown rendering (heading/paragraph/italic/bold/quoted colors, font scale, bubble opacity), shows unified User/Assistant floor numbers from `0#`, and persists floor number metadata in session message records.
+
 ## 0.1.0+7 (2026-04-13)
 
 - Build type: Android APK release

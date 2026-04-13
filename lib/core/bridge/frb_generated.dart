@@ -881,18 +881,19 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
   MessageRecord dco_decode_message_record(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return MessageRecord(
       messageId: dco_decode_String(arr[0]),
       sessionId: dco_decode_String(arr[1]),
       role: dco_decode_message_role(arr[2]),
-      content: dco_decode_String(arr[3]),
-      visible: dco_decode_bool(arr[4]),
-      status: dco_decode_message_status(arr[5]),
-      errorMessage: dco_decode_opt_String(arr[6]),
-      createdAt: dco_decode_String(arr[7]),
-      updatedAt: dco_decode_String(arr[8]),
+      floorNo: dco_decode_opt_box_autoadd_i_64(arr[3]),
+      content: dco_decode_String(arr[4]),
+      visible: dco_decode_bool(arr[5]),
+      status: dco_decode_message_status(arr[6]),
+      errorMessage: dco_decode_opt_String(arr[7]),
+      createdAt: dco_decode_String(arr[8]),
+      updatedAt: dco_decode_String(arr[9]),
     );
   }
 
@@ -1319,6 +1320,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
     var var_messageId = sse_decode_String(deserializer);
     var var_sessionId = sse_decode_String(deserializer);
     var var_role = sse_decode_message_role(deserializer);
+    var var_floorNo = sse_decode_opt_box_autoadd_i_64(deserializer);
     var var_content = sse_decode_String(deserializer);
     var var_visible = sse_decode_bool(deserializer);
     var var_status = sse_decode_message_status(deserializer);
@@ -1329,6 +1331,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
       messageId: var_messageId,
       sessionId: var_sessionId,
       role: var_role,
+      floorNo: var_floorNo,
       content: var_content,
       visible: var_visible,
       status: var_status,
@@ -1801,6 +1804,7 @@ class RustCoreApiImpl extends RustCoreApiImplPlatform implements RustCoreApi {
     sse_encode_String(self.messageId, serializer);
     sse_encode_String(self.sessionId, serializer);
     sse_encode_message_role(self.role, serializer);
+    sse_encode_opt_box_autoadd_i_64(self.floorNo, serializer);
     sse_encode_String(self.content, serializer);
     sse_encode_bool(self.visible, serializer);
     sse_encode_message_status(self.status, serializer);
