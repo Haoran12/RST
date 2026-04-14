@@ -785,12 +785,16 @@ class _BasicConfigPage extends StatefulWidget {
 class _BasicConfigPageState extends State<_BasicConfigPage> {
   late final TextEditingController _nameController;
   late String _userDescription;
+  late final String _initialName;
+  late final String _initialUserDescription;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.initialName);
+    _initialName = widget.initialName;
     _userDescription = widget.initialUserDescription;
+    _initialUserDescription = widget.initialUserDescription;
   }
 
   @override
@@ -801,38 +805,62 @@ class _BasicConfigPageState extends State<_BasicConfigPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('基本配置'),
-        actions: [
-          TextButton(onPressed: _submit, child: const Text('保存')),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-        children: [
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('会话名称', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                TextField(controller: _nameController),
-              ],
+    return PopScope<_BasicConfigResult>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        final shouldClose = await _handleAttemptDismiss();
+        if (!mounted || !shouldClose) {
+          return;
+        }
+        Navigator.of(this.context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: '返回',
+            onPressed: () async {
+              final shouldClose = await _handleAttemptDismiss();
+              if (!mounted || !shouldClose) {
+                return;
+              }
+              Navigator.of(this.context).pop();
+            },
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          title: const Text('基本配置'),
+          actions: [
+            TextButton(onPressed: _submit, child: const Text('保存')),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+          children: [
+            GlassPanelCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('会话名称', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 10),
+                  TextField(controller: _nameController),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          _ActionCard(
-            title: '用户描述',
-            subtitle: _userDescription.trim().isEmpty
-                ? '点击进入设定输入框'
-                : _shortPreview(_userDescription),
-            onTap: _openUserDescriptionEditor,
-          ),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: _submit, child: const Text('保存')),
-        ],
+            const SizedBox(height: 10),
+            _ActionCard(
+              title: '用户描述',
+              subtitle: _userDescription.trim().isEmpty
+                  ? '点击进入设定输入框'
+                  : _shortPreview(_userDescription),
+              onTap: _openUserDescriptionEditor,
+            ),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: _submit, child: const Text('保存')),
+          ],
+        ),
       ),
     );
   }
@@ -877,6 +905,36 @@ class _BasicConfigPageState extends State<_BasicConfigPage> {
       _BasicConfigResult(sessionName: name, userDescription: _userDescription),
     );
   }
+
+  Future<bool> _handleAttemptDismiss() async {
+    if (!_isDirty()) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('放弃未保存的修改？'),
+        content: const Text('你已经修改了内容，现在返回会丢失本次填写。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('放弃修改'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  bool _isDirty() {
+    return _nameController.text != _initialName ||
+        _userDescription != _initialUserDescription;
+  }
 }
 
 class _WorldBookEditorResult {
@@ -914,14 +972,20 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   String? _worldBookId;
   late String _worldDescription;
   late String _characterDescription;
+  late final String? _initialWorldBookId;
+  late final String _initialWorldDescription;
+  late final String _initialCharacterDescription;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _worldBookId = widget.initialWorldBookId;
+    _initialWorldBookId = widget.initialWorldBookId;
     _worldDescription = widget.initialWorldDescription;
+    _initialWorldDescription = widget.initialWorldDescription;
     _characterDescription = widget.initialCharacterDescription;
+    _initialCharacterDescription = widget.initialCharacterDescription;
   }
 
   @override
@@ -937,102 +1001,129 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
         ? _worldBookId
         : null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('世界书'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: '世界描述'),
-            Tab(text: '人物设定'),
+    return PopScope<_WorldBookEditorResult>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        final shouldClose = await _handleAttemptDismiss();
+        if (!mounted || !shouldClose) {
+          return;
+        }
+        Navigator.of(this.context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: '返回',
+            onPressed: () async {
+              final shouldClose = await _handleAttemptDismiss();
+              if (!mounted || !shouldClose) {
+                return;
+              }
+              Navigator.of(this.context).pop();
+            },
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          title: const Text('世界书'),
+          bottom: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: '世界描述'),
+              Tab(text: '人物设定'),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: _submit, child: const Text('保存')),
+            const SizedBox(width: 4),
           ],
         ),
-        actions: [
-          TextButton(onPressed: _submit, child: const Text('保存')),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: GlassPanelCard(
-              child: DropdownButtonFormField<String?>(
-                initialValue: selected,
-                items: <DropdownMenuItem<String?>>[
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('不绑定'),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: GlassPanelCard(
+                child: DropdownButtonFormField<String?>(
+                  initialValue: selected,
+                  items: <DropdownMenuItem<String?>>[
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('不绑定'),
+                    ),
+                    ...widget.options.map(
+                      (item) => DropdownMenuItem<String?>(
+                        value: item.id,
+                        child: Text(item.label),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _worldBookId = value;
+                    });
+                  },
+                  decoration: const InputDecoration(labelText: '对应世界书'),
+                ),
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildTabContent(
+                    title: '世界描述条目占位',
+                    value: _worldDescription,
+                    onClear: () {
+                      setState(() {
+                        _worldDescription = '';
+                      });
+                    },
+                    onEdit: () => _openSettingEditor(
+                      title: '世界描述',
+                      label: '世界描述',
+                      currentValue: _worldDescription,
+                      onSaved: (value) {
+                        setState(() {
+                          _worldDescription = value;
+                        });
+                      },
+                    ),
                   ),
-                  ...widget.options.map(
-                    (item) => DropdownMenuItem<String?>(
-                      value: item.id,
-                      child: Text(item.label),
+                  _buildTabContent(
+                    title: '人物设定条目占位',
+                    value: _characterDescription,
+                    onClear: () {
+                      setState(() {
+                        _characterDescription = '';
+                      });
+                    },
+                    onEdit: () => _openSettingEditor(
+                      title: '人物设定',
+                      label: '人物设定',
+                      currentValue: _characterDescription,
+                      onSaved: (value) {
+                        setState(() {
+                          _characterDescription = value;
+                        });
+                      },
                     ),
                   ),
                 ],
-                onChanged: (value) {
-                  setState(() {
-                    _worldBookId = value;
-                  });
-                },
-                decoration: const InputDecoration(labelText: '对应世界书'),
               ),
             ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildTabContent(
-                  title: '世界描述条目占位',
-                  value: _worldDescription,
-                  onClear: () {
-                    setState(() {
-                      _worldDescription = '';
-                    });
-                  },
-                  onEdit: () => _openSettingEditor(
-                    title: '世界描述',
-                    label: '世界描述',
-                    currentValue: _worldDescription,
-                    onSaved: (value) {
-                      setState(() {
-                        _worldDescription = value;
-                      });
-                    },
-                  ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _submit,
+                  child: const Text('保存'),
                 ),
-                _buildTabContent(
-                  title: '人物设定条目占位',
-                  value: _characterDescription,
-                  onClear: () {
-                    setState(() {
-                      _characterDescription = '';
-                    });
-                  },
-                  onEdit: () => _openSettingEditor(
-                    title: '人物设定',
-                    label: '人物设定',
-                    currentValue: _characterDescription,
-                    onSaved: (value) {
-                      setState(() {
-                        _characterDescription = value;
-                      });
-                    },
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton(onPressed: _submit, child: const Text('保存')),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1109,6 +1200,37 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
       ),
     );
   }
+
+  Future<bool> _handleAttemptDismiss() async {
+    if (!_isDirty()) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('放弃未保存的修改？'),
+        content: const Text('你已经修改了内容，现在返回会丢失本次填写。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('放弃修改'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  bool _isDirty() {
+    return _worldBookId != _initialWorldBookId ||
+        _worldDescription != _initialWorldDescription ||
+        _characterDescription != _initialCharacterDescription;
+  }
 }
 
 class _AppearanceEditorResult {
@@ -1140,12 +1262,16 @@ class _AppearanceEditorPageState extends State<_AppearanceEditorPage> {
   late String _appearanceId;
   late String _backgroundPath;
   late final TextEditingController _backgroundController;
+  late final String _initialAppearanceId;
+  late final String _initialBackgroundPath;
 
   @override
   void initState() {
     super.initState();
     _appearanceId = widget.initialAppearanceId;
+    _initialAppearanceId = widget.initialAppearanceId;
     _backgroundPath = widget.initialBackgroundPath;
+    _initialBackgroundPath = widget.initialBackgroundPath;
     _backgroundController = TextEditingController(
       text: widget.initialBackgroundPath,
     );
@@ -1162,90 +1288,114 @@ class _AppearanceEditorPageState extends State<_AppearanceEditorPage> {
     final optionIds = widget.options.map((item) => item.id).toSet();
     final selected = optionIds.contains(_appearanceId) ? _appearanceId : null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('外观设置'),
-        actions: [
-          TextButton(onPressed: _submit, child: const Text('保存')),
-          const SizedBox(width: 4),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-        children: [
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('选用的主题', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: selected,
-                  items: widget.options
-                      .map(
-                        (item) => DropdownMenuItem<String>(
-                          value: item.id,
-                          child: Text(item.label),
-                        ),
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _appearanceId = value;
-                    });
-                  },
-                ),
-              ],
-            ),
+    return PopScope<_AppearanceEditorResult>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        final shouldClose = await _handleAttemptDismiss();
+        if (!mounted || !shouldClose) {
+          return;
+        }
+        Navigator.of(this.context).pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: '返回',
+            onPressed: () async {
+              final shouldClose = await _handleAttemptDismiss();
+              if (!mounted || !shouldClose) {
+                return;
+              }
+              Navigator.of(this.context).pop();
+            },
+            icon: const Icon(Icons.arrow_back_rounded),
           ),
-          const SizedBox(height: 10),
-          GlassPanelCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('背景图片', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _backgroundController,
-                  decoration: const InputDecoration(
-                    labelText: '图片路径',
-                    hintText: '未设置时使用默认背景',
+          title: const Text('外观设置'),
+          actions: [
+            TextButton(onPressed: _submit, child: const Text('保存')),
+            const SizedBox(width: 4),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+          children: [
+            GlassPanelCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('选用的主题', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: selected,
+                    items: widget.options
+                        .map(
+                          (item) => DropdownMenuItem<String>(
+                            value: item.id,
+                            child: Text(item.label),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() {
+                        _appearanceId = value;
+                      });
+                    },
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      _backgroundPath = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    PrimaryPillButton(
-                      label: '选择图片',
-                      onPressed: _pickBackgroundImage,
-                    ),
-                    SecondaryOutlineButton(
-                      label: '清空',
-                      onPressed: () {
-                        setState(() {
-                          _backgroundPath = '';
-                          _backgroundController.clear();
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: _submit, child: const Text('保存')),
-        ],
+            const SizedBox(height: 10),
+            GlassPanelCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('背景图片', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _backgroundController,
+                    decoration: const InputDecoration(
+                      labelText: '图片路径',
+                      hintText: '未设置时使用默认背景',
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _backgroundPath = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      PrimaryPillButton(
+                        label: '选择图片',
+                        onPressed: _pickBackgroundImage,
+                      ),
+                      SecondaryOutlineButton(
+                        label: '清空',
+                        onPressed: () {
+                          setState(() {
+                            _backgroundPath = '';
+                            _backgroundController.clear();
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: _submit, child: const Text('保存')),
+          ],
+        ),
       ),
     );
   }
@@ -1268,6 +1418,36 @@ class _AppearanceEditorPageState extends State<_AppearanceEditorPage> {
         backgroundImagePath: _backgroundPath.trim(),
       ),
     );
+  }
+
+  Future<bool> _handleAttemptDismiss() async {
+    if (!_isDirty()) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('放弃未保存的修改？'),
+        content: const Text('你已经修改了内容，现在返回会丢失本次填写。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('放弃修改'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  bool _isDirty() {
+    return _appearanceId != _initialAppearanceId ||
+        _backgroundPath != _initialBackgroundPath;
   }
 }
 

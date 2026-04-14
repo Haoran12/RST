@@ -430,29 +430,32 @@ class _ApiConfigEditorDialogState
                                   ),
                                 ),
                                 const SizedBox(height: 12),
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    '供应商 / 协议',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelLarge,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 10,
-                                  children: providerChoices
+                                DropdownButtonFormField<ProviderType>(
+                                  initialValue: _providerType,
+                                  isExpanded: true,
+                                  items: providerChoices
                                       .map(
-                                        (provider) => _ProviderChoiceCard(
-                                          providerType: provider,
-                                          selected: provider == _providerType,
-                                          onTap: () =>
-                                              _selectProvider(provider),
+                                        (
+                                          provider,
+                                        ) => DropdownMenuItem<ProviderType>(
+                                          value: provider,
+                                          child: Text(
+                                            '${provider.label} · ${provider.shortDescription}',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
                                       )
                                       .toList(growable: false),
+                                  onChanged: (value) {
+                                    if (value == null ||
+                                        value == _providerType) {
+                                      return;
+                                    }
+                                    _selectProvider(value);
+                                  },
+                                  decoration: const InputDecoration(
+                                    labelText: '供应商 / 协议',
+                                  ),
                                 ),
                                 const SizedBox(height: 10),
                                 _ProviderInfoBanner(
@@ -678,32 +681,6 @@ class _ApiConfigEditorDialogState
                             title: '高级项',
                             child: Column(
                               children: [
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    'Optional parameters stay omitted unless you fill them in. Required fields will use provider-specific fallbacks when needed.',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: AppColors.textSecondary,
-                                        ),
-                                  ),
-                                ),
-                                if (selectedSpec != null &&
-                                    selectedSpec.notes.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      selectedSpec.notes.first,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: AppColors.textSecondary,
-                                          ),
-                                    ),
-                                  ),
-                                ],
                                 if (selectedSpec != null &&
                                     selectedSpec.parameters.isNotEmpty) ...[
                                   const SizedBox(height: 12),
@@ -723,11 +700,8 @@ class _ApiConfigEditorDialogState
                                   controller: _headersController,
                                   minLines: 2,
                                   maxLines: 5,
-                                  decoration: InputDecoration(
+                                  decoration: const InputDecoration(
                                     labelText: 'Custom Headers',
-                                    helperText: selectedSpec == null
-                                        ? null
-                                        : 'Provider docs: ${selectedSpec.documentationUrl}',
                                   ),
                                 ),
                               ],
@@ -1083,11 +1057,8 @@ class _ApiConfigEditorDialogState
     BuildContext context,
     ProviderParameterSpec parameter,
   ) {
-    final decoration = InputDecoration(
-      labelText: parameter.label,
-      helperText: parameter.buildHelperText(),
-      hintText: parameter.placeholder,
-    );
+    const decorationBase = InputDecoration(helperText: null, hintText: null);
+    final decoration = decorationBase.copyWith(labelText: parameter.label);
     switch (parameter.key) {
       case ApiParameterKey.stream:
         return DropdownButtonFormField<bool?>(
@@ -1236,83 +1207,6 @@ class _EditorSection extends StatelessWidget {
   }
 }
 
-class _ProviderChoiceCard extends StatelessWidget {
-  const _ProviderChoiceCard({
-    required this.providerType,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final ProviderType providerType;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tone = _providerColor(providerType);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 220,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            color: selected
-                ? tone.withValues(alpha: 0.18)
-                : AppColors.surfaceOverlay.withValues(alpha: 0.42),
-            border: Border.all(
-              color: selected ? tone : AppColors.borderSubtle,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: tone.withValues(alpha: 0.16),
-                    ),
-                    child: Icon(
-                      _providerIcon(providerType),
-                      size: 18,
-                      color: tone,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (selected)
-                    Icon(Icons.check_circle_rounded, size: 18, color: tone),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                providerType.label,
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                providerType.shortDescription,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ProviderInfoBanner extends StatelessWidget {
   const _ProviderInfoBanner({required this.providerType, this.providerSpec});
 
@@ -1381,17 +1275,6 @@ class _ProviderBadge extends StatelessWidget {
       ),
     );
   }
-}
-
-IconData _providerIcon(ProviderType providerType) {
-  return switch (providerType) {
-    ProviderType.openai => Icons.auto_awesome_outlined,
-    ProviderType.openaiCompatible => Icons.hub_outlined,
-    ProviderType.anthropic => Icons.forum_outlined,
-    ProviderType.gemini => Icons.diamond_outlined,
-    ProviderType.deepseek => Icons.waves_outlined,
-    ProviderType.openrouter => Icons.route_outlined,
-  };
 }
 
 Color _providerColor(ProviderType providerType) {

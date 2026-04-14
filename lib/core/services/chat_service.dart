@@ -1200,33 +1200,10 @@ class ChatService {
   }
 
   String _composeUrl(String baseUrl, String requestPath) {
-    final trimmedBase = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
-    if (trimmedBase.isEmpty) {
-      throw StateError('Base URL 不能为空');
-    }
-
-    if (requestPath.startsWith('http://') ||
-        requestPath.startsWith('https://')) {
-      final parsedRequestUri = Uri.tryParse(requestPath);
-      if (parsedRequestUri == null ||
-          !parsedRequestUri.hasScheme ||
-          parsedRequestUri.host.isEmpty) {
-        throw StateError('Request Path 不是合法的完整 URL: $requestPath');
-      }
-      return parsedRequestUri.toString();
-    }
-
-    final parsedBaseUri = Uri.tryParse(trimmedBase);
-    if (parsedBaseUri == null ||
-        !parsedBaseUri.hasScheme ||
-        parsedBaseUri.host.isEmpty) {
-      throw StateError('Base URL 不是合法地址: $baseUrl');
-    }
-
-    final normalizedPath = requestPath.startsWith('/')
-        ? requestPath
-        : '/$requestPath';
-    return '$trimmedBase$normalizedPath';
+    return _resolveRequestUri(
+      baseUrl: baseUrl,
+      requestPath: requestPath,
+    ).toString();
   }
 
   String _composeGeminiGenerateUrl({
@@ -1236,21 +1213,118 @@ class ChatService {
     required String apiKey,
     required bool stream,
   }) {
-    final trimmedBase = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     final normalizedPath = requestPath.trim().isEmpty
         ? ProviderType.gemini.defaultRequestPath
         : requestPath.trim();
-    final path = normalizedPath.startsWith('/')
-        ? normalizedPath
-        : '/$normalizedPath';
     final method = stream ? 'streamGenerateContent' : 'generateContent';
-    final uri = Uri.parse('$trimmedBase$path/$model:$method');
+    final endpointUri = _resolveRequestUri(
+      baseUrl: baseUrl,
+      requestPath: normalizedPath,
+    );
+    final uri = endpointUri.replace(
+      pathSegments: <String>[
+        ...endpointUri.pathSegments.where((segment) => segment.isNotEmpty),
+        '$model:$method',
+      ],
+    );
     final queryParameters = <String, String>{
       ...uri.queryParameters,
       if (stream) 'alt': 'sse',
       if (apiKey.trim().isNotEmpty) 'key': apiKey.trim(),
     };
     return uri.replace(queryParameters: queryParameters).toString();
+  }
+
+  Uri _resolveRequestUri({
+    required String baseUrl,
+    required String requestPath,
+  }) {
+    final normalizedBase = baseUrl.trim();
+    if (normalizedBase.isEmpty) {
+      throw StateError('Base URL 不能为空');
+    }
+    final baseUri = Uri.tryParse(normalizedBase);
+    if (baseUri == null || !baseUri.hasScheme || baseUri.host.isEmpty) {
+      throw StateError('Base URL 不是合法地址: $baseUrl');
+    }
+
+    final normalizedRequestPath = requestPath.trim();
+    if (normalizedRequestPath.isEmpty) {
+      return baseUri.replace(pathSegments: _splitPathSegments(baseUri.path));
+    }
+
+    final absoluteRequestUri = _parseAbsoluteUriOrNull(normalizedRequestPath);
+    if (absoluteRequestUri != null) {
+      return absoluteRequestUri.replace(
+        pathSegments: _splitPathSegments(absoluteRequestUri.path),
+      );
+    }
+
+    final relativeRequestUri = Uri.tryParse(
+      normalizedRequestPath.startsWith('/')
+          ? normalizedRequestPath
+          : '/$normalizedRequestPath',
+    );
+    if (relativeRequestUri == null) {
+      throw StateError('Request Path 不是合法路径: $requestPath');
+    }
+
+    final mergedSegments = _mergePathSegments(
+      _splitPathSegments(baseUri.path),
+      _splitPathSegments(relativeRequestUri.path),
+    );
+    return baseUri.replace(
+      pathSegments: mergedSegments,
+      query: relativeRequestUri.hasQuery ? relativeRequestUri.query : null,
+      fragment: relativeRequestUri.fragment.isNotEmpty
+          ? relativeRequestUri.fragment
+          : null,
+    );
+  }
+
+  Uri? _parseAbsoluteUriOrNull(String raw) {
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return null;
+    }
+    return uri;
+  }
+
+  List<String> _splitPathSegments(String path) {
+    return path
+        .split('/')
+        .map((segment) => segment.trim())
+        .where((segment) => segment.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  List<String> _mergePathSegments(
+    List<String> baseSegments,
+    List<String> requestSegments,
+  ) {
+    if (requestSegments.isEmpty) {
+      return baseSegments;
+    }
+    var overlap = 0;
+    final maxOverlap = baseSegments.length < requestSegments.length
+        ? baseSegments.length
+        : requestSegments.length;
+    for (var size = maxOverlap; size > 0; size--) {
+      final baseSlice = baseSegments.sublist(baseSegments.length - size);
+      final requestSlice = requestSegments.sublist(0, size);
+      var matched = true;
+      for (var index = 0; index < size; index++) {
+        if (baseSlice[index] != requestSlice[index]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) {
+        overlap = size;
+        break;
+      }
+    }
+    return <String>[...baseSegments, ...requestSegments.sublist(overlap)];
   }
 
   _SseChunk _parseSseChunk({

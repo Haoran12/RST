@@ -7,6 +7,7 @@ class AppScaffold extends StatelessWidget {
     super.key,
     required this.child,
     required this.drawer,
+    this.scaffoldKey,
     this.headerCenter,
     this.headerTrailing,
     this.backgroundImagePath,
@@ -14,6 +15,7 @@ class AppScaffold extends StatelessWidget {
 
   final Widget child;
   final Widget drawer;
+  final GlobalKey<ScaffoldState>? scaffoldKey;
   final Widget? headerCenter;
   final Widget? headerTrailing;
   final String? backgroundImagePath;
@@ -23,6 +25,7 @@ class AppScaffold extends StatelessWidget {
     return AmbientBackground(
       backgroundImagePath: backgroundImagePath,
       child: Scaffold(
+        key: scaffoldKey,
         backgroundColor: Colors.transparent,
         drawer: drawer,
         body: SafeArea(

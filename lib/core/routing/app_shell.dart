@@ -17,7 +17,7 @@ import '../providers/app_state.dart';
 import '../providers/config_catalog_providers.dart';
 import '../providers/service_providers.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   static final _items = <_DrawerNavItem>[
@@ -105,9 +105,33 @@ class AppShell extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  /// Android 系统返回层级（由高到低）：
+  /// 1. 子页面路由（Navigator.push 打开的详细设置页）先返回上一页；
+  ///    这一层由 Navigator 在本回调前处理。
+  /// 2. 若抽屉已打开，优先关闭抽屉。
+  /// 3. 若当前不在聊天页，切回聊天页。
+  /// 4. 聊天页再次返回，交给系统退出到桌面。
+  void _handleRootBack(AppTab currentTab) {
+    final scaffoldState = _scaffoldKey.currentState;
+    if (scaffoldState?.isDrawerOpen == true) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (currentTab != AppTab.chat) {
+      ref.read(appTabProvider.notifier).state = AppTab.chat;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentTab = ref.watch(appTabProvider);
-    final currentIndex = _tabToIndex[currentTab] ?? 0;
+    final currentIndex = AppShell._tabToIndex[currentTab] ?? 0;
     final currentSessionId = ref.watch(currentSessionIdProvider);
     final sessionBackgroundMap = ref.watch(sessionBackgroundImageProvider);
     final backgroundImagePath =
@@ -115,60 +139,70 @@ class AppShell extends ConsumerWidget {
         ? sessionBackgroundMap[currentSessionId]
         : null;
 
-    return AppScaffold(
-      backgroundImagePath: backgroundImagePath,
-      headerCenter: const _CurrentSessionHeaderTitle(),
-      headerTrailing: const _SessionQuickSettingsTrigger(),
-      drawer: Drawer(
-        backgroundColor: AppColors.backgroundElevated,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                GlassPanelCard(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
+    return PopScope<void>(
+      canPop: currentTab == AppTab.chat,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          return;
+        }
+        _handleRootBack(currentTab);
+      },
+      child: AppScaffold(
+        scaffoldKey: _scaffoldKey,
+        backgroundImagePath: backgroundImagePath,
+        headerCenter: const _CurrentSessionHeaderTitle(),
+        headerTrailing: const _SessionQuickSettingsTrigger(),
+        drawer: Drawer(
+          backgroundColor: AppColors.backgroundElevated,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  GlassPanelCard(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'RST',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'RST',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ],
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: AppShell._items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final item = AppShell._items[index];
+                        return _DrawerExpandableSection(
+                          label: item.label,
+                          icon: item.icon,
+                          selected: index == currentIndex,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            ref.read(appTabProvider.notifier).state = item.tab;
+                          },
+                        );
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: _items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final item = _items[index];
-                      return _DrawerExpandableSection(
-                        label: item.label,
-                        icon: item.icon,
-                        selected: index == currentIndex,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          ref.read(appTabProvider.notifier).state = item.tab;
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-      child: KeyedSubtree(
-        key: ValueKey(_items[currentIndex].tab),
-        child: _items[currentIndex].page,
+        child: KeyedSubtree(
+          key: ValueKey(AppShell._items[currentIndex].tab),
+          child: AppShell._items[currentIndex].page,
+        ),
       ),
     );
   }

@@ -657,34 +657,13 @@ class ApiService {
     required String baseUrl,
     required String requestPath,
   }) {
-    final normalizedBase = baseUrl.trim();
-    if (normalizedBase.isEmpty) {
-      throw StateError('Base URL 不能为空');
-    }
-
-    Uri baseUri = Uri.parse(normalizedBase);
-    var segments = baseUri.pathSegments
+    final endpointUri = _resolveRequestUri(
+      baseUrl: baseUrl,
+      requestPath: requestPath,
+    );
+    var segments = endpointUri.pathSegments
         .where((segment) => segment.isNotEmpty)
         .toList(growable: true);
-
-    final normalizedRequestPath = requestPath.trim();
-    if (normalizedRequestPath.isNotEmpty) {
-      final requestUri = Uri.tryParse(normalizedRequestPath);
-      if (requestUri != null &&
-          requestUri.hasScheme &&
-          requestUri.host.isNotEmpty) {
-        baseUri = requestUri;
-        segments = requestUri.pathSegments
-            .where((segment) => segment.isNotEmpty)
-            .toList(growable: true);
-      } else {
-        segments = normalizedRequestPath
-            .split('/')
-            .where((segment) => segment.isNotEmpty)
-            .toList(growable: true);
-      }
-    }
-
     segments = _trimRequestSegments(segments);
     if (!segments.contains('v1')) {
       segments.add('v1');
@@ -694,7 +673,7 @@ class ApiService {
     }
     segments.add('models');
 
-    return baseUri
+    return endpointUri
         .replace(pathSegments: segments, query: null, fragment: null)
         .toString();
   }
@@ -812,14 +791,13 @@ class ApiService {
     required String baseUrl,
     required String requestPath,
   }) {
-    final trimmedBase = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     final normalizedPath = requestPath.trim().isEmpty
         ? ProviderType.gemini.defaultRequestPath
         : requestPath.trim();
-    final trimmedPath = normalizedPath.startsWith('/')
-        ? normalizedPath
-        : '/$normalizedPath';
-    return '$trimmedBase$trimmedPath';
+    return _resolveRequestUri(
+      baseUrl: baseUrl,
+      requestPath: normalizedPath,
+    ).toString();
   }
 
   String _stripTrailingDeepSeekBeta(String baseUrl) {
@@ -860,6 +838,98 @@ class ApiService {
       return null;
     }
     return int.tryParse(normalized);
+  }
+
+  Uri _resolveRequestUri({
+    required String baseUrl,
+    required String requestPath,
+  }) {
+    final normalizedBase = baseUrl.trim();
+    if (normalizedBase.isEmpty) {
+      throw StateError('Base URL 不能为空');
+    }
+    final baseUri = Uri.tryParse(normalizedBase);
+    if (baseUri == null || !baseUri.hasScheme || baseUri.host.isEmpty) {
+      throw StateError('Base URL 不是合法地址: $baseUrl');
+    }
+
+    final normalizedRequestPath = requestPath.trim();
+    if (normalizedRequestPath.isEmpty) {
+      return baseUri.replace(pathSegments: _splitPathSegments(baseUri.path));
+    }
+
+    final absoluteRequestUri = _parseAbsoluteUriOrNull(normalizedRequestPath);
+    if (absoluteRequestUri != null) {
+      return absoluteRequestUri.replace(
+        pathSegments: _splitPathSegments(absoluteRequestUri.path),
+      );
+    }
+
+    final relativeRequestUri = Uri.tryParse(
+      normalizedRequestPath.startsWith('/')
+          ? normalizedRequestPath
+          : '/$normalizedRequestPath',
+    );
+    if (relativeRequestUri == null) {
+      throw StateError('Request Path 不是合法路径: $requestPath');
+    }
+
+    final mergedSegments = _mergePathSegments(
+      _splitPathSegments(baseUri.path),
+      _splitPathSegments(relativeRequestUri.path),
+    );
+    return baseUri.replace(
+      pathSegments: mergedSegments,
+      query: relativeRequestUri.hasQuery ? relativeRequestUri.query : null,
+      fragment: relativeRequestUri.fragment.isNotEmpty
+          ? relativeRequestUri.fragment
+          : null,
+    );
+  }
+
+  Uri? _parseAbsoluteUriOrNull(String raw) {
+    final uri = Uri.tryParse(raw);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return null;
+    }
+    return uri;
+  }
+
+  List<String> _splitPathSegments(String path) {
+    return path
+        .split('/')
+        .map((segment) => segment.trim())
+        .where((segment) => segment.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  List<String> _mergePathSegments(
+    List<String> baseSegments,
+    List<String> requestSegments,
+  ) {
+    if (requestSegments.isEmpty) {
+      return baseSegments;
+    }
+    var overlap = 0;
+    final maxOverlap = baseSegments.length < requestSegments.length
+        ? baseSegments.length
+        : requestSegments.length;
+    for (var size = maxOverlap; size > 0; size--) {
+      final baseSlice = baseSegments.sublist(baseSegments.length - size);
+      final requestSlice = requestSegments.sublist(0, size);
+      var matched = true;
+      for (var index = 0; index < size; index++) {
+        if (baseSlice[index] != requestSlice[index]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) {
+        overlap = size;
+        break;
+      }
+    }
+    return <String>[...baseSegments, ...requestSegments.sublist(overlap)];
   }
 
   String? _normalizeOptional(String? value) {

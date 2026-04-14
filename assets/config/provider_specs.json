@@ -5,8 +5,8 @@
       "providerType": "openai",
       "label": "OpenAI",
       "shortDescription": "Official Responses API",
-      "defaultBaseUrl": "https://api.openai.com",
-      "defaultRequestPath": "/v1/responses",
+      "defaultBaseUrl": "https://api.openai.com/v1",
+      "defaultRequestPath": "/responses",
       "defaultModel": "gpt-5.4-mini",
       "documentationUrl": "https://developers.openai.com/api/reference/responses/create",
       "notes": [
@@ -67,8 +67,8 @@
       "providerType": "openai_compatible",
       "label": "OpenAI-Compatible",
       "shortDescription": "Chat Completions protocol",
-      "defaultBaseUrl": "https://api.openai.com",
-      "defaultRequestPath": "/v1/chat/completions",
+      "defaultBaseUrl": "https://api.openai.com/v1",
+      "defaultRequestPath": "/chat/completions",
       "defaultModel": "gpt-4.1-mini",
       "documentationUrl": "https://platform.openai.com/docs/api-reference/chat/create",
       "notes": [
@@ -147,8 +147,8 @@
       "providerType": "anthropic",
       "label": "Anthropic",
       "shortDescription": "Claude Messages API",
-      "defaultBaseUrl": "https://api.anthropic.com",
-      "defaultRequestPath": "/v1/messages",
+      "defaultBaseUrl": "https://api.anthropic.com/v1",
+      "defaultRequestPath": "/messages",
       "defaultModel": "claude-sonnet-4-5",
       "documentationUrl": "https://docs.anthropic.com/en/api/messages",
       "notes": [
@@ -207,8 +207,8 @@
       "providerType": "gemini",
       "label": "Google Gemini",
       "shortDescription": "Google AI Studio GenerateContent",
-      "defaultBaseUrl": "https://generativelanguage.googleapis.com",
-      "defaultRequestPath": "/v1beta/models",
+      "defaultBaseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "defaultRequestPath": "/models",
       "defaultModel": "gemini-2.5-pro",
       "documentationUrl": "https://ai.google.dev/api/generate-content",
       "notes": [

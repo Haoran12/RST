@@ -43,10 +43,10 @@ extension ProviderTypeX on ProviderType {
 
   String get defaultBaseUrl {
     return switch (this) {
-      ProviderType.openai => 'https://api.openai.com',
-      ProviderType.openaiCompatible => 'https://api.openai.com',
-      ProviderType.anthropic => 'https://api.anthropic.com',
-      ProviderType.gemini => 'https://generativelanguage.googleapis.com',
+      ProviderType.openai => 'https://api.openai.com/v1',
+      ProviderType.openaiCompatible => 'https://api.openai.com/v1',
+      ProviderType.anthropic => 'https://api.anthropic.com/v1',
+      ProviderType.gemini => 'https://generativelanguage.googleapis.com/v1beta',
       ProviderType.deepseek => 'https://api.deepseek.com/beta',
       ProviderType.openrouter => 'https://openrouter.ai/api/v1',
     };
@@ -54,10 +54,10 @@ extension ProviderTypeX on ProviderType {
 
   String get defaultRequestPath {
     return switch (this) {
-      ProviderType.openai => '/v1/responses',
-      ProviderType.openaiCompatible => '/v1/chat/completions',
-      ProviderType.anthropic => '/v1/messages',
-      ProviderType.gemini => '/v1beta/models',
+      ProviderType.openai => '/responses',
+      ProviderType.openaiCompatible => '/chat/completions',
+      ProviderType.anthropic => '/messages',
+      ProviderType.gemini => '/models',
       ProviderType.deepseek => '/chat/completions',
       ProviderType.openrouter => '/chat/completions',
     };
