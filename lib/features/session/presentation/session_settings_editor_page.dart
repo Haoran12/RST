@@ -94,6 +94,7 @@ class SessionSettingsEditorPage extends ConsumerStatefulWidget {
     required this.appearanceOptions,
     this.onSubmit,
     this.popAfterSubmit = true,
+    this.enableDetailJump = false,
   });
 
   final String title;
@@ -105,6 +106,7 @@ class SessionSettingsEditorPage extends ConsumerStatefulWidget {
   final List<SessionSettingsOptionEntry> appearanceOptions;
   final Future<void> Function(SessionSettingsDraft draft)? onSubmit;
   final bool popAfterSubmit;
+  final bool enableDetailJump;
 
   @override
   ConsumerState<SessionSettingsEditorPage> createState() =>
@@ -194,56 +196,63 @@ class _SessionSettingsEditorPageState
                 onTap: _openBasicConfig,
               ),
               const SizedBox(height: 10),
-              _SelectorCard(
+              _TavoPickerCard(
                 title: '选用的API配置',
-                value: _draft.apiConfigId,
-                options: apiOptions,
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _draft = _draft.copyWith(apiConfigId: value);
-                  });
-                },
+                valueLabel: _resolveOptionLabel(
+                  selectedId: _draft.apiConfigId,
+                  options: apiOptions,
+                ),
+                detailLabel: _draft.apiConfigId,
+                onTap: () => _openApiConfigPicker(apiOptions),
+                onEdit: widget.enableDetailJump
+                    ? () => _jumpToDetailTab(AppTab.apiConfig)
+                    : null,
               ),
               const SizedBox(height: 10),
-              _SelectorCard(
+              _TavoPickerCard(
                 title: '选用的预设',
-                value: _draft.presetId,
-                options: presetOptions,
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _draft = _draft.copyWith(presetId: value);
-                  });
-                },
+                valueLabel: _resolveOptionLabel(
+                  selectedId: _draft.presetId,
+                  options: presetOptions,
+                ),
+                detailLabel: _draft.presetId,
+                onTap: () => _openPresetPicker(presetOptions),
+                onEdit: widget.enableDetailJump
+                    ? () => _jumpToDetailTab(AppTab.preset)
+                    : null,
               ),
               const SizedBox(height: 10),
-              _SchedulerCard(
-                value: _draft.schedulerMode,
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  setState(() {
-                    _draft = _draft.copyWith(schedulerMode: value);
-                  });
-                },
+              _TavoPickerCard(
+                title: '调度器模式',
+                valueLabel: _schedulerLabel(_draft.schedulerMode),
+                detailLabel: _schedulerDetail(_draft.schedulerMode),
+                onTap: _openSchedulerPicker,
+                onEdit: widget.enableDetailJump
+                    ? () => _jumpToDetailTab(AppTab.sessionManagement)
+                    : null,
               ),
               const SizedBox(height: 10),
-              _ActionCard(
+              _TavoPickerCard(
                 title: '对应的世界书',
-                subtitle: _buildWorldBookSummary(worldBookOptions),
-                onTap: () => _openWorldBook(worldBookOptions),
+                valueLabel: _resolveOptionLabel(
+                  selectedId: _draft.worldBookId,
+                  options: worldBookOptions,
+                  emptyLabel: '不绑定',
+                ),
+                detailLabel: _buildWorldBookDetail(),
+                onTap: () => _openWorldBookPicker(worldBookOptions),
+                onEdit: () => _openWorldBook(worldBookOptions),
               ),
               const SizedBox(height: 10),
-              _ActionCard(
+              _TavoPickerCard(
                 title: '外观设置',
-                subtitle: _buildAppearanceSummary(appearanceOptions),
-                onTap: () => _openAppearance(appearanceOptions),
+                valueLabel: _resolveOptionLabel(
+                  selectedId: _draft.appearanceId,
+                  options: appearanceOptions,
+                ),
+                detailLabel: _buildAppearanceDetail(),
+                onTap: () => _openAppearancePicker(appearanceOptions),
+                onEdit: () => _openAppearance(appearanceOptions),
               ),
               if (_submitError != null) ...[
                 const SizedBox(height: 10),
@@ -295,6 +304,328 @@ class _SessionSettingsEditorPageState
       SessionSettingsOptionEntry(id: selectedId, label: '$selectedId (未在列表)'),
       ...entries,
     ];
+  }
+
+  Future<void> _jumpToDetailTab(AppTab tab) async {
+    final shouldClose = await _handleAttemptDismiss();
+    if (!mounted || !shouldClose) {
+      return;
+    }
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    ref.read(appTabProvider.notifier).state = tab;
+  }
+
+  String _resolveOptionLabel({
+    required String? selectedId,
+    required List<SessionSettingsOptionEntry> options,
+    String emptyLabel = '未设置',
+  }) {
+    if (selectedId == null || selectedId.isEmpty) {
+      return emptyLabel;
+    }
+    for (final option in options) {
+      if (option.id == selectedId) {
+        return option.label;
+      }
+    }
+    return '$selectedId (未在列表)';
+  }
+
+  String _schedulerLabel(SchedulerMode mode) {
+    return switch (mode) {
+      SchedulerMode.direct => 'direct',
+      SchedulerMode.rst => 'RST',
+      SchedulerMode.agent => 'Agent',
+    };
+  }
+
+  String _schedulerDetail(SchedulerMode mode) {
+    return switch (mode) {
+      SchedulerMode.direct => '直接拼接上下文，路径最短',
+      SchedulerMode.rst => 'RST 调度，含结构化注入',
+      SchedulerMode.agent => 'Agent 调度，适合复杂流程',
+    };
+  }
+
+  String _buildWorldBookDetail() {
+    final worldReady = _draft.worldDescription.trim().isNotEmpty;
+    final characterReady = _draft.characterDescription.trim().isNotEmpty;
+    final worldState = worldReady ? '已填写' : '未填写';
+    final characterState = characterReady ? '已填写' : '未填写';
+    return '世界描述：$worldState · 人物设定：$characterState';
+  }
+
+  String _buildAppearanceDetail() {
+    return _draft.backgroundImagePath.trim().isEmpty ? '背景：默认' : '背景：已设置';
+  }
+
+  Future<void> _openApiConfigPicker(
+    List<SessionSettingsOptionEntry> options,
+  ) async {
+    final selected = await _showPickerDrawer<String>(
+      title: '选择 API 配置',
+      currentValue: _draft.apiConfigId,
+      options: options
+          .map(
+            (item) => _PickerOption<String>(
+              value: item.id,
+              label: item.label,
+              detail: item.id,
+            ),
+          )
+          .toList(growable: false),
+      onEditOption: widget.enableDetailJump
+          ? (option) => _jumpToDetailTab(AppTab.apiConfig)
+          : null,
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    setState(() {
+      _draft = _draft.copyWith(apiConfigId: selected.value);
+    });
+  }
+
+  Future<void> _openPresetPicker(
+    List<SessionSettingsOptionEntry> options,
+  ) async {
+    final selected = await _showPickerDrawer<String>(
+      title: '选择预设',
+      currentValue: _draft.presetId,
+      options: options
+          .map(
+            (item) => _PickerOption<String>(
+              value: item.id,
+              label: item.label,
+              detail: item.id,
+            ),
+          )
+          .toList(growable: false),
+      onEditOption: widget.enableDetailJump
+          ? (option) => _jumpToDetailTab(AppTab.preset)
+          : null,
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    setState(() {
+      _draft = _draft.copyWith(presetId: selected.value);
+    });
+  }
+
+  Future<void> _openSchedulerPicker() async {
+    final options = const <_PickerOption<SchedulerMode>>[
+      _PickerOption<SchedulerMode>(
+        value: SchedulerMode.direct,
+        label: 'direct',
+        detail: '直接拼接上下文',
+      ),
+      _PickerOption<SchedulerMode>(
+        value: SchedulerMode.rst,
+        label: 'RST',
+        detail: '结构化调度',
+      ),
+      _PickerOption<SchedulerMode>(
+        value: SchedulerMode.agent,
+        label: 'Agent',
+        detail: '多步骤 Agent 模式',
+      ),
+    ];
+    final selected = await _showPickerDrawer<SchedulerMode>(
+      title: '选择调度器模式',
+      currentValue: _draft.schedulerMode,
+      options: options,
+      onEditOption: widget.enableDetailJump
+          ? (option) => _jumpToDetailTab(AppTab.sessionManagement)
+          : null,
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    setState(() {
+      _draft = _draft.copyWith(schedulerMode: selected.value);
+    });
+  }
+
+  Future<void> _openWorldBookPicker(
+    List<SessionSettingsOptionEntry> options,
+  ) async {
+    final selected = await _showPickerDrawer<String?>(
+      title: '选择世界书',
+      currentValue: _draft.worldBookId,
+      options: <_PickerOption<String?>>[
+        const _PickerOption<String?>(
+          value: null,
+          label: '不绑定',
+          detail: '本会话不注入世界书',
+        ),
+        ...options.map(
+          (item) => _PickerOption<String?>(
+            value: item.id,
+            label: item.label,
+            detail: item.id,
+          ),
+        ),
+      ],
+      onEditOption: (option) => _openWorldBook(options),
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    setState(() {
+      _draft = _draft.copyWith(
+        worldBookId: selected.value,
+        replaceWorldBookId: true,
+      );
+    });
+  }
+
+  Future<void> _openAppearancePicker(
+    List<SessionSettingsOptionEntry> options,
+  ) async {
+    final selected = await _showPickerDrawer<String>(
+      title: '选择外观',
+      currentValue: _draft.appearanceId,
+      options: options
+          .map(
+            (item) => _PickerOption<String>(
+              value: item.id,
+              label: item.label,
+              detail: item.id,
+            ),
+          )
+          .toList(growable: false),
+      onEditOption: (option) => _openAppearance(options),
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    setState(() {
+      _draft = _draft.copyWith(appearanceId: selected.value);
+    });
+  }
+
+  Future<_PickerSelection<T>?> _showPickerDrawer<T>({
+    required String title,
+    required T currentValue,
+    required List<_PickerOption<T>> options,
+    Future<void> Function(_PickerOption<T> option)? onEditOption,
+  }) async {
+    final result = await showModalBottomSheet<_PickerSelection<T>>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: AppColors.backgroundElevated,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.72,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.borderStrong,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(title, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: options.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final option = options[index];
+                    final selected = option.value == currentValue;
+
+                    return GlassPanelCard(
+                      padding: EdgeInsets.zero,
+                      borderColor: selected
+                          ? AppColors.borderStrong
+                          : AppColors.borderSubtle,
+                      backgroundColor: selected
+                          ? AppColors.surfaceActive.withValues(alpha: 0.88)
+                          : null,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          Navigator.of(
+                            sheetContext,
+                          ).pop(_PickerSelection<T>(option.value));
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 11, 8, 11),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      option.label,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    if (option.detail != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        option.detail!,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppColors.textSecondary,
+                                            ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              if (onEditOption != null)
+                                IconButton(
+                                  tooltip: '编辑',
+                                  onPressed: () async {
+                                    Navigator.of(sheetContext).pop();
+                                    await onEditOption(option);
+                                  },
+                                  icon: const Icon(Icons.edit_outlined),
+                                ),
+                              if (selected)
+                                const Padding(
+                                  padding: EdgeInsets.only(right: 8),
+                                  child: Icon(
+                                    Icons.check_circle_rounded,
+                                    color: AppColors.accentSecondary,
+                                  ),
+                                )
+                              else
+                                const SizedBox(width: 8),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return result;
   }
 
   Future<void> _openBasicConfig() async {
@@ -378,35 +709,6 @@ class _SessionSettingsEditorPageState
       return '$name\n用户描述：未填写';
     }
     return '$name\n用户描述：${_shortPreview(userDescription)}';
-  }
-
-  String _buildWorldBookSummary(List<SessionSettingsOptionEntry> options) {
-    String? selectedLabel;
-    for (final option in options) {
-      if (option.id == _draft.worldBookId) {
-        selectedLabel = option.label;
-        break;
-      }
-    }
-    final worldLabel =
-        selectedLabel ??
-        (_draft.worldBookId == null ? '未绑定' : '${_draft.worldBookId} (未在列表)');
-    return '绑定：$worldLabel\n世界描述 / 人物设定';
-  }
-
-  String _buildAppearanceSummary(List<SessionSettingsOptionEntry> options) {
-    String? selectedLabel;
-    for (final option in options) {
-      if (option.id == _draft.appearanceId) {
-        selectedLabel = option.label;
-        break;
-      }
-    }
-    final themeLabel = selectedLabel ?? _draft.appearanceId;
-    final background = _draft.backgroundImagePath.trim().isEmpty
-        ? '默认背景'
-        : '已设置背景图';
-    return '主题：$themeLabel\n背景：$background';
   }
 
   String _shortPreview(String text) {
@@ -541,78 +843,89 @@ class _ActionCard extends StatelessWidget {
   }
 }
 
-class _SelectorCard extends StatelessWidget {
-  const _SelectorCard({
+class _PickerOption<T> {
+  const _PickerOption({required this.value, required this.label, this.detail});
+
+  final T value;
+  final String label;
+  final String? detail;
+}
+
+class _PickerSelection<T> {
+  const _PickerSelection(this.value);
+
+  final T value;
+}
+
+class _TavoPickerCard extends StatelessWidget {
+  const _TavoPickerCard({
     required this.title,
-    required this.value,
-    required this.options,
-    required this.onChanged,
+    required this.valueLabel,
+    required this.onTap,
+    this.detailLabel,
+    this.onEdit,
   });
 
   final String title;
-  final String value;
-  final List<SessionSettingsOptionEntry> options;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final optionIds = options.map((item) => item.id).toSet();
-    final selected = optionIds.contains(value) ? value : null;
-
-    return GlassPanelCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: selected,
-            items: options
-                .map(
-                  (item) => DropdownMenuItem<String>(
-                    value: item.id,
-                    child: Text(item.label),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SchedulerCard extends StatelessWidget {
-  const _SchedulerCard({required this.value, required this.onChanged});
-
-  final SchedulerMode value;
-  final ValueChanged<SchedulerMode?> onChanged;
+  final String valueLabel;
+  final String? detailLabel;
+  final VoidCallback onTap;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
     return GlassPanelCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('调度器模式', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<SchedulerMode>(
-            initialValue: value,
-            items: const [
-              DropdownMenuItem(
-                value: SchedulerMode.direct,
-                child: Text('direct'),
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      valueLabel,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.textStrong,
+                      ),
+                    ),
+                    if (detailLabel != null && detailLabel!.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          detailLabel!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: AppColors.textSecondary,
+                                height: 1.2,
+                              ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              DropdownMenuItem(value: SchedulerMode.rst, child: Text('RST')),
-              DropdownMenuItem(
-                value: SchedulerMode.agent,
-                child: Text('Agent'),
-              ),
+              if (onEdit != null)
+                IconButton(
+                  tooltip: '编辑',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                ),
+              const Icon(Icons.expand_more_rounded),
             ],
-            onChanged: onChanged,
           ),
-        ],
+        ),
       ),
     );
   }

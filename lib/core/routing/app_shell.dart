@@ -677,6 +677,7 @@ class _SessionQuickSettingsSheetState
         worldBookOptions: worldEntries,
         appearanceOptions: appearanceEntries,
         popAfterSubmit: false,
+        enableDetailJump: true,
         onSubmit: _save,
       );
     }
