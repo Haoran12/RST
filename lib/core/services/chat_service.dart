@@ -5,7 +5,9 @@ import 'package:dio/dio.dart';
 import '../bridge/frb_api.dart' as frb;
 import '../bridge/rust_bridge.dart';
 import '../models/common.dart';
+import '../models/provider_specs.dart';
 import 'api_service.dart';
+import 'provider_spec_service.dart';
 
 class PromptAssemblyMetadata {
   const PromptAssemblyMetadata({
@@ -112,12 +114,14 @@ class SendRoundResult {
 }
 
 class ChatService {
-  ChatService(this._rustBridge, {Dio? dio}) : _dio = dio ?? Dio();
+  ChatService(this._rustBridge, this._providerSpecService, {Dio? dio})
+    : _dio = dio ?? Dio();
 
   static const int _maxPreviewChars = 120000;
   static const int _maxRawSseChars = 60000;
 
   final RustBridge _rustBridge;
+  final ProviderSpecService _providerSpecService;
   final Dio _dio;
   final Map<String, _ActiveStreamState> _activeStreams =
       <String, _ActiveStreamState>{};
@@ -181,9 +185,12 @@ class ChatService {
     );
     request.onMessageUpdated?.call(assistantMessage);
 
+    final providerSpec = await _providerSpecService.getSpec(
+      request.apiConfig.providerType,
+    );
     final providerRequest = _buildProviderRequest(
       apiConfig: request.apiConfig,
-      presetConfig: request.presetConfig,
+      providerSpec: providerSpec,
       promptMessages: promptResult.messages,
     );
     final requestBodyPreview = _encodePreviewJson(
@@ -195,7 +202,7 @@ class ChatService {
       presetName: request.presetConfig.name,
       providerType: request.apiConfig.providerType,
       model: providerRequest.model,
-      requestUrl: providerRequest.url,
+      requestUrl: _redactUrl(providerRequest.url),
       prompt: promptResult.metadata,
       requestBodyPreview: requestBodyPreview.value ?? '{}',
       requestBodyTruncated: requestBodyPreview.truncated,
@@ -249,9 +256,12 @@ class ChatService {
       scene: request.sessionScene,
       lores: request.sessionLores,
     );
+    final providerSpec = await _providerSpecService.getSpec(
+      request.apiConfig.providerType,
+    );
     final providerRequest = _buildProviderRequest(
       apiConfig: request.apiConfig,
-      presetConfig: request.presetConfig,
+      providerSpec: providerSpec,
       promptMessages: promptResult.messages,
     );
     final requestBodyPreview = _encodePreviewJson(
@@ -263,7 +273,7 @@ class ChatService {
       presetName: request.presetConfig.name,
       providerType: request.apiConfig.providerType,
       model: providerRequest.model,
-      requestUrl: providerRequest.url,
+      requestUrl: _redactUrl(providerRequest.url),
       prompt: promptResult.metadata,
       requestBodyPreview: requestBodyPreview.value ?? '{}',
       requestBodyTruncated: requestBodyPreview.truncated,
@@ -324,12 +334,14 @@ class ChatService {
         payload: providerRequest.payload,
       );
 
-      final response = await _dio.post<ResponseBody>(
+      final response = await _dio.post<dynamic>(
         providerRequest.url,
         data: providerRequest.payload,
         cancelToken: active.cancelToken,
         options: Options(
-          responseType: ResponseType.stream,
+          responseType: providerRequest.stream
+              ? ResponseType.stream
+              : ResponseType.json,
           headers: providerRequest.headers,
           connectTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
           receiveTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
@@ -337,22 +349,29 @@ class ChatService {
         ),
       );
 
-      final body = response.data;
-      if (body == null) {
-        throw StateError('provider returned an empty stream body');
-      }
-
-      final streamResult = await _consumeSseStream(
-        body: body,
-        assistantMessageId: assistantMessageId,
-        providerType: providerRequest.providerType,
-        onMessageUpdated: onMessageUpdated,
-      );
+      final consumeResult = providerRequest.stream
+          ? await _consumeSseStream(
+              body: response.data as ResponseBody,
+              assistantMessageId: assistantMessageId,
+              providerType: providerRequest.providerType,
+              onMessageUpdated: onMessageUpdated,
+            )
+          : await _consumeJsonResponse(
+              body: response.data,
+              assistantMessageId: assistantMessageId,
+              providerType: providerRequest.providerType,
+              onMessageUpdated: onMessageUpdated,
+            );
       final responseTime = DateTime.now().toUtc();
-      final responsePreview = _buildSuccessResponsePreview(
-        response: response,
-        streamResult: streamResult,
-      );
+      final responsePreview = providerRequest.stream
+          ? _buildSuccessResponsePreview(
+              response: response,
+              streamResult: consumeResult,
+            )
+          : _buildNonStreamSuccessResponsePreview(
+              response: response,
+              result: consumeResult,
+            );
       await _persistRequestLog(
         sessionId: sessionId,
         provider: providerRequest.providerName,
@@ -361,10 +380,10 @@ class ChatService {
         requestTime: requestTime,
         responseTime: responseTime,
         durationMs: responseTime.difference(requestTime).inMilliseconds,
-        promptTokens: streamResult.promptTokens,
-        completionTokens: streamResult.completionTokens,
-        totalTokens: streamResult.totalTokens,
-        stopReason: streamResult.stopReason,
+        promptTokens: consumeResult.promptTokens,
+        completionTokens: consumeResult.completionTokens,
+        totalTokens: consumeResult.totalTokens,
+        stopReason: consumeResult.stopReason,
         requestPreviewJson: requestPreview.value,
         responsePreviewJson: responsePreview.value,
         payloadTruncated: requestPreview.truncated || responsePreview.truncated,
@@ -532,6 +551,32 @@ class ChatService {
       completionTokens: completionTokens,
       totalTokens: totalTokens,
       stopReason: stopReason,
+    );
+  }
+
+  Future<_SseConsumeResult> _consumeJsonResponse({
+    required Object? body,
+    required String assistantMessageId,
+    required ProviderType providerType,
+    void Function(frb.MessageRecord message)? onMessageUpdated,
+  }) async {
+    if (body == null) {
+      throw StateError('provider returned an empty response body');
+    }
+    final parsed = _parseJsonResponse(providerType: providerType, body: body);
+    final updated = await _rustBridge.updateMessageContent(
+      messageId: assistantMessageId,
+      content: parsed.text,
+    );
+    onMessageUpdated?.call(updated);
+    return _SseConsumeResult(
+      rawSseLines: const <String>[],
+      rawSseTruncated: false,
+      promptTokens: parsed.promptTokens,
+      completionTokens: parsed.completionTokens,
+      totalTokens: parsed.totalTokens,
+      stopReason: parsed.stopReason,
+      responseBody: _normalizeResponseData(body),
     );
   }
 
@@ -796,86 +841,323 @@ class ChatService {
 
   _ProviderRequest _buildProviderRequest({
     required RuntimeApiConfig apiConfig,
-    required RuntimePresetConfig presetConfig,
+    required ProviderSpec providerSpec,
     required List<Map<String, String>> promptMessages,
   }) {
-    final url = _composeUrl(apiConfig.baseUrl, apiConfig.requestPath);
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-      if (apiConfig.apiKey.trim().isNotEmpty)
-        'Authorization': 'Bearer ${apiConfig.apiKey.trim()}',
-      ...apiConfig.customHeaders,
+    return switch (apiConfig.providerType) {
+      ProviderType.openai => _buildOpenAiResponsesRequest(
+        apiConfig: apiConfig,
+        providerSpec: providerSpec,
+        promptMessages: promptMessages,
+      ),
+      ProviderType.openaiCompatible => _buildCompatibleChatRequest(
+        apiConfig: apiConfig,
+        providerSpec: providerSpec,
+        promptMessages: promptMessages,
+        providerName: 'openai_compatible',
+      ),
+      ProviderType.deepseek => _buildCompatibleChatRequest(
+        apiConfig: apiConfig,
+        providerSpec: providerSpec,
+        promptMessages: promptMessages,
+        providerName: 'deepseek',
+      ),
+      ProviderType.openrouter => _buildCompatibleChatRequest(
+        apiConfig: apiConfig,
+        providerSpec: providerSpec,
+        promptMessages: promptMessages,
+        providerName: 'openrouter',
+        extraHeaders: const <String, String>{
+          'HTTP-Referer': 'https://sillytavern.app',
+          'X-Title': 'SillyTavern',
+        },
+      ),
+      ProviderType.anthropic => _buildAnthropicRequest(
+        apiConfig: apiConfig,
+        providerSpec: providerSpec,
+        promptMessages: promptMessages,
+      ),
+      ProviderType.gemini => _buildGeminiRequest(
+        apiConfig: apiConfig,
+        providerSpec: providerSpec,
+        promptMessages: promptMessages,
+      ),
+    };
+  }
+
+  void _applyConfiguredParameters({
+    required Map<String, dynamic> payload,
+    required RuntimeApiConfig apiConfig,
+    required ProviderSpec providerSpec,
+  }) {
+    for (final parameter in providerSpec.parameters) {
+      final value = _resolveConfiguredParameterValue(parameter, apiConfig);
+      if (value == null) {
+        continue;
+      }
+      _setNestedPayloadValue(payload, parameter.requestField, value);
+    }
+  }
+
+  Object? _resolveConfiguredParameterValue(
+    ProviderParameterSpec parameter,
+    RuntimeApiConfig apiConfig,
+  ) {
+    final value = switch (parameter.key) {
+      ApiParameterKey.stream => apiConfig.stream,
+      ApiParameterKey.temperature => apiConfig.temperature,
+      ApiParameterKey.topP => apiConfig.topP,
+      ApiParameterKey.topK => apiConfig.topK,
+      ApiParameterKey.presencePenalty => apiConfig.presencePenalty,
+      ApiParameterKey.frequencyPenalty => apiConfig.frequencyPenalty,
+      ApiParameterKey.maxCompletionTokens => apiConfig.maxCompletionTokens,
+      ApiParameterKey.stopSequences => apiConfig.stopSequences,
+      ApiParameterKey.reasoningEffort => apiConfig.reasoningEffort,
+      ApiParameterKey.verbosity => apiConfig.verbosity,
     };
 
+    if (value is List) {
+      if (value.isEmpty) {
+        return parameter.appFallbackValue;
+      }
+      return value;
+    }
+    if (value is String) {
+      final normalized = value.trim();
+      if (normalized.isNotEmpty) {
+        return normalized;
+      }
+      return parameter.appFallbackValue;
+    }
+    if (value is bool) {
+      return value;
+    }
+    if (value is int) {
+      if (value >= 0) {
+        return value;
+      }
+      return parameter.appFallbackValue;
+    }
+    if (value is double) {
+      return value;
+    }
+    return parameter.appFallbackValue;
+  }
+
+  void _setNestedPayloadValue(
+    Map<String, dynamic> payload,
+    String requestField,
+    Object value,
+  ) {
+    final segments = requestField
+        .split('.')
+        .map((segment) => segment.trim())
+        .where((segment) => segment.isNotEmpty)
+        .toList(growable: false);
+    if (segments.isEmpty) {
+      return;
+    }
+
+    Map<String, dynamic> current = payload;
+    for (var index = 0; index < segments.length - 1; index++) {
+      final segment = segments[index];
+      final next = current[segment];
+      if (next is Map<String, dynamic>) {
+        current = next;
+        continue;
+      }
+      final nested = <String, dynamic>{};
+      current[segment] = nested;
+      current = nested;
+    }
+    current[segments.last] = value;
+  }
+
+  _ProviderRequest _buildOpenAiResponsesRequest({
+    required RuntimeApiConfig apiConfig,
+    required ProviderSpec providerSpec,
+    required List<Map<String, String>> promptMessages,
+  }) {
+    final streamEnabled = apiConfig.stream ?? true;
     final payload = <String, dynamic>{
       'model': apiConfig.defaultModel,
-      'stream': true,
+      'stream': streamEnabled,
+      'input': promptMessages
+          .map(_toOpenAiInputMessage)
+          .toList(growable: false),
     };
-    _applyCommonGenerationParams(payload, presetConfig);
-    final limit = presetConfig.maxCompletionTokens;
-
-    if (apiConfig.providerType == ProviderType.openaiCompatible) {
-      if (limit != null && limit > 0) {
-        payload['max_tokens'] = limit;
-      }
-      payload['messages'] = promptMessages;
-      return _ProviderRequest(
-        providerType: apiConfig.providerType,
-        providerName: 'openai_compatible',
-        model: apiConfig.defaultModel,
-        url: url,
-        headers: headers,
-        payload: payload,
-        requestTimeoutMs: apiConfig.requestTimeoutMs,
-      );
-    }
-
-    payload['input'] = promptMessages
-        .map(_toOpenAiInputMessage)
-        .toList(growable: false);
-    if (limit != null && limit > 0) {
-      payload['max_output_tokens'] = limit;
-    }
-    if (presetConfig.reasoningEffort != null) {
-      payload['reasoning'] = <String, Object?>{
-        'effort': presetConfig.reasoningEffort,
-      };
-    }
-    if (presetConfig.verbosity != null) {
-      payload['text'] = <String, Object?>{'verbosity': presetConfig.verbosity};
-    }
-
+    _applyConfiguredParameters(
+      payload: payload,
+      apiConfig: apiConfig,
+      providerSpec: providerSpec,
+    );
     return _ProviderRequest(
       providerType: apiConfig.providerType,
       providerName: 'openai',
       model: apiConfig.defaultModel,
-      url: url,
-      headers: headers,
+      url: _composeUrl(apiConfig.baseUrl, apiConfig.requestPath),
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        if (apiConfig.apiKey.trim().isNotEmpty)
+          'Authorization': 'Bearer ${apiConfig.apiKey.trim()}',
+        ...apiConfig.customHeaders,
+      },
       payload: payload,
+      stream: streamEnabled,
       requestTimeoutMs: apiConfig.requestTimeoutMs,
     );
   }
 
-  void _applyCommonGenerationParams(
-    Map<String, dynamic> payload,
-    RuntimePresetConfig presetConfig,
-  ) {
-    if (presetConfig.temperature != null) {
-      payload['temperature'] = presetConfig.temperature;
-    }
-    if (presetConfig.topP != null) {
-      payload['top_p'] = presetConfig.topP;
-    }
-    if (presetConfig.presencePenalty != null) {
-      payload['presence_penalty'] = presetConfig.presencePenalty;
-    }
-    if (presetConfig.frequencyPenalty != null) {
-      payload['frequency_penalty'] = presetConfig.frequencyPenalty;
+  _ProviderRequest _buildCompatibleChatRequest({
+    required RuntimeApiConfig apiConfig,
+    required ProviderSpec providerSpec,
+    required List<Map<String, String>> promptMessages,
+    required String providerName,
+    Map<String, String> extraHeaders = const <String, String>{},
+  }) {
+    final streamEnabled = apiConfig.stream ?? true;
+    final payload = <String, dynamic>{
+      'model': apiConfig.defaultModel,
+      'messages': promptMessages,
+      'stream': streamEnabled,
+    };
+    _applyConfiguredParameters(
+      payload: payload,
+      apiConfig: apiConfig,
+      providerSpec: providerSpec,
+    );
+    return _ProviderRequest(
+      providerType: apiConfig.providerType,
+      providerName: providerName,
+      model: apiConfig.defaultModel,
+      url: _composeUrl(apiConfig.baseUrl, apiConfig.requestPath),
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        if (apiConfig.apiKey.trim().isNotEmpty)
+          'Authorization': 'Bearer ${apiConfig.apiKey.trim()}',
+        ...extraHeaders,
+        ...apiConfig.customHeaders,
+      },
+      payload: payload,
+      stream: streamEnabled,
+      requestTimeoutMs: apiConfig.requestTimeoutMs,
+    );
+  }
+
+  _ProviderRequest _buildAnthropicRequest({
+    required RuntimeApiConfig apiConfig,
+    required ProviderSpec providerSpec,
+    required List<Map<String, String>> promptMessages,
+  }) {
+    final streamEnabled = apiConfig.stream ?? true;
+    final systemChunks = <String>[];
+    final messages = <Map<String, Object?>>[];
+    for (final message in promptMessages) {
+      final role = message['role'] ?? 'user';
+      final content = (message['content'] ?? '').trim();
+      if (content.isEmpty) {
+        continue;
+      }
+      if (role == 'system') {
+        systemChunks.add(content);
+        continue;
+      }
+      messages.add(<String, Object?>{'role': role, 'content': content});
     }
 
-    if (presetConfig.stopSequences.isNotEmpty) {
-      payload['stop'] = presetConfig.stopSequences;
+    final payload = <String, dynamic>{
+      'model': apiConfig.defaultModel,
+      'messages': messages,
+      'stream': streamEnabled,
+    };
+    if (systemChunks.isNotEmpty) {
+      payload['system'] = systemChunks.join('\n\n');
     }
+    _applyConfiguredParameters(
+      payload: payload,
+      apiConfig: apiConfig,
+      providerSpec: providerSpec,
+    );
+
+    return _ProviderRequest(
+      providerType: apiConfig.providerType,
+      providerName: 'anthropic',
+      model: apiConfig.defaultModel,
+      url: _composeUrl(apiConfig.baseUrl, apiConfig.requestPath),
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        if (apiConfig.apiKey.trim().isNotEmpty)
+          'x-api-key': apiConfig.apiKey.trim(),
+        'anthropic-version': '2023-06-01',
+        ...apiConfig.customHeaders,
+      },
+      payload: payload,
+      stream: streamEnabled,
+      requestTimeoutMs: apiConfig.requestTimeoutMs,
+    );
+  }
+
+  _ProviderRequest _buildGeminiRequest({
+    required RuntimeApiConfig apiConfig,
+    required ProviderSpec providerSpec,
+    required List<Map<String, String>> promptMessages,
+  }) {
+    final streamEnabled = apiConfig.stream ?? true;
+    final systemInstruction = <String>[];
+    final contents = <Map<String, Object?>>[];
+    for (final message in promptMessages) {
+      final role = message['role'] ?? 'user';
+      final content = (message['content'] ?? '').trim();
+      if (content.isEmpty) {
+        continue;
+      }
+      if (role == 'system') {
+        systemInstruction.add(content);
+        continue;
+      }
+      contents.add(<String, Object?>{
+        'role': role == 'assistant' ? 'model' : 'user',
+        'parts': <Map<String, String>>[
+          <String, String>{'text': content},
+        ],
+      });
+    }
+
+    final payload = <String, dynamic>{
+      'contents': contents,
+      if (systemInstruction.isNotEmpty)
+        'systemInstruction': <String, Object?>{
+          'parts': <Map<String, String>>[
+            <String, String>{'text': systemInstruction.join('\n\n')},
+          ],
+        },
+    };
+    _applyConfiguredParameters(
+      payload: payload,
+      apiConfig: apiConfig,
+      providerSpec: providerSpec,
+    );
+    payload.remove('stream');
+
+    return _ProviderRequest(
+      providerType: apiConfig.providerType,
+      providerName: 'gemini',
+      model: apiConfig.defaultModel,
+      url: _composeGeminiGenerateUrl(
+        baseUrl: apiConfig.baseUrl,
+        requestPath: apiConfig.requestPath,
+        model: apiConfig.defaultModel,
+        apiKey: apiConfig.apiKey,
+        stream: streamEnabled,
+      ),
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        ...apiConfig.customHeaders,
+      },
+      payload: payload,
+      stream: streamEnabled,
+      requestTimeoutMs: apiConfig.requestTimeoutMs,
+    );
   }
 
   Map<String, Object?> _toOpenAiInputMessage(Map<String, String> message) {
@@ -947,6 +1229,30 @@ class ChatService {
     return '$trimmedBase$normalizedPath';
   }
 
+  String _composeGeminiGenerateUrl({
+    required String baseUrl,
+    required String requestPath,
+    required String model,
+    required String apiKey,
+    required bool stream,
+  }) {
+    final trimmedBase = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final normalizedPath = requestPath.trim().isEmpty
+        ? ProviderType.gemini.defaultRequestPath
+        : requestPath.trim();
+    final path = normalizedPath.startsWith('/')
+        ? normalizedPath
+        : '/$normalizedPath';
+    final method = stream ? 'streamGenerateContent' : 'generateContent';
+    final uri = Uri.parse('$trimmedBase$path/$model:$method');
+    final queryParameters = <String, String>{
+      ...uri.queryParameters,
+      if (stream) 'alt': 'sse',
+      if (apiKey.trim().isNotEmpty) 'key': apiKey.trim(),
+    };
+    return uri.replace(queryParameters: queryParameters).toString();
+  }
+
   _SseChunk _parseSseChunk({
     required String payload,
     required ProviderType providerType,
@@ -956,8 +1262,20 @@ class ChatService {
       if (decoded is! Map<String, dynamic>) {
         return const _SseChunk();
       }
-      if (providerType == ProviderType.openai) {
-        return _parseOpenAiChunk(decoded);
+      switch (providerType) {
+        case ProviderType.openai:
+          final openAiChunk = _parseOpenAiChunk(decoded);
+          if (!openAiChunk.isEmpty) {
+            return openAiChunk;
+          }
+        case ProviderType.anthropic:
+          return _parseAnthropicChunk(decoded);
+        case ProviderType.gemini:
+          return _parseGeminiChunk(decoded);
+        case ProviderType.openaiCompatible:
+        case ProviderType.deepseek:
+        case ProviderType.openrouter:
+          break;
       }
       return _parseCompatibleChunk(decoded);
     } catch (_) {
@@ -1039,6 +1357,221 @@ class ChatService {
     return const _SseChunk();
   }
 
+  _SseChunk _parseAnthropicChunk(Map<String, dynamic> decoded) {
+    final type = decoded['type'];
+    if (type is! String) {
+      return const _SseChunk();
+    }
+    if (type == 'content_block_delta') {
+      final delta = decoded['delta'];
+      final deltaMap = delta is Map ? delta.cast<String, dynamic>() : null;
+      if (deltaMap?['type'] == 'text_delta') {
+        final text = deltaMap?['text'];
+        return _SseChunk(deltaText: text is String ? text : '');
+      }
+    }
+    if (type == 'message_start') {
+      final message = decoded['message'];
+      final messageMap = message is Map
+          ? message.cast<String, dynamic>()
+          : null;
+      final usage = messageMap?['usage'];
+      final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
+      return _SseChunk(promptTokens: _asInt(usageMap?['input_tokens']));
+    }
+    if (type == 'message_delta') {
+      final delta = decoded['delta'];
+      final deltaMap = delta is Map ? delta.cast<String, dynamic>() : null;
+      final usage = decoded['usage'];
+      final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
+      return _SseChunk(
+        completionTokens: _asInt(usageMap?['output_tokens']),
+        stopReason: '${deltaMap?['stop_reason'] ?? ''}'.trim().isEmpty
+            ? null
+            : '${deltaMap?['stop_reason']}',
+      );
+    }
+    if (type == 'message_stop') {
+      return const _SseChunk(stopReason: 'message_stop');
+    }
+    if (type == 'error') {
+      return const _SseChunk(stopReason: 'error');
+    }
+    return const _SseChunk();
+  }
+
+  _SseChunk _parseGeminiChunk(Map<String, dynamic> decoded) {
+    final candidates = decoded['candidates'];
+    final firstCandidate = candidates is List && candidates.isNotEmpty
+        ? candidates.first
+        : null;
+    final candidateMap = firstCandidate is Map
+        ? firstCandidate.cast<String, dynamic>()
+        : null;
+    final content = candidateMap?['content'];
+    final contentMap = content is Map ? content.cast<String, dynamic>() : null;
+    final parts = contentMap?['parts'];
+    final deltaText = parts is List
+        ? parts.whereType<Map>().map((part) => '${part['text'] ?? ''}').join()
+        : '';
+    final usage = decoded['usageMetadata'];
+    final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
+    final promptTokens = _asInt(usageMap?['promptTokenCount']);
+    final completionTokens = _asInt(usageMap?['candidatesTokenCount']);
+    final totalTokens = _asInt(usageMap?['totalTokenCount']);
+    final finishReason = candidateMap?['finishReason'];
+    return _SseChunk(
+      deltaText: deltaText,
+      promptTokens: promptTokens,
+      completionTokens: completionTokens,
+      totalTokens: totalTokens,
+      stopReason: finishReason is String && finishReason.isNotEmpty
+          ? finishReason
+          : null,
+    );
+  }
+
+  _ParsedResponseBody _parseJsonResponse({
+    required ProviderType providerType,
+    required Object? body,
+  }) {
+    final decoded = body is Map<String, dynamic>
+        ? body
+        : body is Map
+        ? body.cast<String, dynamic>()
+        : _decodeJsonMap(body);
+    return switch (providerType) {
+      ProviderType.openai => _parseOpenAiJsonResponse(decoded),
+      ProviderType.anthropic => _parseAnthropicJsonResponse(decoded),
+      ProviderType.gemini => _parseGeminiJsonResponse(decoded),
+      ProviderType.openaiCompatible ||
+      ProviderType.deepseek ||
+      ProviderType.openrouter => _parseCompatibleJsonResponse(decoded),
+    };
+  }
+
+  Map<String, dynamic> _decodeJsonMap(Object? body) {
+    if (body is String) {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.cast<String, dynamic>();
+      }
+    }
+    throw StateError('provider returned a non-JSON response body');
+  }
+
+  _ParsedResponseBody _parseCompatibleJsonResponse(
+    Map<String, dynamic> decoded,
+  ) {
+    final choices = decoded['choices'];
+    final firstChoice = choices is List && choices.isNotEmpty
+        ? choices.first
+        : null;
+    final choiceMap = firstChoice is Map
+        ? firstChoice.cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final message = choiceMap['message'];
+    final messageMap = message is Map
+        ? message.cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final text = _extractDeltaContent(messageMap['content']);
+    final usage = decoded['usage'];
+    final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
+    return _ParsedResponseBody(
+      text: text,
+      promptTokens: _asInt(usageMap?['prompt_tokens']),
+      completionTokens: _asInt(usageMap?['completion_tokens']),
+      totalTokens: _asInt(usageMap?['total_tokens']),
+      stopReason: '${choiceMap['finish_reason'] ?? ''}'.trim().isEmpty
+          ? null
+          : '${choiceMap['finish_reason']}',
+    );
+  }
+
+  _ParsedResponseBody _parseAnthropicJsonResponse(
+    Map<String, dynamic> decoded,
+  ) {
+    final content = decoded['content'];
+    var text = '';
+    if (content is List) {
+      text = content
+          .whereType<Map>()
+          .map((item) => item['text'])
+          .whereType<String>()
+          .join();
+    }
+    final usage = decoded['usage'];
+    final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
+    return _ParsedResponseBody(
+      text: text,
+      promptTokens: _asInt(usageMap?['input_tokens']),
+      completionTokens: _asInt(usageMap?['output_tokens']),
+      totalTokens: _combineTokens(
+        _asInt(usageMap?['input_tokens']),
+        _asInt(usageMap?['output_tokens']),
+      ),
+      stopReason: '${decoded['stop_reason'] ?? ''}'.trim().isEmpty
+          ? null
+          : '${decoded['stop_reason']}',
+    );
+  }
+
+  _ParsedResponseBody _parseGeminiJsonResponse(Map<String, dynamic> decoded) {
+    final chunk = _parseGeminiChunk(decoded);
+    return _ParsedResponseBody(
+      text: chunk.deltaText,
+      promptTokens: chunk.promptTokens,
+      completionTokens: chunk.completionTokens,
+      totalTokens: chunk.totalTokens,
+      stopReason: chunk.stopReason,
+    );
+  }
+
+  _ParsedResponseBody _parseOpenAiJsonResponse(Map<String, dynamic> decoded) {
+    final outputText = '${decoded['output_text'] ?? ''}';
+    if (outputText.trim().isNotEmpty) {
+      final usage = decoded['usage'];
+      final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
+      return _ParsedResponseBody(
+        text: outputText,
+        promptTokens: _asInt(usageMap?['input_tokens']),
+        completionTokens: _asInt(usageMap?['output_tokens']),
+        totalTokens: _asInt(usageMap?['total_tokens']),
+        stopReason: '${decoded['status'] ?? ''}'.trim().isEmpty
+            ? null
+            : '${decoded['status']}',
+      );
+    }
+
+    final output = decoded['output'];
+    if (output is List) {
+      final text = output
+          .whereType<Map>()
+          .expand(
+            (item) =>
+                (item['content'] is List ? item['content'] as List : const [])
+                    .whereType<Map>()
+                    .map((part) => '${part['text'] ?? ''}'),
+          )
+          .join();
+      final usage = decoded['usage'];
+      final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
+      return _ParsedResponseBody(
+        text: text,
+        promptTokens: _asInt(usageMap?['input_tokens']),
+        completionTokens: _asInt(usageMap?['output_tokens']),
+        totalTokens: _asInt(usageMap?['total_tokens']),
+        stopReason: '${decoded['status'] ?? ''}'.trim().isEmpty
+            ? null
+            : '${decoded['status']}',
+      );
+    }
+    return const _ParsedResponseBody(text: '');
+  }
+
   String _extractDeltaContent(Object? content) {
     if (content is String) {
       return content;
@@ -1070,14 +1603,14 @@ class ChatService {
   }) {
     return _encodePreviewJson(<String, Object?>{
       'method': 'POST',
-      'url': url,
+      'url': _redactUrl(url),
       'headers': _redactHeaders(headers),
       'body': _redactJsonValue(payload),
     });
   }
 
   _PreviewData _buildSuccessResponsePreview({
-    required Response<ResponseBody> response,
+    required Response<dynamic> response,
     required _SseConsumeResult streamResult,
   }) {
     return _encodePreviewJson(<String, Object?>{
@@ -1097,6 +1630,26 @@ class ChatService {
             'total_tokens': streamResult.totalTokens,
           },
       },
+    });
+  }
+
+  _PreviewData _buildNonStreamSuccessResponsePreview({
+    required Response<dynamic> response,
+    required _SseConsumeResult result,
+  }) {
+    return _encodePreviewJson(<String, Object?>{
+      'status_code': response.statusCode,
+      'headers': _redactHeaders(_flattenHeaders(response.headers)),
+      'body': result.responseBody,
+      if (result.stopReason != null) 'stop_reason': result.stopReason,
+      if (result.promptTokens != null ||
+          result.completionTokens != null ||
+          result.totalTokens != null)
+        'usage': <String, Object?>{
+          'prompt_tokens': result.promptTokens,
+          'completion_tokens': result.completionTokens,
+          'total_tokens': result.totalTokens,
+        },
     });
   }
 
@@ -1279,6 +1832,22 @@ class ChatService {
     return sanitized;
   }
 
+  String _redactUrl(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || uri.queryParameters.isEmpty) {
+      return _redactSensitiveText(value);
+    }
+    final redacted = <String, String>{};
+    for (final entry in uri.queryParameters.entries) {
+      if (_isSensitiveKey(entry.key)) {
+        redacted[entry.key] = '[REDACTED]';
+      } else {
+        redacted[entry.key] = _redactSensitiveText(entry.value);
+      }
+    }
+    return uri.replace(queryParameters: redacted).toString();
+  }
+
   Duration? _durationFromMs(int? timeoutMs) {
     if (timeoutMs == null || timeoutMs <= 0) {
       return null;
@@ -1367,6 +1936,7 @@ class _ProviderRequest {
     required this.url,
     required this.headers,
     required this.payload,
+    required this.stream,
     this.requestTimeoutMs,
   });
 
@@ -1376,6 +1946,7 @@ class _ProviderRequest {
   final String url;
   final Map<String, String> headers;
   final Map<String, dynamic> payload;
+  final bool stream;
   final int? requestTimeoutMs;
 }
 
@@ -1408,6 +1979,7 @@ class _SseConsumeResult {
     this.completionTokens,
     this.totalTokens,
     this.stopReason,
+    this.responseBody,
   });
 
   final List<String> rawSseLines;
@@ -1416,6 +1988,7 @@ class _SseConsumeResult {
   final int? completionTokens;
   final int? totalTokens;
   final String? stopReason;
+  final Object? responseBody;
 }
 
 class _SseChunk {
@@ -1428,6 +2001,29 @@ class _SseChunk {
   });
 
   final String deltaText;
+  final int? promptTokens;
+  final int? completionTokens;
+  final int? totalTokens;
+  final String? stopReason;
+
+  bool get isEmpty =>
+      deltaText.isEmpty &&
+      promptTokens == null &&
+      completionTokens == null &&
+      totalTokens == null &&
+      stopReason == null;
+}
+
+class _ParsedResponseBody {
+  const _ParsedResponseBody({
+    required this.text,
+    this.promptTokens,
+    this.completionTokens,
+    this.totalTokens,
+    this.stopReason,
+  });
+
+  final String text;
   final int? promptTokens;
   final int? completionTokens;
   final int? totalTokens;

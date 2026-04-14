@@ -37,6 +37,16 @@ class RuntimeApiConfig {
     required this.defaultModel,
     this.customHeaders = const <String, String>{},
     this.requestTimeoutMs,
+    this.stream,
+    this.temperature,
+    this.topP,
+    this.topK,
+    this.presencePenalty,
+    this.frequencyPenalty,
+    this.maxCompletionTokens,
+    this.stopSequences = const <String>[],
+    this.reasoningEffort,
+    this.verbosity,
   });
 
   final String apiId;
@@ -48,6 +58,16 @@ class RuntimeApiConfig {
   final String defaultModel;
   final Map<String, String> customHeaders;
   final int? requestTimeoutMs;
+  final bool? stream;
+  final double? temperature;
+  final double? topP;
+  final int? topK;
+  final double? presencePenalty;
+  final double? frequencyPenalty;
+  final int? maxCompletionTokens;
+  final List<String> stopSequences;
+  final String? reasoningEffort;
+  final String? verbosity;
 }
 
 class RuntimePresetEntry {
@@ -73,27 +93,11 @@ class RuntimePresetConfig {
     required this.presetId,
     required this.name,
     required this.entries,
-    this.temperature,
-    this.topP,
-    this.presencePenalty,
-    this.frequencyPenalty,
-    this.maxCompletionTokens,
-    this.stopSequences = const <String>[],
-    this.reasoningEffort,
-    this.verbosity,
   });
 
   final String presetId;
   final String name;
   final List<RuntimePresetEntry> entries;
-  final double? temperature;
-  final double? topP;
-  final double? presencePenalty;
-  final double? frequencyPenalty;
-  final int? maxCompletionTokens;
-  final List<String> stopSequences;
-  final String? reasoningEffort;
-  final String? verbosity;
 }
 
 class StartupChatRuntime {
@@ -157,38 +161,6 @@ class ApiService {
   static const String _presetMainPrompt = String.fromEnvironment(
     'RST_PRESET_MAIN_PROMPT',
     defaultValue: '你是 RST 的助手，请基于上下文给出清晰、连贯的回复。',
-  );
-  static const String _presetTemperatureRaw = String.fromEnvironment(
-    'RST_PRESET_TEMPERATURE',
-    defaultValue: '0.8',
-  );
-  static const String _presetTopPRaw = String.fromEnvironment(
-    'RST_PRESET_TOP_P',
-    defaultValue: '1.0',
-  );
-  static const String _presetPresencePenaltyRaw = String.fromEnvironment(
-    'RST_PRESET_PRESENCE_PENALTY',
-    defaultValue: '',
-  );
-  static const String _presetFrequencyPenaltyRaw = String.fromEnvironment(
-    'RST_PRESET_FREQUENCY_PENALTY',
-    defaultValue: '',
-  );
-  static const String _presetMaxCompletionTokensRaw = String.fromEnvironment(
-    'RST_PRESET_MAX_COMPLETION_TOKENS',
-    defaultValue: '512',
-  );
-  static const String _presetReasoningEffort = String.fromEnvironment(
-    'RST_PRESET_REASONING_EFFORT',
-    defaultValue: '',
-  );
-  static const String _presetVerbosity = String.fromEnvironment(
-    'RST_PRESET_VERBOSITY',
-    defaultValue: '',
-  );
-  static const String _presetStopSequencesRaw = String.fromEnvironment(
-    'RST_PRESET_STOP_SEQUENCES',
-    defaultValue: '',
   );
   static const String _maxContextMessagesRaw = String.fromEnvironment(
     'RST_MAX_CONTEXT_MESSAGES',
@@ -329,6 +301,33 @@ class ApiService {
           : null,
       clearRequestTimeoutMs:
           config.requestTimeoutMs == null || config.requestTimeoutMs! <= 0,
+      stream: config.stream,
+      clearStream: config.stream == null,
+      temperature: config.temperature,
+      clearTemperature: config.temperature == null,
+      topP: config.topP,
+      clearTopP: config.topP == null,
+      topK: config.topK != null && config.topK! >= 0 ? config.topK : null,
+      clearTopK: config.topK == null || config.topK! < 0,
+      presencePenalty: config.presencePenalty,
+      clearPresencePenalty: config.presencePenalty == null,
+      frequencyPenalty: config.frequencyPenalty,
+      clearFrequencyPenalty: config.frequencyPenalty == null,
+      maxCompletionTokens:
+          config.maxCompletionTokens != null && config.maxCompletionTokens! > 0
+          ? config.maxCompletionTokens
+          : null,
+      clearMaxCompletionTokens:
+          config.maxCompletionTokens == null ||
+          config.maxCompletionTokens! <= 0,
+      stopSequences: config.stopSequences
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false),
+      reasoningEffort: _normalizeOptional(config.reasoningEffort),
+      clearReasoningEffort: _normalizeOptional(config.reasoningEffort) == null,
+      verbosity: _normalizeOptional(config.verbosity),
+      clearVerbosity: _normalizeOptional(config.verbosity) == null,
       updatedAt: now,
       createdAt: config.createdAt.toUtc(),
     );
@@ -390,47 +389,38 @@ class ApiService {
     Map<String, String> customHeaders = const <String, String>{},
     int? requestTimeoutMs,
   }) async {
-    final url = _composeModelsUrl(baseUrl: baseUrl, requestPath: requestPath);
     final dio = Dio(
       BaseOptions(
         connectTimeout: Duration(milliseconds: requestTimeoutMs ?? 15000),
         receiveTimeout: Duration(milliseconds: requestTimeoutMs ?? 15000),
         sendTimeout: Duration(milliseconds: requestTimeoutMs ?? 15000),
-        headers: <String, String>{
-          if (apiKey.trim().isNotEmpty)
-            'Authorization': 'Bearer ${apiKey.trim()}',
-          ...customHeaders,
-        },
       ),
     );
 
     try {
-      final response = await dio.getUri<dynamic>(Uri.parse(url));
+      final response = await dio.getUri<dynamic>(
+        _buildModelsUri(
+          providerType: providerType,
+          baseUrl: baseUrl,
+          requestPath: requestPath,
+          apiKey: apiKey,
+        ),
+        options: Options(
+          headers: _buildModelFetchHeaders(
+            providerType: providerType,
+            apiKey: apiKey,
+            customHeaders: customHeaders,
+          ),
+        ),
+      );
       final payload = response.data;
-      if (payload is! Map) {
-        throw StateError('模型列表响应格式不正确');
-      }
-
-      final data = payload['data'];
-      if (data is! List) {
-        throw StateError('模型列表响应缺少 data');
-      }
-
-      final models =
-          data
-              .whereType<Map>()
-              .map((item) => '${item['id'] ?? ''}'.trim())
-              .where((item) => item.isNotEmpty)
-              .toSet()
-              .toList(growable: false)
-            ..sort();
+      final models = _extractModels(
+        providerType: providerType,
+        payload: payload,
+      );
 
       if (models.isEmpty) {
         throw StateError('没有返回可用模型');
-      }
-
-      if (providerType == ProviderType.openai) {
-        return models;
       }
       return models;
     } on DioException catch (error) {
@@ -451,9 +441,7 @@ class ApiService {
   RuntimeApiConfig _toRuntimeApiConfig(StoredApiConfig config) {
     final providerType = config.providerType;
     final requestPath = config.requestPath.trim().isEmpty
-        ? providerType == ProviderType.openai
-              ? '/v1/responses'
-              : '/v1/chat/completions'
+        ? providerType.defaultRequestPath
         : config.requestPath.trim();
     return RuntimeApiConfig(
       apiId: config.apiId,
@@ -465,6 +453,16 @@ class ApiService {
       defaultModel: config.defaultModel.trim(),
       customHeaders: config.customHeaders,
       requestTimeoutMs: config.requestTimeoutMs,
+      stream: config.stream,
+      temperature: config.temperature,
+      topP: config.topP,
+      topK: config.topK,
+      presencePenalty: config.presencePenalty,
+      frequencyPenalty: config.frequencyPenalty,
+      maxCompletionTokens: config.maxCompletionTokens,
+      stopSequences: config.stopSequences,
+      reasoningEffort: _normalizeOptional(config.reasoningEffort),
+      verbosity: _normalizeOptional(config.verbosity),
     );
   }
 
@@ -475,14 +473,6 @@ class ApiService {
       presetId: config.presetId,
       name: config.name,
       entries: entries,
-      temperature: config.temperature,
-      topP: config.topP,
-      presencePenalty: config.presencePenalty,
-      frequencyPenalty: config.frequencyPenalty,
-      maxCompletionTokens: config.maxCompletionTokens,
-      stopSequences: config.stopSequences,
-      reasoningEffort: _normalizeOptional(config.reasoningEffort),
-      verbosity: _normalizeOptional(config.verbosity),
     );
   }
 
@@ -551,24 +541,24 @@ class ApiService {
   }
 
   StoredApiConfig _defaultApiConfig() {
-    final providerType = _providerTypeRaw.trim().toLowerCase() == 'openai'
-        ? ProviderType.openai
-        : ProviderType.openaiCompatible;
+    final providerType = providerTypeFromWire(_providerTypeRaw);
     final requestPath = _apiRequestPathRaw.trim().isEmpty
-        ? providerType == ProviderType.openai
-              ? '/v1/responses'
-              : '/v1/chat/completions'
+        ? providerType.defaultRequestPath
         : _apiRequestPathRaw.trim();
     final now = DateTime.now().toUtc();
     return StoredApiConfig(
       apiId: _apiId,
       name: _apiName,
       providerType: providerType,
-      baseUrl: _apiBaseUrl.trim(),
+      baseUrl: _apiBaseUrl.trim().isEmpty
+          ? providerType.defaultBaseUrl
+          : _apiBaseUrl.trim(),
       requestPath: requestPath,
       apiKeyCiphertext: _apiKey.trim(),
       apiKeyHint: _buildApiKeyHint(_apiKey.trim()),
-      defaultModel: _apiModel.trim(),
+      defaultModel: _apiModel.trim().isEmpty
+          ? providerType.defaultModel
+          : _apiModel.trim(),
       createdAt: now,
       updatedAt: now,
     );
@@ -580,14 +570,6 @@ class ApiService {
       presetId: _presetId,
       name: _presetName,
       mainPrompt: _presetMainPrompt.trim(),
-      temperature: _parseDouble(_presetTemperatureRaw),
-      topP: _parseDouble(_presetTopPRaw),
-      presencePenalty: _parseDouble(_presetPresencePenaltyRaw),
-      frequencyPenalty: _parseDouble(_presetFrequencyPenaltyRaw),
-      maxCompletionTokens: _parseInt(_presetMaxCompletionTokensRaw),
-      stopSequences: _parseCsv(_presetStopSequencesRaw),
-      reasoningEffort: _normalizeOptional(_presetReasoningEffort),
-      verbosity: _normalizeOptional(_presetVerbosity),
       createdAt: now,
       updatedAt: now,
     );
@@ -730,6 +712,124 @@ class ApiService {
     return segments;
   }
 
+  Uri _buildModelsUri({
+    required ProviderType providerType,
+    required String baseUrl,
+    required String requestPath,
+    required String apiKey,
+  }) {
+    switch (providerType) {
+      case ProviderType.gemini:
+        final url = _composeGeminiModelsUrl(
+          baseUrl: baseUrl,
+          requestPath: requestPath,
+        );
+        final uri = Uri.parse(url);
+        return uri.replace(
+          queryParameters: <String, String>{
+            ...uri.queryParameters,
+            if (apiKey.trim().isNotEmpty) 'key': apiKey.trim(),
+          },
+        );
+      case ProviderType.deepseek:
+        return Uri.parse(
+          _composeModelsUrl(
+            baseUrl: _stripTrailingDeepSeekBeta(baseUrl),
+            requestPath: requestPath,
+          ),
+        );
+      default:
+        return Uri.parse(
+          _composeModelsUrl(baseUrl: baseUrl, requestPath: requestPath),
+        );
+    }
+  }
+
+  Map<String, String> _buildModelFetchHeaders({
+    required ProviderType providerType,
+    required String apiKey,
+    required Map<String, String> customHeaders,
+  }) {
+    final headers = <String, String>{...customHeaders};
+    if (providerType == ProviderType.openai ||
+        providerType == ProviderType.openaiCompatible ||
+        providerType == ProviderType.deepseek ||
+        providerType == ProviderType.openrouter) {
+      if (apiKey.trim().isNotEmpty) {
+        headers.putIfAbsent('Authorization', () => 'Bearer ${apiKey.trim()}');
+      }
+    }
+    if (providerType == ProviderType.openrouter) {
+      headers.putIfAbsent('HTTP-Referer', () => 'https://sillytavern.app');
+      headers.putIfAbsent('X-Title', () => 'SillyTavern');
+    }
+    if (providerType == ProviderType.anthropic) {
+      if (apiKey.trim().isNotEmpty) {
+        headers.putIfAbsent('x-api-key', () => apiKey.trim());
+      }
+      headers.putIfAbsent('anthropic-version', () => '2023-06-01');
+    }
+    return headers;
+  }
+
+  List<String> _extractModels({
+    required ProviderType providerType,
+    required Object? payload,
+  }) {
+    if (payload is! Map) {
+      throw StateError('模型列表响应格式不正确');
+    }
+    switch (providerType) {
+      case ProviderType.gemini:
+        final models = payload['models'];
+        if (models is! List) {
+          throw StateError('模型列表响应缺少 models');
+        }
+        return models
+            .whereType<Map>()
+            .map((item) => '${item['name'] ?? ''}'.trim())
+            .map((name) => name.replaceFirst('models/', ''))
+            .where((item) => item.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+      default:
+        final data = payload['data'];
+        if (data is! List) {
+          throw StateError('模型列表响应缺少 data');
+        }
+        return data
+            .whereType<Map>()
+            .map((item) => '${item['id'] ?? ''}'.trim())
+            .where((item) => item.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+    }
+  }
+
+  String _composeGeminiModelsUrl({
+    required String baseUrl,
+    required String requestPath,
+  }) {
+    final trimmedBase = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final normalizedPath = requestPath.trim().isEmpty
+        ? ProviderType.gemini.defaultRequestPath
+        : requestPath.trim();
+    final trimmedPath = normalizedPath.startsWith('/')
+        ? normalizedPath
+        : '/$normalizedPath';
+    return '$trimmedBase$trimmedPath';
+  }
+
+  String _stripTrailingDeepSeekBeta(String baseUrl) {
+    final trimmed = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (trimmed.endsWith('/beta')) {
+      return trimmed.substring(0, trimmed.length - 5);
+    }
+    return trimmed;
+  }
+
   Map<String, String> _sanitizeHeaders(Map<String, String> raw) {
     final next = <String, String>{};
     raw.forEach((key, value) {
@@ -754,14 +854,6 @@ class ApiService {
     return '${normalized.substring(0, 4)}***${normalized.substring(normalized.length - 4)}';
   }
 
-  double? _parseDouble(String value) {
-    final normalized = value.trim();
-    if (normalized.isEmpty) {
-      return null;
-    }
-    return double.tryParse(normalized);
-  }
-
   int? _parseInt(String value) {
     final normalized = value.trim();
     if (normalized.isEmpty) {
@@ -776,13 +868,5 @@ class ApiService {
       return null;
     }
     return normalized;
-  }
-
-  List<String> _parseCsv(String raw) {
-    return raw
-        .split(',')
-        .map((item) => item.trim())
-        .where((item) => item.isNotEmpty)
-        .toList(growable: false);
   }
 }

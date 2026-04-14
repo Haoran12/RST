@@ -177,25 +177,9 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _mainPromptController;
-  late final TextEditingController _temperatureController;
-  late final TextEditingController _topPController;
-  late final TextEditingController _presencePenaltyController;
-  late final TextEditingController _frequencyPenaltyController;
-  late final TextEditingController _maxTokensController;
-  late final TextEditingController _stopSequencesController;
-  late final TextEditingController _reasoningController;
-  late final TextEditingController _verbosityController;
   late final String _initialName;
   late final String _initialDescription;
   late final String _initialMainPrompt;
-  late final String _initialTemperature;
-  late final String _initialTopP;
-  late final String _initialPresencePenalty;
-  late final String _initialFrequencyPenalty;
-  late final String _initialMaxTokens;
-  late final String _initialStopSequences;
-  late final String _initialReasoning;
-  late final String _initialVerbosity;
 
   @override
   void initState() {
@@ -209,34 +193,6 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
     _initialDescription = value.description ?? '';
     _mainPromptController = TextEditingController(text: value.mainPrompt);
     _initialMainPrompt = value.mainPrompt;
-    _temperatureController = TextEditingController(
-      text: _stringifyDouble(value.temperature),
-    );
-    _initialTemperature = _stringifyDouble(value.temperature);
-    _topPController = TextEditingController(text: _stringifyDouble(value.topP));
-    _initialTopP = _stringifyDouble(value.topP);
-    _presencePenaltyController = TextEditingController(
-      text: _stringifyDouble(value.presencePenalty),
-    );
-    _initialPresencePenalty = _stringifyDouble(value.presencePenalty);
-    _frequencyPenaltyController = TextEditingController(
-      text: _stringifyDouble(value.frequencyPenalty),
-    );
-    _initialFrequencyPenalty = _stringifyDouble(value.frequencyPenalty);
-    _maxTokensController = TextEditingController(
-      text: value.maxCompletionTokens?.toString() ?? '',
-    );
-    _initialMaxTokens = value.maxCompletionTokens?.toString() ?? '';
-    _stopSequencesController = TextEditingController(
-      text: value.stopSequences.join('\n'),
-    );
-    _initialStopSequences = value.stopSequences.join('\n');
-    _reasoningController = TextEditingController(
-      text: value.reasoningEffort ?? '',
-    );
-    _initialReasoning = value.reasoningEffort ?? '';
-    _verbosityController = TextEditingController(text: value.verbosity ?? '');
-    _initialVerbosity = value.verbosity ?? '';
   }
 
   @override
@@ -244,14 +200,6 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
     _nameController.dispose();
     _descriptionController.dispose();
     _mainPromptController.dispose();
-    _temperatureController.dispose();
-    _topPController.dispose();
-    _presencePenaltyController.dispose();
-    _frequencyPenaltyController.dispose();
-    _maxTokensController.dispose();
-    _stopSequencesController.dispose();
-    _reasoningController.dispose();
-    _verbosityController.dispose();
     super.dispose();
   }
 
@@ -318,75 +266,19 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
                           labelText: 'Main Prompt',
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      _buildResponsivePair(
-                        TextField(
-                          controller: _temperatureController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Temperature',
-                          ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          color: AppColors.surfaceOverlay.withValues(alpha: 0.4),
+                          border: Border.all(color: AppColors.borderSubtle),
                         ),
-                        TextField(
-                          controller: _topPController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(labelText: 'Top P'),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _buildResponsivePair(
-                        TextField(
-                          controller: _presencePenaltyController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Presence Penalty',
-                          ),
-                        ),
-                        TextField(
-                          controller: _frequencyPenaltyController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Frequency Penalty',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _maxTokensController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Max Completion Tokens',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _stopSequencesController,
-                        minLines: 2,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                          labelText: 'Stop Sequences',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _buildResponsivePair(
-                        TextField(
-                          controller: _reasoningController,
-                          decoration: const InputDecoration(
-                            labelText: 'Reasoning Effort',
-                          ),
-                        ),
-                        TextField(
-                          controller: _verbosityController,
-                          decoration: const InputDecoration(
-                            labelText: 'Verbosity',
+                        child: Text(
+                          '模型参数已经迁移到 API 配置板块。预设现在只负责 Prompt、描述和结构化注入内容。',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                            height: 1.4,
                           ),
                         ),
                       ),
@@ -400,23 +292,6 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildResponsivePair(Widget left, Widget right) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 560) {
-          return Column(children: [left, const SizedBox(height: 10), right]);
-        }
-        return Row(
-          children: [
-            Expanded(child: left),
-            const SizedBox(width: 10),
-            Expanded(child: right),
-          ],
-        );
-      },
     );
   }
 
@@ -434,38 +309,8 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
         description: _normalize(_descriptionController.text),
         clearDescription: _normalize(_descriptionController.text) == null,
         mainPrompt: _mainPromptController.text.trim(),
-        temperature: _tryParseDouble(_temperatureController.text),
-        clearTemperature: _temperatureController.text.trim().isEmpty,
-        topP: _tryParseDouble(_topPController.text),
-        clearTopP: _topPController.text.trim().isEmpty,
-        presencePenalty: _tryParseDouble(_presencePenaltyController.text),
-        clearPresencePenalty: _presencePenaltyController.text.trim().isEmpty,
-        frequencyPenalty: _tryParseDouble(_frequencyPenaltyController.text),
-        clearFrequencyPenalty: _frequencyPenaltyController.text.trim().isEmpty,
-        maxCompletionTokens: int.tryParse(_maxTokensController.text.trim()),
-        clearMaxCompletionTokens: _maxTokensController.text.trim().isEmpty,
-        stopSequences: _stopSequencesController.text
-            .split('\n')
-            .map((item) => item.trim())
-            .where((item) => item.isNotEmpty)
-            .toList(growable: false),
-        reasoningEffort: _normalize(_reasoningController.text),
-        clearReasoningEffort: _normalize(_reasoningController.text) == null,
-        verbosity: _normalize(_verbosityController.text),
-        clearVerbosity: _normalize(_verbosityController.text) == null,
       ),
     );
-  }
-
-  String _stringifyDouble(double? value) {
-    if (value == null) {
-      return '';
-    }
-    return value.toString();
-  }
-
-  double? _tryParseDouble(String raw) {
-    return double.tryParse(raw.trim());
   }
 
   String? _normalize(String raw) {
@@ -501,14 +346,6 @@ class _PresetEditorPageState extends State<_PresetEditorPage> {
   bool _isDirty() {
     return _nameController.text != _initialName ||
         _descriptionController.text != _initialDescription ||
-        _mainPromptController.text != _initialMainPrompt ||
-        _temperatureController.text != _initialTemperature ||
-        _topPController.text != _initialTopP ||
-        _presencePenaltyController.text != _initialPresencePenalty ||
-        _frequencyPenaltyController.text != _initialFrequencyPenalty ||
-        _maxTokensController.text != _initialMaxTokens ||
-        _stopSequencesController.text != _initialStopSequences ||
-        _reasoningController.text != _initialReasoning ||
-        _verbosityController.text != _initialVerbosity;
+        _mainPromptController.text != _initialMainPrompt;
   }
 }

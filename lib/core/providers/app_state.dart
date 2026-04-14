@@ -516,10 +516,11 @@ List<ManagedOptionSection> _buildPresetSections() {
 List<ManagedOptionSection> _buildApiConfigSections() {
   const providerChoices = <ManagedFieldChoice>[
     ManagedFieldChoice(label: 'OpenAI', value: 'openai'),
+    ManagedFieldChoice(label: 'OpenRouter', value: 'openrouter'),
     ManagedFieldChoice(label: 'Gemini', value: 'gemini'),
     ManagedFieldChoice(label: 'Deepseek', value: 'deepseek'),
     ManagedFieldChoice(label: 'Anthropic', value: 'anthropic'),
-    ManagedFieldChoice(label: 'OpenAI 兼容', value: 'openai_compat'),
+    ManagedFieldChoice(label: 'OpenAI 兼容', value: 'openai_compatible'),
   ];
   const reasoningChoices = <ManagedFieldChoice>[
     ManagedFieldChoice(label: '不使用', value: ''),
@@ -537,7 +538,7 @@ List<ManagedOptionSection> _buildApiConfigSections() {
           key: 'provider',
           label: 'Provider',
           type: ManagedFieldType.select,
-          value: 'openai_compat',
+          value: 'openai_compatible',
           choices: providerChoices,
         ),
         ManagedOptionField(

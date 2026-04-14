@@ -1,0 +1,405 @@
+{
+  "version": 1,
+  "providers": [
+    {
+      "providerType": "openai",
+      "label": "OpenAI",
+      "shortDescription": "Official Responses API",
+      "defaultBaseUrl": "https://api.openai.com",
+      "defaultRequestPath": "/v1/responses",
+      "defaultModel": "gpt-5.4-mini",
+      "documentationUrl": "https://developers.openai.com/api/reference/responses/create",
+      "notes": [
+        "Optional generation parameters are omitted unless you explicitly set them."
+      ],
+      "parameters": [
+        {
+          "key": "stream",
+          "label": "Stream",
+          "valueType": "boolean",
+          "requestField": "stream",
+          "defaultValueLabel": "true",
+          "description": "When omitted, the app defaults to streaming for live output."
+        },
+        {
+          "key": "temperature",
+          "label": "Temperature",
+          "valueType": "number",
+          "requestField": "temperature",
+          "defaultValueLabel": "1.0",
+          "description": "Leave blank to let the provider use its default."
+        },
+        {
+          "key": "topP",
+          "label": "Top P",
+          "valueType": "number",
+          "requestField": "top_p",
+          "defaultValueLabel": "1.0",
+          "description": "Leave blank to let the provider use its default."
+        },
+        {
+          "key": "maxCompletionTokens",
+          "label": "Max Completion Tokens",
+          "valueType": "integer",
+          "requestField": "max_output_tokens",
+          "defaultSource": "omitted",
+          "description": "Leave blank to omit this limit."
+        },
+        {
+          "key": "reasoningEffort",
+          "label": "Reasoning Effort",
+          "valueType": "text",
+          "requestField": "reasoning.effort",
+          "defaultValueLabel": "medium",
+          "placeholder": "minimal | low | medium | high"
+        },
+        {
+          "key": "verbosity",
+          "label": "Verbosity",
+          "valueType": "text",
+          "requestField": "text.verbosity",
+          "defaultValueLabel": "medium",
+          "placeholder": "low | medium | high"
+        }
+      ]
+    },
+    {
+      "providerType": "openai_compatible",
+      "label": "OpenAI-Compatible",
+      "shortDescription": "Chat Completions protocol",
+      "defaultBaseUrl": "https://api.openai.com",
+      "defaultRequestPath": "/v1/chat/completions",
+      "defaultModel": "gpt-4.1-mini",
+      "documentationUrl": "https://platform.openai.com/docs/api-reference/chat/create",
+      "notes": [
+        "This profile follows the OpenAI Chat Completions reference, but compatible vendors may differ."
+      ],
+      "parameters": [
+        {
+          "key": "stream",
+          "label": "Stream",
+          "valueType": "boolean",
+          "requestField": "stream",
+          "defaultValueLabel": "false",
+          "description": "If omitted, many compatible providers default to non-streaming."
+        },
+        {
+          "key": "temperature",
+          "label": "Temperature",
+          "valueType": "number",
+          "requestField": "temperature",
+          "defaultValueLabel": "1.0"
+        },
+        {
+          "key": "topP",
+          "label": "Top P",
+          "valueType": "number",
+          "requestField": "top_p",
+          "defaultValueLabel": "1.0"
+        },
+        {
+          "key": "presencePenalty",
+          "label": "Presence Penalty",
+          "valueType": "number",
+          "requestField": "presence_penalty",
+          "defaultValueLabel": "0.0"
+        },
+        {
+          "key": "frequencyPenalty",
+          "label": "Frequency Penalty",
+          "valueType": "number",
+          "requestField": "frequency_penalty",
+          "defaultValueLabel": "0.0"
+        },
+        {
+          "key": "maxCompletionTokens",
+          "label": "Max Completion Tokens",
+          "valueType": "integer",
+          "requestField": "max_tokens",
+          "defaultSource": "omitted"
+        },
+        {
+          "key": "stopSequences",
+          "label": "Stop Sequences",
+          "valueType": "stringList",
+          "requestField": "stop",
+          "defaultSource": "omitted"
+        },
+        {
+          "key": "reasoningEffort",
+          "label": "Reasoning Effort",
+          "valueType": "text",
+          "requestField": "reasoning_effort",
+          "defaultValueLabel": "medium",
+          "placeholder": "minimal | low | medium | high"
+        },
+        {
+          "key": "verbosity",
+          "label": "Verbosity",
+          "valueType": "text",
+          "requestField": "verbosity",
+          "defaultValueLabel": "medium",
+          "placeholder": "low | medium | high"
+        }
+      ]
+    },
+    {
+      "providerType": "anthropic",
+      "label": "Anthropic",
+      "shortDescription": "Claude Messages API",
+      "defaultBaseUrl": "https://api.anthropic.com",
+      "defaultRequestPath": "/v1/messages",
+      "defaultModel": "claude-sonnet-4-5",
+      "documentationUrl": "https://docs.anthropic.com/en/api/messages",
+      "notes": [
+        "System prompts are sent as a single merged system string."
+      ],
+      "parameters": [
+        {
+          "key": "stream",
+          "label": "Stream",
+          "valueType": "boolean",
+          "requestField": "stream",
+          "defaultValueLabel": "false",
+          "description": "If omitted, Anthropic returns a non-streaming response."
+        },
+        {
+          "key": "maxCompletionTokens",
+          "label": "Max Completion Tokens",
+          "valueType": "integer",
+          "requestField": "max_tokens",
+          "required": true,
+          "defaultSource": "no provider default",
+          "description": "Anthropic requires max_tokens on each request.",
+          "appFallbackValue": 1024
+        },
+        {
+          "key": "temperature",
+          "label": "Temperature",
+          "valueType": "number",
+          "requestField": "temperature",
+          "defaultValueLabel": "1.0"
+        },
+        {
+          "key": "topP",
+          "label": "Top P",
+          "valueType": "number",
+          "requestField": "top_p",
+          "defaultValueLabel": "0.99"
+        },
+        {
+          "key": "topK",
+          "label": "Top K",
+          "valueType": "integer",
+          "requestField": "top_k",
+          "defaultSource": "omitted"
+        },
+        {
+          "key": "stopSequences",
+          "label": "Stop Sequences",
+          "valueType": "stringList",
+          "requestField": "stop_sequences",
+          "defaultSource": "omitted"
+        }
+      ]
+    },
+    {
+      "providerType": "gemini",
+      "label": "Google Gemini",
+      "shortDescription": "Google AI Studio GenerateContent",
+      "defaultBaseUrl": "https://generativelanguage.googleapis.com",
+      "defaultRequestPath": "/v1beta/models",
+      "defaultModel": "gemini-2.5-pro",
+      "documentationUrl": "https://ai.google.dev/api/generate-content",
+      "notes": [
+        "Most defaults come from the selected model, so leaving fields blank is preferred."
+      ],
+      "parameters": [
+        {
+          "key": "stream",
+          "label": "Stream",
+          "valueType": "boolean",
+          "requestField": "stream",
+          "defaultValueLabel": "false",
+          "description": "Gemini switches between generateContent and streamGenerateContent."
+        },
+        {
+          "key": "temperature",
+          "label": "Temperature",
+          "valueType": "number",
+          "requestField": "generationConfig.temperature",
+          "defaultSource": "model default"
+        },
+        {
+          "key": "topP",
+          "label": "Top P",
+          "valueType": "number",
+          "requestField": "generationConfig.topP",
+          "defaultSource": "model default"
+        },
+        {
+          "key": "topK",
+          "label": "Top K",
+          "valueType": "integer",
+          "requestField": "generationConfig.topK",
+          "defaultSource": "model default"
+        },
+        {
+          "key": "maxCompletionTokens",
+          "label": "Max Completion Tokens",
+          "valueType": "integer",
+          "requestField": "generationConfig.maxOutputTokens",
+          "defaultSource": "model outputTokenLimit"
+        },
+        {
+          "key": "stopSequences",
+          "label": "Stop Sequences",
+          "valueType": "stringList",
+          "requestField": "generationConfig.stopSequences",
+          "defaultSource": "omitted"
+        }
+      ]
+    },
+    {
+      "providerType": "deepseek",
+      "label": "DeepSeek",
+      "shortDescription": "DeepSeek Chat Completions",
+      "defaultBaseUrl": "https://api.deepseek.com/",
+      "defaultRequestPath": "/chat/completions",
+      "defaultModel": "deepseek-chat",
+      "documentationUrl": "https://api-docs.deepseek.com/api/create-chat-completion",
+      "notes": [
+        "Reasoner models may ignore or restrict some sampling parameters."
+      ],
+      "parameters": [
+        {
+          "key": "stream",
+          "label": "Stream",
+          "valueType": "boolean",
+          "requestField": "stream",
+          "defaultValueLabel": "false"
+        },
+        {
+          "key": "temperature",
+          "label": "Temperature",
+          "valueType": "number",
+          "requestField": "temperature",
+          "defaultValueLabel": "1.0"
+        },
+        {
+          "key": "topP",
+          "label": "Top P",
+          "valueType": "number",
+          "requestField": "top_p",
+          "defaultValueLabel": "1.0"
+        },
+        {
+          "key": "presencePenalty",
+          "label": "Presence Penalty",
+          "valueType": "number",
+          "requestField": "presence_penalty",
+          "defaultValueLabel": "0.0"
+        },
+        {
+          "key": "frequencyPenalty",
+          "label": "Frequency Penalty",
+          "valueType": "number",
+          "requestField": "frequency_penalty",
+          "defaultValueLabel": "0.0"
+        },
+        {
+          "key": "maxCompletionTokens",
+          "label": "Max Completion Tokens",
+          "valueType": "integer",
+          "requestField": "max_tokens",
+          "defaultValueLabel": "4096 or model-specific"
+        },
+        {
+          "key": "stopSequences",
+          "label": "Stop Sequences",
+          "valueType": "stringList",
+          "requestField": "stop",
+          "defaultSource": "omitted"
+        }
+      ]
+    },
+    {
+      "providerType": "openrouter",
+      "label": "OpenRouter",
+      "shortDescription": "OpenRouter routed chat completions",
+      "defaultBaseUrl": "https://openrouter.ai/api/v1",
+      "defaultRequestPath": "/chat/completions",
+      "defaultModel": "openai/gpt-4.1-mini",
+      "documentationUrl": "https://openrouter.ai/docs/api-reference/parameters",
+      "notes": [
+        "This profile automatically adds HTTP-Referer and X-Title headers."
+      ],
+      "parameters": [
+        {
+          "key": "stream",
+          "label": "Stream",
+          "valueType": "boolean",
+          "requestField": "stream",
+          "defaultValueLabel": "false"
+        },
+        {
+          "key": "temperature",
+          "label": "Temperature",
+          "valueType": "number",
+          "requestField": "temperature",
+          "defaultValueLabel": "1.0"
+        },
+        {
+          "key": "topP",
+          "label": "Top P",
+          "valueType": "number",
+          "requestField": "top_p",
+          "defaultValueLabel": "1.0"
+        },
+        {
+          "key": "topK",
+          "label": "Top K",
+          "valueType": "integer",
+          "requestField": "top_k",
+          "defaultValueLabel": "0"
+        },
+        {
+          "key": "presencePenalty",
+          "label": "Presence Penalty",
+          "valueType": "number",
+          "requestField": "presence_penalty",
+          "defaultValueLabel": "0.0"
+        },
+        {
+          "key": "frequencyPenalty",
+          "label": "Frequency Penalty",
+          "valueType": "number",
+          "requestField": "frequency_penalty",
+          "defaultValueLabel": "0.0"
+        },
+        {
+          "key": "maxCompletionTokens",
+          "label": "Max Completion Tokens",
+          "valueType": "integer",
+          "requestField": "max_tokens",
+          "defaultSource": "omitted"
+        },
+        {
+          "key": "stopSequences",
+          "label": "Stop Sequences",
+          "valueType": "stringList",
+          "requestField": "stop",
+          "defaultSource": "omitted"
+        },
+        {
+          "key": "verbosity",
+          "label": "Verbosity",
+          "valueType": "text",
+          "requestField": "verbosity",
+          "defaultValueLabel": "medium",
+          "placeholder": "low | medium | high"
+        }
+      ]
+    }
+  ]
+}

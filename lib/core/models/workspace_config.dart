@@ -12,6 +12,16 @@ class StoredApiConfig {
     required this.defaultModel,
     this.customHeaders = const <String, String>{},
     this.requestTimeoutMs,
+    this.stream,
+    this.temperature,
+    this.topP,
+    this.topK,
+    this.presencePenalty,
+    this.frequencyPenalty,
+    this.maxCompletionTokens,
+    this.stopSequences = const <String>[],
+    this.reasoningEffort,
+    this.verbosity,
     required this.createdAt,
     required this.updatedAt,
     this.version = 1,
@@ -27,6 +37,16 @@ class StoredApiConfig {
   final String defaultModel;
   final Map<String, String> customHeaders;
   final int? requestTimeoutMs;
+  final bool? stream;
+  final double? temperature;
+  final double? topP;
+  final int? topK;
+  final double? presencePenalty;
+  final double? frequencyPenalty;
+  final int? maxCompletionTokens;
+  final List<String> stopSequences;
+  final String? reasoningEffort;
+  final String? verbosity;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -44,6 +64,25 @@ class StoredApiConfig {
     Map<String, String>? customHeaders,
     int? requestTimeoutMs,
     bool clearRequestTimeoutMs = false,
+    bool? stream,
+    bool clearStream = false,
+    double? temperature,
+    bool clearTemperature = false,
+    double? topP,
+    bool clearTopP = false,
+    int? topK,
+    bool clearTopK = false,
+    double? presencePenalty,
+    bool clearPresencePenalty = false,
+    double? frequencyPenalty,
+    bool clearFrequencyPenalty = false,
+    int? maxCompletionTokens,
+    bool clearMaxCompletionTokens = false,
+    List<String>? stopSequences,
+    String? reasoningEffort,
+    bool clearReasoningEffort = false,
+    String? verbosity,
+    bool clearVerbosity = false,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -61,6 +100,24 @@ class StoredApiConfig {
       requestTimeoutMs: clearRequestTimeoutMs
           ? null
           : (requestTimeoutMs ?? this.requestTimeoutMs),
+      stream: clearStream ? null : (stream ?? this.stream),
+      temperature: clearTemperature ? null : (temperature ?? this.temperature),
+      topP: clearTopP ? null : (topP ?? this.topP),
+      topK: clearTopK ? null : (topK ?? this.topK),
+      presencePenalty: clearPresencePenalty
+          ? null
+          : (presencePenalty ?? this.presencePenalty),
+      frequencyPenalty: clearFrequencyPenalty
+          ? null
+          : (frequencyPenalty ?? this.frequencyPenalty),
+      maxCompletionTokens: clearMaxCompletionTokens
+          ? null
+          : (maxCompletionTokens ?? this.maxCompletionTokens),
+      stopSequences: stopSequences ?? this.stopSequences,
+      reasoningEffort: clearReasoningEffort
+          ? null
+          : (reasoningEffort ?? this.reasoningEffort),
+      verbosity: clearVerbosity ? null : (verbosity ?? this.verbosity),
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -71,10 +128,7 @@ class StoredApiConfig {
     return <String, dynamic>{
       'apiId': apiId,
       'name': name,
-      'providerType': switch (providerType) {
-        ProviderType.openai => 'openai',
-        ProviderType.openaiCompatible => 'openai_compatible',
-      },
+      'providerType': providerType.wireValue,
       'baseUrl': baseUrl,
       'requestPath': requestPath,
       'apiKeyCiphertext': apiKeyCiphertext,
@@ -82,6 +136,16 @@ class StoredApiConfig {
       'defaultModel': defaultModel,
       'customHeaders': customHeaders,
       'requestTimeoutMs': requestTimeoutMs,
+      'stream': stream,
+      'temperature': temperature,
+      'topP': topP,
+      'topK': topK,
+      'presencePenalty': presencePenalty,
+      'frequencyPenalty': frequencyPenalty,
+      'maxCompletionTokens': maxCompletionTokens,
+      'stopSequences': stopSequences,
+      'reasoningEffort': reasoningEffort,
+      'verbosity': verbosity,
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
       'version': version,
@@ -92,7 +156,7 @@ class StoredApiConfig {
     return StoredApiConfig(
       apiId: '${json['apiId'] ?? ''}',
       name: '${json['name'] ?? ''}',
-      providerType: _parseProviderType(json['providerType']),
+      providerType: providerTypeFromWire(json['providerType']),
       baseUrl: '${json['baseUrl'] ?? ''}',
       requestPath: '${json['requestPath'] ?? ''}',
       apiKeyCiphertext: '${json['apiKeyCiphertext'] ?? ''}',
@@ -100,6 +164,16 @@ class StoredApiConfig {
       defaultModel: '${json['defaultModel'] ?? ''}',
       customHeaders: _parseHeaders(json['customHeaders']),
       requestTimeoutMs: _parseInt(json['requestTimeoutMs']),
+      stream: _parseBool(json['stream']),
+      temperature: _parseDouble(json['temperature']),
+      topP: _parseDouble(json['topP']),
+      topK: _parseInt(json['topK']),
+      presencePenalty: _parseDouble(json['presencePenalty']),
+      frequencyPenalty: _parseDouble(json['frequencyPenalty']),
+      maxCompletionTokens: _parseInt(json['maxCompletionTokens']),
+      stopSequences: _parseStringList(json['stopSequences']),
+      reasoningEffort: _normalizeOptional(json['reasoningEffort']),
+      verbosity: _normalizeOptional(json['verbosity']),
       createdAt: _parseDateTime(json['createdAt']),
       updatedAt: _parseDateTime(json['updatedAt']),
       version: _parseInt(json['version']) ?? 1,
@@ -235,13 +309,6 @@ class StoredPresetConfig {
   }
 }
 
-ProviderType _parseProviderType(Object? raw) {
-  final value = '$raw'.trim().toLowerCase();
-  return value == 'openai'
-      ? ProviderType.openai
-      : ProviderType.openaiCompatible;
-}
-
 Map<String, String> _parseHeaders(Object? raw) {
   if (raw is! Map) {
     return const <String, String>{};
@@ -294,6 +361,20 @@ double? _parseDouble(Object? raw) {
     return raw.toDouble();
   }
   return double.tryParse('$raw'.trim());
+}
+
+bool? _parseBool(Object? raw) {
+  if (raw is bool) {
+    return raw;
+  }
+  final normalized = '$raw'.trim().toLowerCase();
+  if (normalized == 'true') {
+    return true;
+  }
+  if (normalized == 'false') {
+    return false;
+  }
+  return null;
 }
 
 DateTime _parseDateTime(Object? raw) {

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/common.dart';
+import '../../../core/models/provider_specs.dart';
 import '../../../core/models/workspace_config.dart';
 import '../../../core/providers/app_state.dart';
 import '../../../core/providers/config_catalog_providers.dart';
@@ -86,11 +87,37 @@ class ApiConfigManagementPage extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: GlassPanelCard(
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      config.name,
-                      style: Theme.of(context).textTheme.titleMedium,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          config.name,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _ProviderBadge(
+                              label: config.providerType.label,
+                              tone: _providerTone(config.providerType),
+                            ),
+                            _ProviderBadge(
+                              label: config.providerType.shortDescription,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          config.baseUrl,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: AppColors.textSecondary),
+                        ),
+                      ],
                     ),
                   ),
                   IconButton(
@@ -112,6 +139,17 @@ class ApiConfigManagementPage extends ConsumerWidget {
           ),
         )
         .toList(growable: false);
+  }
+
+  static Color _providerTone(ProviderType providerType) {
+    return switch (providerType) {
+      ProviderType.openai => AppColors.accentPrimary,
+      ProviderType.openaiCompatible => AppColors.accentSecondary,
+      ProviderType.anthropic => AppColors.warning,
+      ProviderType.gemini => const Color(0xFF79D66F),
+      ProviderType.deepseek => const Color(0xFF57A7FF),
+      ProviderType.openrouter => const Color(0xFFF06A93),
+    };
   }
 
   Future<void> _openEditor(
@@ -188,7 +226,17 @@ class _ApiConfigEditorDialogState
   late final TextEditingController _modelController;
   late final TextEditingController _timeoutController;
   late final TextEditingController _headersController;
+  late final TextEditingController _temperatureController;
+  late final TextEditingController _topPController;
+  late final TextEditingController _topKController;
+  late final TextEditingController _presencePenaltyController;
+  late final TextEditingController _frequencyPenaltyController;
+  late final TextEditingController _maxTokensController;
+  late final TextEditingController _stopSequencesController;
+  late final TextEditingController _reasoningController;
+  late final TextEditingController _verbosityController;
   late ProviderType _providerType;
+  bool? _streamValue;
   bool _obscureApiKey = false;
   bool _fetchingModels = false;
   String? _modelFetchError;
@@ -201,6 +249,16 @@ class _ApiConfigEditorDialogState
   late String _initialModel;
   late String _initialTimeout;
   late String _initialHeaders;
+  late bool? _initialStreamValue;
+  late String _initialTemperature;
+  late String _initialTopP;
+  late String _initialTopK;
+  late String _initialPresencePenalty;
+  late String _initialFrequencyPenalty;
+  late String _initialMaxTokens;
+  late String _initialStopSequences;
+  late String _initialReasoning;
+  late String _initialVerbosity;
 
   @override
   void initState() {
@@ -230,6 +288,38 @@ class _ApiConfigEditorDialogState
     _initialHeaders = value.customHeaders.entries
         .map((entry) => '${entry.key}: ${entry.value}')
         .join('\n');
+    _streamValue = value.stream;
+    _initialStreamValue = value.stream;
+    _temperatureController = TextEditingController(
+      text: _stringifyDouble(value.temperature),
+    );
+    _initialTemperature = _stringifyDouble(value.temperature);
+    _topPController = TextEditingController(text: _stringifyDouble(value.topP));
+    _initialTopP = _stringifyDouble(value.topP);
+    _topKController = TextEditingController(text: value.topK?.toString() ?? '');
+    _initialTopK = value.topK?.toString() ?? '';
+    _presencePenaltyController = TextEditingController(
+      text: _stringifyDouble(value.presencePenalty),
+    );
+    _initialPresencePenalty = _stringifyDouble(value.presencePenalty);
+    _frequencyPenaltyController = TextEditingController(
+      text: _stringifyDouble(value.frequencyPenalty),
+    );
+    _initialFrequencyPenalty = _stringifyDouble(value.frequencyPenalty);
+    _maxTokensController = TextEditingController(
+      text: value.maxCompletionTokens?.toString() ?? '',
+    );
+    _initialMaxTokens = value.maxCompletionTokens?.toString() ?? '';
+    _stopSequencesController = TextEditingController(
+      text: value.stopSequences.join('\n'),
+    );
+    _initialStopSequences = value.stopSequences.join('\n');
+    _reasoningController = TextEditingController(
+      text: value.reasoningEffort ?? '',
+    );
+    _initialReasoning = value.reasoningEffort ?? '';
+    _verbosityController = TextEditingController(text: value.verbosity ?? '');
+    _initialVerbosity = value.verbosity ?? '';
     if (value.defaultModel.trim().isNotEmpty) {
       _availableModels = <String>[value.defaultModel.trim()];
     }
@@ -244,11 +334,28 @@ class _ApiConfigEditorDialogState
     _modelController.dispose();
     _timeoutController.dispose();
     _headersController.dispose();
+    _temperatureController.dispose();
+    _topPController.dispose();
+    _topKController.dispose();
+    _presencePenaltyController.dispose();
+    _frequencyPenaltyController.dispose();
+    _maxTokensController.dispose();
+    _stopSequencesController.dispose();
+    _reasoningController.dispose();
+    _verbosityController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final specCatalogAsync = ref.watch(providerSpecCatalogProvider);
+    final specCatalog = specCatalogAsync.valueOrNull;
+    final providerChoices =
+        specCatalog?.providers
+            .map((provider) => provider.providerType)
+            .toList(growable: false) ??
+        ProviderType.values;
+    final selectedSpec = specCatalog?.specFor(_providerType);
     return PopScope<StoredApiConfig>(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -326,44 +433,31 @@ class _ApiConfigEditorDialogState
                                 Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    '模型平台',
+                                    '供应商 / 协议',
                                     style: Theme.of(
                                       context,
                                     ).textTheme.labelLarge,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                SegmentedButton<ProviderType>(
-                                  segments: const [
-                                    ButtonSegment<ProviderType>(
-                                      value: ProviderType.openaiCompatible,
-                                      label: Text('OpenAI-Compatible'),
-                                      icon: Icon(Icons.hub_outlined),
-                                    ),
-                                    ButtonSegment<ProviderType>(
-                                      value: ProviderType.openai,
-                                      label: Text('OpenAI'),
-                                      icon: Icon(Icons.auto_awesome_outlined),
-                                    ),
-                                  ],
-                                  selected: <ProviderType>{_providerType},
-                                  onSelectionChanged: (selection) {
-                                    final selected = selection.first;
-                                    setState(() {
-                                      _providerType = selected;
-                                      _modelFetchError = null;
-                                      _availableModels =
-                                          _seedModelsFromCurrentInput();
-                                      if (_requestPathController.text
-                                          .trim()
-                                          .isEmpty) {
-                                        _requestPathController.text =
-                                            selected == ProviderType.openai
-                                            ? '/v1/responses'
-                                            : '/v1/chat/completions';
-                                      }
-                                    });
-                                  },
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: providerChoices
+                                      .map(
+                                        (provider) => _ProviderChoiceCard(
+                                          providerType: provider,
+                                          selected: provider == _providerType,
+                                          onTap: () =>
+                                              _selectProvider(provider),
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                ),
+                                const SizedBox(height: 10),
+                                _ProviderInfoBanner(
+                                  providerType: _providerType,
+                                  providerSpec: selectedSpec,
                                 ),
                               ],
                             ),
@@ -380,6 +474,7 @@ class _ApiConfigEditorDialogState
                                   enableSuggestions: false,
                                   decoration: const InputDecoration(
                                     labelText: 'Base URL',
+                                    helperText: '会按当前供应商自动预填默认入口。',
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -389,6 +484,7 @@ class _ApiConfigEditorDialogState
                                   enableSuggestions: false,
                                   decoration: const InputDecoration(
                                     labelText: 'Request Path',
+                                    helperText: '供应商切换时会同步推荐默认路径，可再手动覆盖。',
                                   ),
                                 ),
                                 const SizedBox(height: 10),
@@ -435,8 +531,8 @@ class _ApiConfigEditorDialogState
                                         alignment: Alignment.centerRight,
                                         child: SecondaryOutlineButton(
                                           label: _fetchingModels
-                                              ? '获取中...'
-                                              : '获取模型列表',
+                                              ? '同步中...'
+                                              : '同步模型',
                                           onPressed: _fetchingModels
                                               ? null
                                               : _fetchModels,
@@ -580,13 +676,61 @@ class _ApiConfigEditorDialogState
                           const SizedBox(height: 12),
                           _EditorSection(
                             title: '高级项',
-                            child: TextField(
-                              controller: _headersController,
-                              minLines: 2,
-                              maxLines: 5,
-                              decoration: const InputDecoration(
-                                labelText: 'Custom Headers',
-                              ),
+                            child: Column(
+                              children: [
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Optional parameters stay omitted unless you fill them in. Required fields will use provider-specific fallbacks when needed.',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: AppColors.textSecondary,
+                                        ),
+                                  ),
+                                ),
+                                if (selectedSpec != null &&
+                                    selectedSpec.notes.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      selectedSpec.notes.first,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: AppColors.textSecondary,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                                if (selectedSpec != null &&
+                                    selectedSpec.parameters.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  ..._buildParameterFields(
+                                    context,
+                                    selectedSpec.parameters,
+                                  ),
+                                ],
+                                if (selectedSpec == null) ...[
+                                  const SizedBox(height: 12),
+                                  const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                ],
+                                TextField(
+                                  controller: _headersController,
+                                  minLines: 2,
+                                  maxLines: 5,
+                                  decoration: InputDecoration(
+                                    labelText: 'Custom Headers',
+                                    helperText: selectedSpec == null
+                                        ? null
+                                        : 'Provider docs: ${selectedSpec.documentationUrl}',
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -620,31 +764,135 @@ class _ApiConfigEditorDialogState
                     const SizedBox(width: 12),
                     Expanded(
                       child: FilledButton(
-                        onPressed: () {
-                          final name = _nameController.text.trim();
-                          if (name.isEmpty) {
-                            return;
-                          }
-                          Navigator.of(context).pop(
-                            widget.initialValue.copyWith(
-                              name: name,
-                              providerType: _providerType,
-                              baseUrl: _baseUrlController.text.trim(),
-                              requestPath: _requestPathController.text.trim(),
-                              apiKeyCiphertext: _apiKeyController.text.trim(),
-                              defaultModel: _modelController.text.trim(),
-                              requestTimeoutMs: int.tryParse(
-                                _timeoutController.text.trim(),
-                              ),
-                              clearRequestTimeoutMs: _timeoutController.text
-                                  .trim()
-                                  .isEmpty,
-                              customHeaders: _parseHeaders(
-                                _headersController.text,
-                              ),
-                            ),
-                          );
-                        },
+                        onPressed: selectedSpec == null
+                            ? null
+                            : () {
+                                final name = _nameController.text.trim();
+                                if (name.isEmpty) {
+                                  return;
+                                }
+                                final activeSpec = selectedSpec;
+                                Navigator.of(context).pop(
+                                  widget.initialValue.copyWith(
+                                    name: name,
+                                    providerType: _providerType,
+                                    baseUrl: _baseUrlController.text.trim(),
+                                    requestPath: _requestPathController.text
+                                        .trim(),
+                                    apiKeyCiphertext: _apiKeyController.text
+                                        .trim(),
+                                    defaultModel: _modelController.text.trim(),
+                                    requestTimeoutMs: int.tryParse(
+                                      _timeoutController.text.trim(),
+                                    ),
+                                    clearRequestTimeoutMs: _timeoutController
+                                        .text
+                                        .trim()
+                                        .isEmpty,
+                                    customHeaders: _parseHeaders(
+                                      _headersController.text,
+                                    ),
+                                    stream: _streamValue,
+                                    clearStream:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.stream,
+                                        ) ||
+                                        _streamValue == null,
+                                    temperature: _tryParseDouble(
+                                      _temperatureController.text,
+                                    ),
+                                    clearTemperature:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.temperature,
+                                        ) ||
+                                        _temperatureController.text
+                                            .trim()
+                                            .isEmpty,
+                                    topP: _tryParseDouble(_topPController.text),
+                                    clearTopP:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.topP,
+                                        ) ||
+                                        _topPController.text.trim().isEmpty,
+                                    topK: int.tryParse(
+                                      _topKController.text.trim(),
+                                    ),
+                                    clearTopK:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.topK,
+                                        ) ||
+                                        _topKController.text.trim().isEmpty,
+                                    presencePenalty: _tryParseDouble(
+                                      _presencePenaltyController.text,
+                                    ),
+                                    clearPresencePenalty:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.presencePenalty,
+                                        ) ||
+                                        _presencePenaltyController.text
+                                            .trim()
+                                            .isEmpty,
+                                    frequencyPenalty: _tryParseDouble(
+                                      _frequencyPenaltyController.text,
+                                    ),
+                                    clearFrequencyPenalty:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.frequencyPenalty,
+                                        ) ||
+                                        _frequencyPenaltyController.text
+                                            .trim()
+                                            .isEmpty,
+                                    maxCompletionTokens: int.tryParse(
+                                      _maxTokensController.text.trim(),
+                                    ),
+                                    clearMaxCompletionTokens:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.maxCompletionTokens,
+                                        ) ||
+                                        _maxTokensController.text
+                                            .trim()
+                                            .isEmpty,
+                                    stopSequences:
+                                        _supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.stopSequences,
+                                        )
+                                        ? _stopSequencesController.text
+                                              .split('\n')
+                                              .map((item) => item.trim())
+                                              .where((item) => item.isNotEmpty)
+                                              .toList(growable: false)
+                                        : const <String>[],
+                                    reasoningEffort: _normalize(
+                                      _reasoningController.text,
+                                    ),
+                                    clearReasoningEffort:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.reasoningEffort,
+                                        ) ||
+                                        _normalize(_reasoningController.text) ==
+                                            null,
+                                    verbosity: _normalize(
+                                      _verbosityController.text,
+                                    ),
+                                    clearVerbosity:
+                                        !_supportsParameter(
+                                          activeSpec,
+                                          ApiParameterKey.verbosity,
+                                        ) ||
+                                        _normalize(_verbosityController.text) ==
+                                            null,
+                                  ),
+                                );
+                              },
                         child: const Text('保存配置'),
                       ),
                     ),
@@ -691,7 +939,17 @@ class _ApiConfigEditorDialogState
         _apiKeyController.text != _initialApiKey ||
         _modelController.text != _initialModel ||
         _timeoutController.text != _initialTimeout ||
-        _headersController.text != _initialHeaders;
+        _headersController.text != _initialHeaders ||
+        _streamValue != _initialStreamValue ||
+        _temperatureController.text != _initialTemperature ||
+        _topPController.text != _initialTopP ||
+        _topKController.text != _initialTopK ||
+        _presencePenaltyController.text != _initialPresencePenalty ||
+        _frequencyPenaltyController.text != _initialFrequencyPenalty ||
+        _maxTokensController.text != _initialMaxTokens ||
+        _stopSequencesController.text != _initialStopSequences ||
+        _reasoningController.text != _initialReasoning ||
+        _verbosityController.text != _initialVerbosity;
   }
 
   Future<void> _fetchModels() async {
@@ -735,12 +993,171 @@ class _ApiConfigEditorDialogState
     }
   }
 
+  void _selectProvider(ProviderType selected) {
+    setState(() {
+      final previous = _providerType;
+      _providerType = selected;
+      _modelFetchError = null;
+      _availableModels = _seedModelsFromCurrentInput();
+
+      if (_shouldReplaceWithProviderDefault(
+        currentValue: _baseUrlController.text,
+        previous: previous,
+        selected: selected,
+        selector: _providerDefaultBaseUrl,
+      )) {
+        _baseUrlController.text = _providerDefaultBaseUrl(selected);
+      }
+
+      if (_shouldReplaceWithProviderDefault(
+        currentValue: _requestPathController.text,
+        previous: previous,
+        selected: selected,
+        selector: _providerDefaultRequestPath,
+      )) {
+        _requestPathController.text = _providerDefaultRequestPath(selected);
+      }
+
+      if (_shouldReplaceWithProviderDefault(
+        currentValue: _modelController.text,
+        previous: previous,
+        selected: selected,
+        selector: _providerDefaultModel,
+      )) {
+        _modelController.text = _providerDefaultModel(selected);
+      }
+    });
+  }
+
   List<String> _seedModelsFromCurrentInput() {
     final current = _modelController.text.trim();
     if (current.isEmpty) {
       return <String>[];
     }
     return <String>[current];
+  }
+
+  String _providerDefaultBaseUrl(ProviderType provider) {
+    final catalog = ref.read(providerSpecCatalogProvider).valueOrNull;
+    if (catalog == null) {
+      return provider.defaultBaseUrl;
+    }
+    return catalog.specFor(provider).defaultBaseUrl;
+  }
+
+  String _providerDefaultRequestPath(ProviderType provider) {
+    final catalog = ref.read(providerSpecCatalogProvider).valueOrNull;
+    if (catalog == null) {
+      return provider.defaultRequestPath;
+    }
+    return catalog.specFor(provider).defaultRequestPath;
+  }
+
+  String _providerDefaultModel(ProviderType provider) {
+    final catalog = ref.read(providerSpecCatalogProvider).valueOrNull;
+    if (catalog == null) {
+      return provider.defaultModel;
+    }
+    return catalog.specFor(provider).defaultModel;
+  }
+
+  bool _supportsParameter(ProviderSpec? providerSpec, ApiParameterKey key) {
+    return providerSpec?.supports(key) == true;
+  }
+
+  List<Widget> _buildParameterFields(
+    BuildContext context,
+    List<ProviderParameterSpec> parameters,
+  ) {
+    final widgets = <Widget>[];
+    for (var index = 0; index < parameters.length; index++) {
+      widgets.add(_buildParameterField(context, parameters[index]));
+      if (index != parameters.length - 1) {
+        widgets.add(const SizedBox(height: 10));
+      }
+    }
+    return widgets;
+  }
+
+  Widget _buildParameterField(
+    BuildContext context,
+    ProviderParameterSpec parameter,
+  ) {
+    final decoration = InputDecoration(
+      labelText: parameter.label,
+      helperText: parameter.buildHelperText(),
+      hintText: parameter.placeholder,
+    );
+    switch (parameter.key) {
+      case ApiParameterKey.stream:
+        return DropdownButtonFormField<bool?>(
+          initialValue: _streamValue,
+          items: const [
+            DropdownMenuItem<bool?>(value: null, child: Text('默认')),
+            DropdownMenuItem<bool?>(value: true, child: Text('开启')),
+            DropdownMenuItem<bool?>(value: false, child: Text('关闭')),
+          ],
+          onChanged: (value) {
+            setState(() {
+              _streamValue = value;
+            });
+          },
+          decoration: decoration,
+        );
+      case ApiParameterKey.temperature:
+        return TextField(
+          controller: _temperatureController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: decoration,
+        );
+      case ApiParameterKey.topP:
+        return TextField(
+          controller: _topPController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: decoration,
+        );
+      case ApiParameterKey.topK:
+        return TextField(
+          controller: _topKController,
+          keyboardType: TextInputType.number,
+          decoration: decoration,
+        );
+      case ApiParameterKey.presencePenalty:
+        return TextField(
+          controller: _presencePenaltyController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: decoration,
+        );
+      case ApiParameterKey.frequencyPenalty:
+        return TextField(
+          controller: _frequencyPenaltyController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: decoration,
+        );
+      case ApiParameterKey.maxCompletionTokens:
+        return TextField(
+          controller: _maxTokensController,
+          keyboardType: TextInputType.number,
+          decoration: decoration,
+        );
+      case ApiParameterKey.stopSequences:
+        return TextField(
+          controller: _stopSequencesController,
+          minLines: 2,
+          maxLines: 5,
+          decoration: decoration,
+        );
+      case ApiParameterKey.reasoningEffort:
+        return TextField(
+          controller: _reasoningController,
+          decoration: decoration,
+        );
+      case ApiParameterKey.verbosity:
+        return TextField(
+          controller: _verbosityController,
+          decoration: decoration,
+        );
+    }
   }
 
   Map<String, String> _parseHeaders(String raw) {
@@ -762,6 +1179,38 @@ class _ApiConfigEditorDialogState
       next[key] = value;
     }
     return next;
+  }
+
+  bool _shouldReplaceWithProviderDefault({
+    required String currentValue,
+    required ProviderType previous,
+    required ProviderType selected,
+    required String Function(ProviderType provider) selector,
+  }) {
+    final trimmed = currentValue.trim();
+    if (trimmed.isEmpty) {
+      return true;
+    }
+    if (trimmed == selector(previous)) {
+      return true;
+    }
+    return trimmed == selector(selected);
+  }
+
+  String _stringifyDouble(double? value) {
+    if (value == null) {
+      return '';
+    }
+    return value.toString();
+  }
+
+  double? _tryParseDouble(String raw) {
+    return double.tryParse(raw.trim());
+  }
+
+  String? _normalize(String raw) {
+    final value = raw.trim();
+    return value.isEmpty ? null : value;
   }
 }
 
@@ -785,4 +1234,190 @@ class _EditorSection extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ProviderChoiceCard extends StatelessWidget {
+  const _ProviderChoiceCard({
+    required this.providerType,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ProviderType providerType;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = _providerColor(providerType);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 220,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: selected
+                ? tone.withValues(alpha: 0.18)
+                : AppColors.surfaceOverlay.withValues(alpha: 0.42),
+            border: Border.all(
+              color: selected ? tone : AppColors.borderSubtle,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: tone.withValues(alpha: 0.16),
+                    ),
+                    child: Icon(
+                      _providerIcon(providerType),
+                      size: 18,
+                      color: tone,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (selected)
+                    Icon(Icons.check_circle_rounded, size: 18, color: tone),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                providerType.label,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                providerType.shortDescription,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProviderInfoBanner extends StatelessWidget {
+  const _ProviderInfoBanner({required this.providerType, this.providerSpec});
+
+  final ProviderType providerType;
+  final ProviderSpec? providerSpec;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = _providerColor(providerType);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [
+            tone.withValues(alpha: 0.18),
+            AppColors.surfaceOverlay.withValues(alpha: 0.32),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(color: tone.withValues(alpha: 0.65)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            providerSpec?.label ?? providerType.label,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            providerSpec?.notes.isNotEmpty == true
+                ? providerSpec!.notes.first
+                : _providerInfoText(providerType),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProviderBadge extends StatelessWidget {
+  const _ProviderBadge({required this.label, this.tone});
+
+  final String label;
+  final Color? tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = tone ?? AppColors.textMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.42)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
+      ),
+    );
+  }
+}
+
+IconData _providerIcon(ProviderType providerType) {
+  return switch (providerType) {
+    ProviderType.openai => Icons.auto_awesome_outlined,
+    ProviderType.openaiCompatible => Icons.hub_outlined,
+    ProviderType.anthropic => Icons.forum_outlined,
+    ProviderType.gemini => Icons.diamond_outlined,
+    ProviderType.deepseek => Icons.waves_outlined,
+    ProviderType.openrouter => Icons.route_outlined,
+  };
+}
+
+Color _providerColor(ProviderType providerType) {
+  return switch (providerType) {
+    ProviderType.openai => AppColors.accentPrimary,
+    ProviderType.openaiCompatible => AppColors.accentSecondary,
+    ProviderType.anthropic => AppColors.warning,
+    ProviderType.gemini => const Color(0xFF79D66F),
+    ProviderType.deepseek => const Color(0xFF57A7FF),
+    ProviderType.openrouter => const Color(0xFFF06A93),
+  };
+}
+
+String _providerInfoText(ProviderType providerType) {
+  return switch (providerType) {
+    ProviderType.openai =>
+      '使用 OpenAI Responses API。请求会按原生 Responses 结构发送，适合官方最新模型能力。',
+    ProviderType.openaiCompatible =>
+      '使用标准 Chat Completions 协议。会按 SillyTavern 常见兼容格式发送 messages、max_tokens、reasoning_effort 与 verbosity。',
+    ProviderType.anthropic =>
+      '使用 Claude Messages API。鉴权会切换成 x-api-key，并自动追加 anthropic-version。',
+    ProviderType.gemini =>
+      '使用 Google AI Studio 流式生成接口。API key 会放在 query 中，系统提示会映射为 systemInstruction。',
+    ProviderType.deepseek =>
+      '按 DeepSeek 的 Chat Completions 方式发送，整体保持 OpenAI-compatible 风格，便于和 SillyTavern 对齐。',
+    ProviderType.openrouter =>
+      '走 OpenRouter 聚合路由，并自动附加 SillyTavern 常见的 HTTP-Referer 与 X-Title 标识头。',
+  };
 }

@@ -1,5 +1,11 @@
 # Version History
 
+## 0.1.0+12 (2026-04-14)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+12-release.apk`
+- Notes: Added provider-driven API parameter specs, dynamic provider-specific API settings fields, omitted untouched optional params, and explicit stream/non-stream request handling.
+
 ## 0.1.0+11 (2026-04-13)
 
 - Build type: Android APK release
