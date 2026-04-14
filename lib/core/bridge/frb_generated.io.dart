@@ -55,6 +55,9 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
+  CleanupRequestLogsResult dco_decode_cleanup_request_logs_result(dynamic raw);
+
+  @protected
   CreateMessageRequest dco_decode_create_message_request(dynamic raw);
 
   @protected
@@ -186,6 +189,11 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  CleanupRequestLogsResult sse_decode_cleanup_request_logs_result(
+    SseDeserializer deserializer,
+  );
 
   @protected
   CreateMessageRequest sse_decode_create_message_request(
@@ -352,6 +360,12 @@ abstract class RustCoreApiImplPlatform extends BaseApiImpl<RustCoreWire> {
 
   @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_cleanup_request_logs_result(
+    CleanupRequestLogsResult self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_create_message_request(

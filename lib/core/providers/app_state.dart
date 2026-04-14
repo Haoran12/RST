@@ -727,7 +727,7 @@ List<ManagedOptionSection> _buildAppearanceSections() {
           label: 'Bubble Opacity',
           type: ManagedFieldType.decimal,
           value: 1.0,
-          min: 0.35,
+          min: 0.0,
           max: 1.0,
           step: 0.05,
         ),

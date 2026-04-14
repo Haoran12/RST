@@ -537,7 +537,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       selected,
       'message_bubble_opacity',
       1.0,
-    ).clamp(0.35, 1.0);
+    ).clamp(0.0, 1.0);
 
     return MessageBubbleAppearance(
       paragraphColor: _readColorField(

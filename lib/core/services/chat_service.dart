@@ -547,6 +547,7 @@ class ChatService {
     return _SseConsumeResult(
       rawSseLines: rawSseLines,
       rawSseTruncated: sseTruncated,
+      normalizedResponse: _redactSensitiveText(buffer.toString()),
       promptTokens: promptTokens,
       completionTokens: completionTokens,
       totalTokens: totalTokens,
@@ -572,6 +573,7 @@ class ChatService {
     return _SseConsumeResult(
       rawSseLines: const <String>[],
       rawSseTruncated: false,
+      normalizedResponse: _redactSensitiveText(parsed.text),
       promptTokens: parsed.promptTokens,
       completionTokens: parsed.completionTokens,
       totalTokens: parsed.totalTokens,
@@ -1690,6 +1692,7 @@ class ChatService {
     return _encodePreviewJson(<String, Object?>{
       'status_code': response.statusCode,
       'headers': _redactHeaders(_flattenHeaders(response.headers)),
+      'normalized_response': streamResult.normalizedResponse,
       'stream': <String, Object?>{
         'lines': streamResult.rawSseLines,
         'truncated': streamResult.rawSseTruncated,
@@ -1714,6 +1717,7 @@ class ChatService {
     return _encodePreviewJson(<String, Object?>{
       'status_code': response.statusCode,
       'headers': _redactHeaders(_flattenHeaders(response.headers)),
+      'normalized_response': result.normalizedResponse,
       'body': result.responseBody,
       if (result.stopReason != null) 'stop_reason': result.stopReason,
       if (result.promptTokens != null ||
@@ -2049,6 +2053,7 @@ class _SseConsumeResult {
   const _SseConsumeResult({
     required this.rawSseLines,
     required this.rawSseTruncated,
+    required this.normalizedResponse,
     this.promptTokens,
     this.completionTokens,
     this.totalTokens,
@@ -2058,6 +2063,7 @@ class _SseConsumeResult {
 
   final List<String> rawSseLines;
   final bool rawSseTruncated;
+  final String normalizedResponse;
   final int? promptTokens;
   final int? completionTokens;
   final int? totalTokens;

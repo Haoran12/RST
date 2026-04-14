@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use chrono::{SecondsFormat, Utc};
+use chrono::{DateTime, Days, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
@@ -221,6 +221,14 @@ pub struct CreateRequestLogRequest {
     pub request_preview_json: Option<String>,
     #[serde(default)]
     pub response_preview_json: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupRequestLogsResult {
+    pub scanned: u32,
+    pub deleted: u32,
+    pub has_more_expired: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -683,6 +691,48 @@ pub fn get_request_log(log_id: String) -> Result<RequestLog> {
     read_request_log_file(&path)
 }
 
+pub fn cleanup_request_logs(
+    older_than_days: u32,
+    max_delete: Option<u32>,
+) -> Result<CleanupRequestLogsResult> {
+    if older_than_days == 0 {
+        return Err(anyhow!(
+            "validation_error: olderThanDays must be greater than 0"
+        ));
+    }
+
+    let cutoff = Utc::now()
+        .checked_sub_days(Days::new(older_than_days as u64))
+        .ok_or_else(|| anyhow!("invalid olderThanDays value: {}", older_than_days))?;
+    let delete_limit = max_delete.unwrap_or(u32::MAX);
+
+    let mut scanned = 0_u32;
+    let mut deleted = 0_u32;
+    let mut has_more_expired = false;
+
+    for path in request_log_paths()? {
+        scanned = scanned.saturating_add(1);
+        if !is_request_log_expired(&path, cutoff) {
+            continue;
+        }
+
+        if deleted >= delete_limit {
+            has_more_expired = true;
+            continue;
+        }
+
+        if fs::remove_file(&path).is_ok() {
+            deleted = deleted.saturating_add(1);
+        }
+    }
+
+    Ok(CleanupRequestLogsResult {
+        scanned,
+        deleted,
+        has_more_expired,
+    })
+}
+
 pub fn set_workspace_dir(path: String) -> Result<String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
@@ -765,6 +815,29 @@ fn request_log_paths() -> Result<Vec<PathBuf>> {
         }
     }
     Ok(paths)
+}
+
+fn is_request_log_expired(path: &Path, cutoff: DateTime<Utc>) -> bool {
+    if let Ok(log) = read_request_log_file(path) {
+        if let Some(request_time) = parse_rfc3339_utc(&log.request_time) {
+            return request_time < cutoff;
+        }
+    }
+
+    let modified = fs::metadata(path)
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+        .map(DateTime::<Utc>::from);
+    match modified {
+        Some(timestamp) => timestamp < cutoff,
+        None => false,
+    }
+}
+
+fn parse_rfc3339_utc(raw: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|parsed| parsed.with_timezone(&Utc))
 }
 
 fn read_session_file(path: &Path) -> Result<SessionFile> {
@@ -1264,6 +1337,44 @@ mod tests {
         assert_eq!(loaded.session_id, "session-a");
         assert_eq!(loaded.status, RequestLogStatus::Success);
         assert_eq!(loaded.model, "gpt-5.4-mini");
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
+    }
+
+    #[test]
+    fn request_log_cleanup_by_age() {
+        let _guard = test_lock();
+        let workspace_dir =
+            std::env::temp_dir().join(format!("rst-logs-cleanup-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let _created = create_request_log(CreateRequestLogRequest {
+            session_id: "session-a".to_string(),
+            provider: "openai_compatible".to_string(),
+            model: "gpt-5.4-mini".to_string(),
+            status: RequestLogStatus::Success,
+            request_time: "2001-01-01T00:00:00Z".to_string(),
+            response_time: Some("2001-01-01T00:00:01Z".to_string()),
+            duration_ms: Some(1000),
+            prompt_tokens: Some(12),
+            completion_tokens: Some(8),
+            total_tokens: Some(20),
+            stop_reason: Some("stop".to_string()),
+            redacted: true,
+            payload_truncated: false,
+            request_preview_json: Some("{\"ok\":true}".to_string()),
+            response_preview_json: Some("{\"ok\":true}".to_string()),
+        })
+        .expect("create_request_log should succeed");
+
+        let cleanup =
+            cleanup_request_logs(14, Some(100)).expect("cleanup_request_logs should work");
+        assert_eq!(cleanup.deleted, 1);
+
+        let listed = list_request_logs(None, None, None).expect("list_request_logs should succeed");
+        assert!(listed.is_empty());
 
         let _ = std::fs::remove_dir_all(workspace_dir);
     }

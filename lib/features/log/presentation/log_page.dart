@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -183,6 +185,19 @@ class _LogDetailSheet extends ConsumerWidget {
             child: Text('日志不存在'),
           );
         }
+        final requestPreviewText = _formatPreviewForDisplay(
+          log.requestPreviewJson,
+        );
+        final responsePreviewDecoded = _tryDecodePreview(
+          log.responsePreviewJson,
+        );
+        final rawResponsePreviewText = _formatRawResponseForDisplay(
+          original: log.responsePreviewJson,
+          decoded: responsePreviewDecoded,
+        );
+        final normalizedResponseText = _extractNormalizedResponseForDisplay(
+          responsePreviewDecoded,
+        );
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -223,20 +238,81 @@ class _LogDetailSheet extends ConsumerWidget {
                 value: '${log.payloadTruncated}',
               ),
               const SizedBox(height: 12),
-              _JsonBlock(
-                title: 'Request Preview (Redacted)',
-                content: log.requestPreviewJson,
+              _CollapsibleLogBlock(
+                title: '原始请求 (Redacted)',
+                content: requestPreviewText,
               ),
               const SizedBox(height: 12),
-              _JsonBlock(
-                title: 'Response Preview (Redacted)',
-                content: log.responsePreviewJson,
+              _CollapsibleLogBlock(
+                title: '原始响应 (Redacted)',
+                content: rawResponsePreviewText,
+              ),
+              const SizedBox(height: 12),
+              _CollapsibleLogBlock(
+                title: '整理后的完整响应',
+                content: normalizedResponseText,
               ),
             ],
           ),
         );
       },
     );
+  }
+
+  static Object? _tryDecodePreview(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+    try {
+      return jsonDecode(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _formatPreviewForDisplay(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return '(empty)';
+    }
+    final decoded = _tryDecodePreview(raw);
+    if (decoded == null) {
+      return raw;
+    }
+    return const JsonEncoder.withIndent('  ').convert(decoded);
+  }
+
+  static String _formatRawResponseForDisplay({
+    required String? original,
+    required Object? decoded,
+  }) {
+    if (decoded is! Map) {
+      return _formatPreviewForDisplay(original);
+    }
+    final cloned = <String, Object?>{};
+    decoded.forEach((key, value) {
+      cloned['$key'] = value;
+    });
+    cloned.remove('normalized_response');
+    if (cloned.isEmpty) {
+      return '(empty)';
+    }
+    return const JsonEncoder.withIndent('  ').convert(cloned);
+  }
+
+  static String _extractNormalizedResponseForDisplay(Object? decoded) {
+    if (decoded is Map) {
+      final value = decoded['normalized_response'];
+      if (value is String && value.trim().isNotEmpty) {
+        return value;
+      }
+      if (value != null) {
+        final fallback = '$value'.trim();
+        if (fallback.isNotEmpty) {
+          return fallback;
+        }
+      }
+    }
+    return '(empty)';
   }
 }
 
@@ -284,31 +360,36 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-class _JsonBlock extends StatelessWidget {
-  const _JsonBlock({required this.title, required this.content});
+class _CollapsibleLogBlock extends StatelessWidget {
+  const _CollapsibleLogBlock({required this.title, required this.content});
 
   final String title;
-  final String? content;
+  final String content;
 
   @override
   Widget build(BuildContext context) {
-    final text = content == null || content!.isEmpty ? '(empty)' : content!;
     return GlassPanelCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          SelectableText(
-            text,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 12,
-              height: 1.35,
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: Text(title, style: Theme.of(context).textTheme.titleSmall),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                content,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

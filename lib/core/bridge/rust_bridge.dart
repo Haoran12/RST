@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
@@ -10,6 +11,14 @@ class RustBridge {
   const RustBridge();
 
   static bool _initialized = false;
+  static const int _requestLogRetentionDays = 14;
+  static const int _requestLogCleanupMaxDelete = 200;
+  static const Duration _requestLogCleanupDefaultDelay = Duration(minutes: 2);
+  static const Duration _requestLogCleanupMinInterval = Duration(hours: 12);
+
+  static Timer? _requestLogCleanupTimer;
+  static DateTime? _lastRequestLogCleanupAtUtc;
+  static bool _requestLogCleanupRunning = false;
 
   Future<void> initialize() async {
     if (_initialized) {
@@ -150,7 +159,9 @@ class RustBridge {
     required frb.CreateRequestLogRequest seed,
   }) async {
     await initialize();
-    return frb.createRequestLog(seed: seed);
+    final created = await frb.createRequestLog(seed: seed);
+    scheduleRequestLogCleanup();
+    return created;
   }
 
   Future<List<frb.RequestLogSummary>> listRequestLogs({
@@ -159,16 +170,77 @@ class RustBridge {
     int? limit,
   }) async {
     await initialize();
-    return frb.listRequestLogs(
+    final logs = await frb.listRequestLogs(
       sessionId: sessionId,
       status: status,
       limit: limit,
     );
+    scheduleRequestLogCleanup(delay: const Duration(seconds: 15));
+    return logs;
   }
 
   Future<frb.RequestLog> getRequestLog(String logId) async {
     await initialize();
     return frb.getRequestLog(logId: logId);
+  }
+
+  Future<frb.CleanupRequestLogsResult> cleanupRequestLogs({
+    required int olderThanDays,
+    int? maxDelete,
+  }) async {
+    await initialize();
+    return frb.cleanupRequestLogs(
+      olderThanDays: olderThanDays,
+      maxDelete: maxDelete,
+    );
+  }
+
+  void scheduleRequestLogCleanup({Duration? delay, bool force = false}) {
+    final now = DateTime.now().toUtc();
+    final lastRun = _lastRequestLogCleanupAtUtc;
+    if (!force &&
+        lastRun != null &&
+        now.difference(lastRun) < _requestLogCleanupMinInterval) {
+      return;
+    }
+    if (_requestLogCleanupRunning) {
+      return;
+    }
+    if (_requestLogCleanupTimer?.isActive ?? false) {
+      return;
+    }
+
+    _requestLogCleanupTimer = Timer(
+      delay ?? _requestLogCleanupDefaultDelay,
+      () {
+        _requestLogCleanupTimer = null;
+        unawaited(_runRequestLogCleanup());
+      },
+    );
+  }
+
+  Future<void> _runRequestLogCleanup() async {
+    if (_requestLogCleanupRunning) {
+      return;
+    }
+    _requestLogCleanupRunning = true;
+    var shouldRunFollowUp = false;
+    try {
+      final result = await cleanupRequestLogs(
+        olderThanDays: _requestLogRetentionDays,
+        maxDelete: _requestLogCleanupMaxDelete,
+      );
+      _lastRequestLogCleanupAtUtc = DateTime.now().toUtc();
+      shouldRunFollowUp = result.hasMoreExpired && result.deleted > 0;
+    } catch (_) {
+      // Cleanup failure should never impact user flows.
+    } finally {
+      _requestLogCleanupRunning = false;
+    }
+
+    if (shouldRunFollowUp) {
+      scheduleRequestLogCleanup(delay: const Duration(minutes: 5), force: true);
+    }
   }
 
   frb.SessionMode _toFrbSessionMode(core.SessionMode mode) {

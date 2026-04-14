@@ -6,9 +6,9 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `apply_status_side_effects`, `copy_dir_recursive`, `legacy_workspace_root`, `migrate_workspace_if_needed`, `mutate_message`, `next_floor_no`, `normalize_optional`, `now_rfc3339`, `read_request_log_file`, `read_session_file`, `reconcile_inflight_state`, `reconcile_message_floors`, `request_log_file_path`, `request_log_paths`, `request_logs_dir`, `role_has_floor`, `session_file_path`, `session_paths`, `sessions_dir`, `touch_session`, `validate_mode_binding`, `validate_session_name`, `workspace_root`, `write_request_log_file`, `write_session_file`
+// These functions are ignored because they are not marked as `pub`: `apply_status_side_effects`, `copy_dir_recursive`, `is_request_log_expired`, `legacy_workspace_root`, `migrate_workspace_if_needed`, `mutate_message`, `next_floor_no`, `normalize_optional`, `now_rfc3339`, `parse_rfc3339_utc`, `read_request_log_file`, `read_session_file`, `reconcile_inflight_state`, `reconcile_message_floors`, `request_log_file_path`, `request_log_paths`, `request_logs_dir`, `role_has_floor`, `session_file_path`, `session_paths`, `sessions_dir`, `touch_session`, `validate_mode_binding`, `validate_session_name`, `workspace_root`, `write_request_log_file`, `write_session_file`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `SessionFile`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<List<SessionSummary>> listSessions() =>
     RustCore.instance.api.crateFrbApiListSessions();
@@ -94,8 +94,41 @@ Future<List<RequestLogSummary>> listRequestLogs({
 Future<RequestLog> getRequestLog({required String logId}) =>
     RustCore.instance.api.crateFrbApiGetRequestLog(logId: logId);
 
+Future<CleanupRequestLogsResult> cleanupRequestLogs({
+  required int olderThanDays,
+  int? maxDelete,
+}) => RustCore.instance.api.crateFrbApiCleanupRequestLogs(
+  olderThanDays: olderThanDays,
+  maxDelete: maxDelete,
+);
+
 Future<String> setWorkspaceDir({required String path}) =>
     RustCore.instance.api.crateFrbApiSetWorkspaceDir(path: path);
+
+class CleanupRequestLogsResult {
+  final int scanned;
+  final int deleted;
+  final bool hasMoreExpired;
+
+  const CleanupRequestLogsResult({
+    required this.scanned,
+    required this.deleted,
+    required this.hasMoreExpired,
+  });
+
+  @override
+  int get hashCode =>
+      scanned.hashCode ^ deleted.hashCode ^ hasMoreExpired.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CleanupRequestLogsResult &&
+          runtimeType == other.runtimeType &&
+          scanned == other.scanned &&
+          deleted == other.deleted &&
+          hasMoreExpired == other.hasMoreExpired;
+}
 
 class CreateMessageRequest {
   final String sessionId;
