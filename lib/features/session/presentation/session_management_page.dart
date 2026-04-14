@@ -336,7 +336,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     required List<SessionSettingsOptionEntry> worldBookOptions,
     required List<SessionSettingsOptionEntry> appearanceOptions,
   }) async {
-    final saved = await Navigator.of(context).push<SessionSettingsDraft>(
+    return Navigator.of(context).push<SessionSettingsDraft>(
       MaterialPageRoute<SessionSettingsDraft>(
         fullscreenDialog: true,
         builder: (context) => SessionSettingsEditorPage(
@@ -350,8 +350,6 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         ),
       ),
     );
-    ref.read(appTabProvider.notifier).state = AppTab.chat;
-    return saved;
   }
 
   void _applySessionScopedSettings({

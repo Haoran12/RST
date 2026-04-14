@@ -1,5 +1,6 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_state.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -81,7 +82,7 @@ class SessionSettingsDraft {
   }
 }
 
-class SessionSettingsEditorPage extends StatefulWidget {
+class SessionSettingsEditorPage extends ConsumerStatefulWidget {
   const SessionSettingsEditorPage({
     super.key,
     required this.title,
@@ -106,11 +107,13 @@ class SessionSettingsEditorPage extends StatefulWidget {
   final bool popAfterSubmit;
 
   @override
-  State<SessionSettingsEditorPage> createState() =>
+  ConsumerState<SessionSettingsEditorPage> createState() =>
       _SessionSettingsEditorPageState();
 }
 
-class _SessionSettingsEditorPageState extends State<SessionSettingsEditorPage> {
+class _SessionSettingsEditorPageState
+    extends ConsumerState<SessionSettingsEditorPage> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   late SessionSettingsDraft _draft;
   late SessionSettingsDraft _baseline;
   bool _submitting = false;
@@ -159,17 +162,18 @@ class _SessionSettingsEditorPageState extends State<SessionSettingsEditorPage> {
         Navigator.of(this.context).pop();
       },
       child: Scaffold(
+        key: _scaffoldKey,
+        drawer: _SessionSettingsNavDrawer(
+          currentTab: ref.watch(appTabProvider),
+          onSelect: _handleDrawerTabSelect,
+        ),
         appBar: AppBar(
           leading: IconButton(
-            tooltip: '返回聊天',
-            onPressed: () async {
-              final shouldClose = await _handleAttemptDismiss();
-              if (!mounted || !shouldClose) {
-                return;
-              }
-              Navigator.of(this.context).pop();
+            tooltip: '打开导航菜单',
+            onPressed: () {
+              _scaffoldKey.currentState?.openDrawer();
             },
-            icon: const Icon(Icons.arrow_back_rounded),
+            icon: const Icon(Icons.menu_rounded),
           ),
           title: Text(widget.title),
           actions: [
@@ -258,6 +262,18 @@ class _SessionSettingsEditorPageState extends State<SessionSettingsEditorPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleDrawerTabSelect(AppTab tab) async {
+    Navigator.of(context).pop();
+    final shouldClose = await _handleAttemptDismiss();
+    if (!mounted || !shouldClose) {
+      return;
+    }
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    ref.read(appTabProvider.notifier).state = tab;
   }
 
   List<SessionSettingsOptionEntry> _ensureOption(
@@ -600,6 +616,147 @@ class _SchedulerCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SessionSettingsNavDrawer extends StatelessWidget {
+  const _SessionSettingsNavDrawer({
+    required this.currentTab,
+    required this.onSelect,
+  });
+
+  final AppTab currentTab;
+  final ValueChanged<AppTab> onSelect;
+
+  static const _items = <_SessionNavItem>[
+    _SessionNavItem(AppTab.chat, '聊天', Icons.forum_outlined),
+    _SessionNavItem(
+      AppTab.sessionManagement,
+      '会话管理',
+      Icons.chat_bubble_outline_rounded,
+    ),
+    _SessionNavItem(AppTab.worldBook, '世界书', Icons.menu_book_outlined),
+    _SessionNavItem(AppTab.preset, '预设', Icons.auto_awesome_motion_outlined),
+    _SessionNavItem(AppTab.apiConfig, 'API配置', Icons.cloud_sync_outlined),
+    _SessionNavItem(AppTab.appearance, '外观', Icons.palette_outlined),
+    _SessionNavItem(AppTab.log, '日志', Icons.receipt_long_outlined),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      backgroundColor: AppColors.backgroundElevated,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GlassPanelCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Text(
+                  'RST',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: _items.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = _items[index];
+                    return _SessionDrawerItemCard(
+                      label: item.label,
+                      icon: item.icon,
+                      selected: item.tab == currentTab,
+                      onTap: () => onSelect(item.tab),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionDrawerItemCard extends StatelessWidget {
+  const _SessionDrawerItemCard({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = selected
+        ? AppColors.borderStrong
+        : AppColors.borderSubtle;
+    final background = selected
+        ? AppColors.surfaceOverlay.withValues(alpha: 0.72)
+        : AppColors.surfaceCard.withValues(alpha: 0.84);
+    final iconColor = selected
+        ? AppColors.accentPrimary
+        : AppColors.textSecondary;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: borderColor),
+                  color: AppColors.surfaceOverlay,
+                ),
+                child: Icon(icon, size: 19, color: iconColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionNavItem {
+  const _SessionNavItem(this.tab, this.label, this.icon);
+
+  final AppTab tab;
+  final String label;
+  final IconData icon;
 }
 
 class _BasicConfigResult {
