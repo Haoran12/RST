@@ -1,5 +1,17 @@
 # Version History
 
+## 0.1.0+14 (2026-04-14)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+14-release.apk`
+- Notes: Added preset entry-based editing with fixed header/save bars, auto-saving entry content editor, and SillyTavern-compatible prompt preset import/export that ignores ST API and mode fields.
+
+## 0.1.0+13 (2026-04-14)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+13-release.apk`
+- Notes: Lowered bubble opacity minimum to 0, improved log readability with normalized full responses plus collapsible raw/normalized blocks, and added deferred throttled cleanup for request logs older than 14 days.
+
 ## 0.1.0+12 (2026-04-14)
 
 - Build type: Android APK release

@@ -6,6 +6,7 @@ import '../bridge/frb_api.dart' as frb;
 import '../bridge/rust_bridge.dart';
 import '../models/common.dart';
 import '../models/provider_specs.dart';
+import '../models/workspace_config.dart';
 import 'api_service.dart';
 import 'provider_spec_service.dart';
 
@@ -682,47 +683,54 @@ class ChatService {
     );
 
     for (final entry in presetConfig.entries) {
-      if (entry.disabled) {
+      if (!entry.enabled) {
         continue;
       }
-      usedEntries.add(entry.name);
-      switch (entry.name) {
-        case PresetBuiltinEntryNames.mainPrompt:
+      usedEntries.add(entry.title);
+      switch (entry.builtinKey) {
+        case PresetBuiltinEntryKeys.mainPrompt:
           _appendMessage(
             target: promptMessages,
             role: entry.role,
             content: context.mainPromptContent(entry.content),
           );
           break;
-        case PresetBuiltinEntryNames.lores:
+        case PresetBuiltinEntryKeys.loreBefore:
           _appendMessage(
             target: promptMessages,
             role: entry.role,
-            content: context.loresContent(),
+            content: context.mergeDynamicContent(
+              entry.content,
+              context.loresContent(),
+            ),
           );
           break;
-        case PresetBuiltinEntryNames.userDescription:
+        case PresetBuiltinEntryKeys.userDescription:
           _appendMessage(
             target: promptMessages,
             role: entry.role,
-            content: context.userDescriptionContent(),
+            content: context.mergeDynamicContent(
+              entry.content,
+              context.userDescriptionContent(),
+            ),
           );
           break;
-        case PresetBuiltinEntryNames.chatHistory:
+        case PresetBuiltinEntryKeys.chatHistory:
+          _appendMessage(
+            target: promptMessages,
+            role: entry.role,
+            content: entry.content,
+          );
           promptMessages.addAll(_toWireMessages(context.historyMessages));
           break;
-        case PresetBuiltinEntryNames.scene:
+        case PresetBuiltinEntryKeys.scene:
           _appendMessage(
             target: promptMessages,
             role: entry.role,
-            content: context.sceneContent(),
-          );
-          break;
-        case PresetBuiltinEntryNames.userInput:
-          _appendMessage(
-            target: promptMessages,
-            role: 'user',
-            content: context.userInput,
+            content: context.mergeDynamicContent(
+              entry.content,
+              context.sceneContent(),
+            ),
           );
           break;
         default:
@@ -734,6 +742,12 @@ class ChatService {
           break;
       }
     }
+    _appendMessage(
+      target: promptMessages,
+      role: 'user',
+      content: context.userInput,
+    );
+    usedEntries.add('User Input');
 
     return _PromptResult(
       messages: promptMessages,
@@ -1990,6 +2004,18 @@ class _PromptContext {
   String userDescriptionContent() => userDescription.trim();
 
   String sceneContent() => scene.trim();
+
+  String mergeDynamicContent(String entryContent, String dynamicContent) {
+    final staticPart = entryContent.trim();
+    final dynamicPart = dynamicContent.trim();
+    if (staticPart.isEmpty) {
+      return dynamicPart;
+    }
+    if (dynamicPart.isEmpty) {
+      return staticPart;
+    }
+    return '$staticPart\n\n$dynamicPart';
+  }
 }
 
 class _ResolvedUserInput {

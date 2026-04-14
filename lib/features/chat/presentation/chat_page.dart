@@ -27,6 +27,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _composerFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
+  late final StateController<ChatTopStatus> _chatTopStatusController;
 
   StartupChatRuntime? _runtime;
   frb.SessionConfig? _session;
@@ -38,13 +39,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void initState() {
     super.initState();
+    _chatTopStatusController = ref.read(chatTopStatusProvider.notifier);
     _syncTopStatus();
     _bootstrap();
   }
 
   @override
   void dispose() {
-    ref.read(chatTopStatusProvider.notifier).state = ChatTopStatus.calm;
+    _chatTopStatusController.state = ChatTopStatus.calm;
     _controller.dispose();
     _composerFocusNode.dispose();
     _scrollController.dispose();
@@ -63,9 +65,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _syncTopStatus() {
     final next = _resolveTopStatus();
-    final notifier = ref.read(chatTopStatusProvider.notifier);
-    if (notifier.state != next) {
-      notifier.state = next;
+    if (_chatTopStatusController.state != next) {
+      _chatTopStatusController.state = next;
     }
   }
 

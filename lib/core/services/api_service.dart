@@ -8,24 +8,6 @@ import '../bridge/frb_api.dart' as frb;
 import '../models/common.dart';
 import '../models/workspace_config.dart';
 
-class PresetBuiltinEntryNames {
-  static const String mainPrompt = 'Main_Prompt';
-  static const String lores = 'lores';
-  static const String userDescription = 'user_description';
-  static const String chatHistory = 'chat_history';
-  static const String scene = 'scene';
-  static const String userInput = 'user_input';
-
-  static const List<String> all = <String>[
-    mainPrompt,
-    lores,
-    userDescription,
-    chatHistory,
-    scene,
-    userInput,
-  ];
-}
-
 class RuntimeApiConfig {
   const RuntimeApiConfig({
     required this.apiId,
@@ -72,20 +54,22 @@ class RuntimeApiConfig {
 
 class RuntimePresetEntry {
   const RuntimePresetEntry({
-    required this.name,
+    required this.entryId,
+    required this.title,
     required this.role,
     required this.content,
-    required this.disabled,
-    required this.comment,
-    required this.builtin,
+    required this.enabled,
+    this.builtinKey,
   });
 
-  final String name;
+  final String entryId;
+  final String title;
   final String role;
   final String content;
-  final bool disabled;
-  final String comment;
-  final bool builtin;
+  final bool enabled;
+  final String? builtinKey;
+
+  bool get isBuiltin => builtinKey != null;
 }
 
 class RuntimePresetConfig {
@@ -262,11 +246,22 @@ class ApiService {
 
   Future<StoredPresetConfig> savePreset(StoredPresetConfig config) async {
     final now = DateTime.now().toUtc();
+    final normalizedEntries = normalizeStoredPresetEntries(
+      config.entries
+          .map(
+            (entry) => entry.copyWith(
+              title: entry.title.trim(),
+              content: entry.content.replaceAll('\r\n', '\n'),
+            ),
+          )
+          .toList(growable: false),
+      legacyMainPrompt: config.mainPrompt,
+    );
     final normalized = config.copyWith(
       name: config.name.trim().isEmpty ? '未命名预设' : config.name.trim(),
+      entries: normalizedEntries,
       description: _normalizeOptional(config.description),
       clearDescription: _normalizeOptional(config.description) == null,
-      mainPrompt: config.mainPrompt.trim(),
       stopSequences: config.stopSequences
           .map((item) => item.trim())
           .where((item) => item.isNotEmpty)
@@ -467,7 +462,7 @@ class ApiService {
   }
 
   RuntimePresetConfig _toRuntimePresetConfig(StoredPresetConfig config) {
-    final entries = _buildPresetEntries(config.mainPrompt.trim());
+    final entries = _buildPresetEntries(config.entries);
     _assertBuiltinEntries(entries);
     return RuntimePresetConfig(
       presetId: config.presetId,
@@ -476,63 +471,30 @@ class ApiService {
     );
   }
 
-  List<RuntimePresetEntry> _buildPresetEntries(String mainPrompt) {
-    return <RuntimePresetEntry>[
-      RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.mainPrompt,
-        role: 'system',
-        content: mainPrompt,
-        disabled: false,
-        comment: '主系统指令',
-        builtin: true,
-      ),
-      const RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.lores,
-        role: 'system',
-        content: '',
-        disabled: false,
-        comment: 'Lore 注入调度器输出',
-        builtin: true,
-      ),
-      const RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.userDescription,
-        role: 'system',
-        content: '',
-        disabled: false,
-        comment: 'Session 用户描述',
-        builtin: true,
-      ),
-      const RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.chatHistory,
-        role: 'system',
-        content: '',
-        disabled: false,
-        comment: '最近可见消息',
-        builtin: true,
-      ),
-      const RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.scene,
-        role: 'system',
-        content: '',
-        disabled: false,
-        comment: '会话场景',
-        builtin: true,
-      ),
-      const RuntimePresetEntry(
-        name: PresetBuiltinEntryNames.userInput,
-        role: 'user',
-        content: '',
-        disabled: false,
-        comment: '用户输入',
-        builtin: true,
-      ),
-    ];
+  List<RuntimePresetEntry> _buildPresetEntries(
+    List<StoredPresetEntry> entries,
+  ) {
+    return entries
+        .map(
+          (entry) => RuntimePresetEntry(
+            entryId: entry.entryId,
+            title: entry.title,
+            role: entry.role.wireValue,
+            content: entry.content,
+            enabled: entry.enabled,
+            builtinKey: entry.builtinKey,
+          ),
+        )
+        .toList(growable: false);
   }
 
   void _assertBuiltinEntries(List<RuntimePresetEntry> entries) {
-    final names = entries.map((entry) => entry.name).toSet();
-    for (final requiredName in PresetBuiltinEntryNames.all) {
-      if (!names.contains(requiredName)) {
+    final builtinKeys = entries
+        .map((entry) => entry.builtinKey)
+        .whereType<String>()
+        .toSet();
+    for (final requiredName in PresetBuiltinEntryKeys.ordered) {
+      if (!builtinKeys.contains(requiredName)) {
         throw StateError(
           'missing required preset builtin entry: $requiredName',
         );
@@ -569,7 +531,9 @@ class ApiService {
     return StoredPresetConfig(
       presetId: _presetId,
       name: _presetName,
-      mainPrompt: _presetMainPrompt.trim(),
+      entries: buildDefaultPresetEntries(
+        mainPromptContent: _presetMainPrompt.trim(),
+      ),
       createdAt: now,
       updatedAt: now,
     );
@@ -633,7 +597,14 @@ class ApiService {
     if (json is! Map<String, dynamic>) {
       throw StateError('invalid_preset_file: ${file.path}');
     }
-    return StoredPresetConfig.fromJson(json);
+    final normalizedJson = <String, dynamic>{
+      ...json,
+      if ('${json['presetId'] ?? ''}'.trim().isEmpty)
+        'presetId': file.uri.pathSegments.last.replaceFirst('.json', ''),
+      if ('${json['name'] ?? ''}'.trim().isEmpty)
+        'name': file.uri.pathSegments.last.replaceFirst('.json', ''),
+    };
+    return StoredPresetConfig.fromJson(normalizedJson);
   }
 
   Future<StoredApiConfig> _readApiFile(File file) async {

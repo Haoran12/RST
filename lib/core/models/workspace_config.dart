@@ -181,12 +181,220 @@ class StoredApiConfig {
   }
 }
 
+enum StoredPresetEntryRole {
+  system('system', 'System'),
+  user('user', 'User'),
+  assistant('assistant', 'Assistant');
+
+  const StoredPresetEntryRole(this.wireValue, this.displayLabel);
+
+  final String wireValue;
+  final String displayLabel;
+}
+
+StoredPresetEntryRole storedPresetEntryRoleFromWire(Object? raw) {
+  final normalized = '$raw'.trim().toLowerCase();
+  for (final value in StoredPresetEntryRole.values) {
+    if (value.wireValue == normalized) {
+      return value;
+    }
+  }
+  return StoredPresetEntryRole.system;
+}
+
+class PresetBuiltinEntryKeys {
+  const PresetBuiltinEntryKeys._();
+
+  static const String mainPrompt = 'main_prompt';
+  static const String loreBefore = 'lore_before';
+  static const String userDescription = 'user_description';
+  static const String chatHistory = 'chat_history';
+  static const String scene = 'scene';
+
+  static const List<String> ordered = <String>[
+    mainPrompt,
+    loreBefore,
+    userDescription,
+    chatHistory,
+    scene,
+  ];
+
+  static String defaultTitleOf(String builtinKey) {
+    return switch (builtinKey) {
+      mainPrompt => 'Main Prompt',
+      loreBefore => 'Lore Before',
+      userDescription => 'User Description',
+      chatHistory => 'Chat History',
+      scene => 'Scene',
+      _ => builtinKey,
+    };
+  }
+}
+
+class StoredPresetEntry {
+  const StoredPresetEntry({
+    required this.entryId,
+    required this.title,
+    required this.role,
+    required this.content,
+    this.enabled = true,
+    this.builtinKey,
+  });
+
+  final String entryId;
+  final String title;
+  final StoredPresetEntryRole role;
+  final String content;
+  final bool enabled;
+  final String? builtinKey;
+
+  bool get isBuiltin => builtinKey != null;
+
+  StoredPresetEntry copyWith({
+    String? entryId,
+    String? title,
+    StoredPresetEntryRole? role,
+    String? content,
+    bool? enabled,
+    String? builtinKey,
+    bool clearBuiltinKey = false,
+  }) {
+    return StoredPresetEntry(
+      entryId: entryId ?? this.entryId,
+      title: title ?? this.title,
+      role: role ?? this.role,
+      content: content ?? this.content,
+      enabled: enabled ?? this.enabled,
+      builtinKey: clearBuiltinKey ? null : (builtinKey ?? this.builtinKey),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'entryId': entryId,
+      'title': title,
+      'role': role.wireValue,
+      'content': content,
+      'enabled': enabled,
+      'builtinKey': builtinKey,
+    };
+  }
+
+  factory StoredPresetEntry.fromJson(
+    Map<String, dynamic> json, {
+    int index = 0,
+  }) {
+    final rawBuiltin = _normalizeOptional(json['builtinKey'] ?? json['name']);
+    final builtinKey =
+        rawBuiltin != null &&
+            PresetBuiltinEntryKeys.ordered.contains(rawBuiltin)
+        ? rawBuiltin
+        : null;
+    final normalizedTitle =
+        _normalizeOptional(json['title'] ?? json['label'] ?? json['name']) ??
+        (builtinKey == null
+            ? '未命名条目 ${index + 1}'
+            : PresetBuiltinEntryKeys.defaultTitleOf(builtinKey));
+    return StoredPresetEntry(
+      entryId:
+          _normalizeOptional(json['entryId']) ??
+          (builtinKey == null ? 'entry-$index' : 'builtin-$builtinKey'),
+      title: normalizedTitle,
+      role: storedPresetEntryRoleFromWire(json['role']),
+      content: '${json['content'] ?? ''}',
+      enabled: _parsePresetEntryEnabled(json),
+      builtinKey: builtinKey,
+    );
+  }
+}
+
+List<StoredPresetEntry> normalizeStoredPresetEntries(
+  List<StoredPresetEntry> rawEntries, {
+  String legacyMainPrompt = '',
+}) {
+  final next = rawEntries
+      .asMap()
+      .entries
+      .map(
+        (item) => item.value.copyWith(
+          entryId: item.value.entryId.trim().isEmpty
+              ? (item.value.isBuiltin
+                    ? 'builtin-${item.value.builtinKey}'
+                    : 'entry-${item.key}')
+              : item.value.entryId.trim(),
+          title: item.value.title.trim().isEmpty
+              ? (item.value.builtinKey == null
+                    ? '未命名条目 ${item.key + 1}'
+                    : PresetBuiltinEntryKeys.defaultTitleOf(
+                        item.value.builtinKey!,
+                      ))
+              : item.value.title.trim(),
+          content: item.value.content.replaceAll('\r\n', '\n'),
+        ),
+      )
+      .toList(growable: true);
+
+  if (next.isEmpty) {
+    return buildDefaultPresetEntries(mainPromptContent: legacyMainPrompt);
+  }
+
+  for (final builtinKey in PresetBuiltinEntryKeys.ordered) {
+    final existingIndex = next.indexWhere(
+      (entry) => entry.builtinKey == builtinKey,
+    );
+    final defaultEntry = _buildBuiltinPresetEntry(
+      builtinKey,
+      mainPromptContent: legacyMainPrompt,
+    );
+    if (existingIndex < 0) {
+      next.add(defaultEntry);
+      continue;
+    }
+    final existing = next[existingIndex];
+    if (builtinKey == PresetBuiltinEntryKeys.mainPrompt &&
+        existing.content.trim().isEmpty &&
+        legacyMainPrompt.trim().isNotEmpty) {
+      next[existingIndex] = existing.copyWith(content: legacyMainPrompt.trim());
+    }
+  }
+
+  return next;
+}
+
+List<StoredPresetEntry> buildDefaultPresetEntries({
+  String mainPromptContent = '',
+}) {
+  return PresetBuiltinEntryKeys.ordered
+      .map(
+        (builtinKey) => _buildBuiltinPresetEntry(
+          builtinKey,
+          mainPromptContent: mainPromptContent,
+        ),
+      )
+      .toList(growable: false);
+}
+
+StoredPresetEntry _buildBuiltinPresetEntry(
+  String builtinKey, {
+  String mainPromptContent = '',
+}) {
+  return StoredPresetEntry(
+    entryId: 'builtin-$builtinKey',
+    title: PresetBuiltinEntryKeys.defaultTitleOf(builtinKey),
+    role: StoredPresetEntryRole.system,
+    content: builtinKey == PresetBuiltinEntryKeys.mainPrompt
+        ? mainPromptContent.trim()
+        : '',
+    builtinKey: builtinKey,
+  );
+}
+
 class StoredPresetConfig {
   const StoredPresetConfig({
     required this.presetId,
     required this.name,
+    required this.entries,
     this.description,
-    required this.mainPrompt,
     this.temperature,
     this.topP,
     this.presencePenalty,
@@ -202,8 +410,8 @@ class StoredPresetConfig {
 
   final String presetId;
   final String name;
+  final List<StoredPresetEntry> entries;
   final String? description;
-  final String mainPrompt;
   final double? temperature;
   final double? topP;
   final double? presencePenalty;
@@ -216,12 +424,21 @@ class StoredPresetConfig {
   final DateTime updatedAt;
   final int version;
 
+  String get mainPrompt {
+    for (final entry in entries) {
+      if (entry.builtinKey == PresetBuiltinEntryKeys.mainPrompt) {
+        return entry.content;
+      }
+    }
+    return '';
+  }
+
   StoredPresetConfig copyWith({
     String? presetId,
     String? name,
+    List<StoredPresetEntry>? entries,
     String? description,
     bool clearDescription = false,
-    String? mainPrompt,
     double? temperature,
     bool clearTemperature = false,
     double? topP,
@@ -244,8 +461,8 @@ class StoredPresetConfig {
     return StoredPresetConfig(
       presetId: presetId ?? this.presetId,
       name: name ?? this.name,
+      entries: entries ?? this.entries,
       description: clearDescription ? null : (description ?? this.description),
-      mainPrompt: mainPrompt ?? this.mainPrompt,
       temperature: clearTemperature ? null : (temperature ?? this.temperature),
       topP: clearTopP ? null : (topP ?? this.topP),
       presencePenalty: clearPresencePenalty
@@ -272,6 +489,9 @@ class StoredPresetConfig {
     return <String, dynamic>{
       'presetId': presetId,
       'name': name,
+      'entries': entries.map((item) => item.toJson()).toList(growable: false),
+      'prompts': _toSillyTavernPrompts(entries),
+      'prompt_order': _toSillyTavernPromptOrder(entries),
       'description': description,
       'mainPrompt': mainPrompt,
       'temperature': temperature,
@@ -289,11 +509,18 @@ class StoredPresetConfig {
   }
 
   factory StoredPresetConfig.fromJson(Map<String, dynamic> json) {
+    final legacyMainPrompt = '${json['mainPrompt'] ?? ''}'.trim();
+    final rawEntries = _parseStoredPresetEntries(json['entries']).isNotEmpty
+        ? _parseStoredPresetEntries(json['entries'])
+        : _parseStoredPresetEntriesFromSillyTavern(json);
     return StoredPresetConfig(
       presetId: '${json['presetId'] ?? ''}',
       name: '${json['name'] ?? ''}',
+      entries: normalizeStoredPresetEntries(
+        rawEntries,
+        legacyMainPrompt: legacyMainPrompt,
+      ),
       description: _normalizeOptional(json['description']),
-      mainPrompt: '${json['mainPrompt'] ?? ''}',
       temperature: _parseDouble(json['temperature']),
       topP: _parseDouble(json['topP']),
       presencePenalty: _parseDouble(json['presencePenalty']),
@@ -307,6 +534,194 @@ class StoredPresetConfig {
       version: _parseInt(json['version']) ?? 1,
     );
   }
+}
+
+List<StoredPresetEntry> _parseStoredPresetEntries(Object? raw) {
+  if (raw is! List) {
+    return const <StoredPresetEntry>[];
+  }
+  final items = <StoredPresetEntry>[];
+  for (var index = 0; index < raw.length; index++) {
+    final item = raw[index];
+    if (item is! Map) {
+      continue;
+    }
+    items.add(
+      StoredPresetEntry.fromJson(Map<String, dynamic>.from(item), index: index),
+    );
+  }
+  return items;
+}
+
+List<StoredPresetEntry> _parseStoredPresetEntriesFromSillyTavern(
+  Map<String, dynamic> json,
+) {
+  final rawPrompts = json['prompts'];
+  if (rawPrompts is! List) {
+    return const <StoredPresetEntry>[];
+  }
+
+  final promptByIdentifier = <String, Map<String, dynamic>>{};
+  for (final item in rawPrompts) {
+    if (item is! Map) {
+      continue;
+    }
+    final prompt = Map<String, dynamic>.from(item);
+    final identifier = _normalizeOptional(prompt['identifier']);
+    if (identifier == null) {
+      continue;
+    }
+    promptByIdentifier[identifier] = prompt;
+  }
+
+  final orderedIdentifiers = <String>[];
+  final enabledByIdentifier = <String, bool>{};
+  final promptOrder = json['prompt_order'];
+  if (promptOrder is List) {
+    for (final item in promptOrder) {
+      if (item is! Map) {
+        continue;
+      }
+      final orderList = item['order'];
+      if (orderList is! List) {
+        continue;
+      }
+      for (final orderItem in orderList) {
+        if (orderItem is! Map) {
+          continue;
+        }
+        final identifier = _normalizeOptional(orderItem['identifier']);
+        if (identifier == null) {
+          continue;
+        }
+        orderedIdentifiers.add(identifier);
+        enabledByIdentifier[identifier] =
+            _parseBool(orderItem['enabled']) ?? true;
+      }
+      break;
+    }
+  }
+
+  for (final identifier in promptByIdentifier.keys) {
+    if (!orderedIdentifiers.contains(identifier)) {
+      orderedIdentifiers.add(identifier);
+    }
+  }
+
+  final entries = <StoredPresetEntry>[];
+  for (final identifier in orderedIdentifiers) {
+    final prompt = promptByIdentifier[identifier];
+    if (prompt == null) {
+      continue;
+    }
+    final builtinKey = _builtinKeyFromSillyTavernIdentifier(identifier);
+    final marker = _parseBool(prompt['marker']) ?? false;
+    final role = storedPresetEntryRoleFromWire(prompt['role']);
+    final title =
+        _normalizeOptional(prompt['name']) ??
+        (builtinKey == null
+            ? identifier
+            : PresetBuiltinEntryKeys.defaultTitleOf(builtinKey));
+    final content = '${prompt['content'] ?? ''}';
+    final enabled =
+        enabledByIdentifier[identifier] ??
+        _parseBool(prompt['enabled']) ??
+        true;
+
+    if (builtinKey == null && marker && content.trim().isEmpty) {
+      continue;
+    }
+
+    entries.add(
+      StoredPresetEntry(
+        entryId: identifier,
+        title: title,
+        role: role,
+        content: content,
+        enabled: enabled,
+        builtinKey: builtinKey,
+      ),
+    );
+  }
+  return entries;
+}
+
+List<Map<String, dynamic>> _toSillyTavernPrompts(
+  List<StoredPresetEntry> entries,
+) {
+  return entries
+      .map(
+        (entry) => <String, dynamic>{
+          'identifier': _sillyTavernIdentifierForEntry(entry),
+          'name': entry.title,
+          'system_prompt': entry.role == StoredPresetEntryRole.system,
+          'marker': entry.builtinKey == PresetBuiltinEntryKeys.chatHistory,
+          if (entry.content.trim().isNotEmpty ||
+              entry.builtinKey != PresetBuiltinEntryKeys.chatHistory)
+            'content': entry.content,
+          'role': entry.role.wireValue,
+          'injection_position': 0,
+          'injection_depth': 4,
+          'forbid_overrides': false,
+          'enabled': entry.enabled,
+        },
+      )
+      .toList(growable: false);
+}
+
+List<Map<String, dynamic>> _toSillyTavernPromptOrder(
+  List<StoredPresetEntry> entries,
+) {
+  return <Map<String, dynamic>>[
+    <String, dynamic>{
+      'character_id': 100001,
+      'order': entries
+          .map(
+            (entry) => <String, dynamic>{
+              'identifier': _sillyTavernIdentifierForEntry(entry),
+              'enabled': entry.enabled,
+            },
+          )
+          .toList(growable: false),
+    },
+  ];
+}
+
+String _sillyTavernIdentifierForEntry(StoredPresetEntry entry) {
+  if (entry.builtinKey != null) {
+    return switch (entry.builtinKey!) {
+      PresetBuiltinEntryKeys.mainPrompt => 'main',
+      PresetBuiltinEntryKeys.loreBefore => 'worldInfoBefore',
+      PresetBuiltinEntryKeys.userDescription => 'personaDescription',
+      PresetBuiltinEntryKeys.chatHistory => 'chatHistory',
+      PresetBuiltinEntryKeys.scene => 'scenario',
+      _ => entry.entryId,
+    };
+  }
+  return entry.entryId;
+}
+
+String? _builtinKeyFromSillyTavernIdentifier(String identifier) {
+  return switch (identifier) {
+    'main' => PresetBuiltinEntryKeys.mainPrompt,
+    'worldInfoBefore' => PresetBuiltinEntryKeys.loreBefore,
+    'personaDescription' => PresetBuiltinEntryKeys.userDescription,
+    'chatHistory' => PresetBuiltinEntryKeys.chatHistory,
+    'scenario' => PresetBuiltinEntryKeys.scene,
+    _ => null,
+  };
+}
+
+bool _parsePresetEntryEnabled(Map<String, dynamic> json) {
+  final enabled = _parseBool(json['enabled']);
+  if (enabled != null) {
+    return enabled;
+  }
+  final disabled = _parseBool(json['disabled']);
+  if (disabled != null) {
+    return !disabled;
+  }
+  return true;
 }
 
 Map<String, String> _parseHeaders(Object? raw) {
