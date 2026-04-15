@@ -1,5 +1,17 @@
 # Version History
 
+## 0.1.0+16 (2026-04-15)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+16-release.apk`
+- Notes: Tightened preset editor UI, simplified preset entry cards, and refined structured content editing feedback.
+
+## 0.1.0+15 (2026-04-15)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+15-release.apk`
+- Notes: Release packaging build for current workspace state.
+
 ## 0.1.0+14 (2026-04-14)
 
 - Build type: Android APK release
@@ -77,3 +89,4 @@
 - Build type: Android APK release
 - Artifact: `rst-0.1.0+2-release.apk`
 - Notes: UI navigation refactor and session quick settings update
+

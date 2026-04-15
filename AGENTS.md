@@ -23,3 +23,12 @@
 - Standard packaging command: `pwsh ./scripts/build_android_release.ps1`.
 - The project must maintain a persistent released-version record (for example in `docs/version-history.md` or `CHANGELOG.md`) and update it for each release.
 - The build process must include version bump capability: at minimum, increment `+build` on each build/release and write back the updated version metadata.
+
+## UI Copy And Editor UX
+
+- Keep UI copy minimal, especially in editing screens and config panels.
+- Do not add explanatory filler text, reassurance copy, or status copy unless it directly helps the user complete the current task.
+- Avoid messages such as "content auto-saved", "quotes/brackets normal", or similar low-value helper text by default.
+- Prefer in-editor visual feedback over extra prose when showing validation or structure hints.
+- When the user explicitly asks for less copy or less clutter, that preference overrides any stylistic tendency or skill guidance.
+- Skills may inform layout or implementation quality, but they must not be used as a reason to add unnecessary UI copy.

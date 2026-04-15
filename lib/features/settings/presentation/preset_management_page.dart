@@ -271,20 +271,9 @@ class _PresetEditorPageState extends ConsumerState<_PresetEditorPage> {
             decoration: _inputDecoration('输入预设名称'),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '拖拽卡片即可调整 Prompt Builder 的实际顺序。',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              PrimaryPillButton(label: '新增条目', onPressed: _addEntry),
-            ],
+          Align(
+            alignment: Alignment.centerRight,
+            child: PrimaryPillButton(label: '新增条目', onPressed: _addEntry),
           ),
         ],
       ),
@@ -618,118 +607,78 @@ class _PresetEntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GlassPanelCard(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       backgroundColor: entry.enabled
           ? AppColors.surfaceCard.withValues(alpha: 0.92)
           : AppColors.surfaceOverlay.withValues(alpha: 0.55),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           ReorderableDragStartListener(
             index: index,
             child: Container(
-              width: 34,
-              height: 44,
+              width: 28,
+              height: 34,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 color: AppColors.surfaceOverlay.withValues(alpha: 0.6),
                 border: Border.all(color: AppColors.borderSubtle),
               ),
-              child: const Icon(Icons.drag_indicator_rounded, size: 18),
+              child: const Icon(Icons.drag_indicator_rounded, size: 16),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        entry.title,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (entry.isBuiltin) const SizedBox(width: 8),
-                    if (entry.isBuiltin)
-                      const _EntryMetaPill(
-                        label: '系统内置',
-                        accentColor: AppColors.accentTertiary,
-                      ),
-                  ],
+                Text(
+                  entry.title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontSize: 14, height: 1.15),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _EntryMetaPill(label: entry.role.displayLabel),
-                    _EntryMetaPill(
-                      label: entry.enabled ? '已启用' : '已停用',
-                      accentColor: entry.enabled
-                          ? AppColors.accentSecondary
-                          : AppColors.textMuted,
-                    ),
-                  ],
+                const SizedBox(height: 4),
+                _EntryMetaPill(
+                  label: entry.role.displayLabel,
+                  accentColor: entry.enabled
+                      ? AppColors.textSecondary
+                      : AppColors.textMuted,
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Switch.adaptive(
-                value: entry.enabled,
-                onChanged: onEnabledChanged,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              _CompactIconButton(
+                tooltip: '编辑条目',
+                icon: Icons.edit_outlined,
+                onPressed: onEdit,
               ),
-              const SizedBox(height: 4),
-              SizedBox(
-                width: 40,
-                height: 40,
-                child: PopupMenuButton<_PresetEntryAction>(
-                  tooltip: '条目操作',
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.more_horiz_rounded),
-                  color: AppColors.backgroundElevated,
-                  onSelected: (action) {
-                    switch (action) {
-                      case _PresetEntryAction.edit:
-                        onEdit();
-                        break;
-                      case _PresetEntryAction.copy:
-                        onCopy();
-                        break;
-                      case _PresetEntryAction.delete:
-                        onDelete?.call();
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem<_PresetEntryAction>(
-                      value: _PresetEntryAction.edit,
-                      child: Text('编辑'),
-                    ),
-                    const PopupMenuItem<_PresetEntryAction>(
-                      value: _PresetEntryAction.copy,
-                      child: Text('复制'),
-                    ),
-                    PopupMenuItem<_PresetEntryAction>(
-                      value: _PresetEntryAction.delete,
-                      enabled: onDelete != null,
-                      child: Text(
-                        '删除',
-                        style: TextStyle(
-                          color: onDelete == null
-                              ? AppColors.textMuted
-                              : AppColors.error,
-                        ),
-                      ),
-                    ),
-                  ],
+              _CompactIconButton(
+                tooltip: '复制条目',
+                icon: Icons.content_copy_outlined,
+                onPressed: onCopy,
+              ),
+              _CompactIconButton(
+                tooltip: entry.isBuiltin ? '该条目不可删除' : '删除条目',
+                icon: Icons.delete_outline_rounded,
+                iconColor: onDelete == null
+                    ? AppColors.error.withValues(alpha: 0.28)
+                    : AppColors.error,
+                onPressed: onDelete,
+              ),
+              Transform.scale(
+                scale: 0.78,
+                child: Switch.adaptive(
+                  value: entry.enabled,
+                  onChanged: onEnabledChanged,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
             ],
@@ -739,8 +688,6 @@ class _PresetEntryCard extends StatelessWidget {
     );
   }
 }
-
-enum _PresetEntryAction { edit, copy, delete }
 
 class _EntryMetaPill extends StatelessWidget {
   const _EntryMetaPill({required this.label, this.accentColor});
@@ -752,7 +699,7 @@ class _EntryMetaPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final tint = accentColor ?? AppColors.textSecondary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         color: tint.withValues(alpha: 0.12),
@@ -760,7 +707,40 @@ class _EntryMetaPill extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(color: tint),
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: tint, fontSize: 11),
+      ),
+    );
+  }
+}
+
+class _CompactIconButton extends StatelessWidget {
+  const _CompactIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.iconColor,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        visualDensity: VisualDensity.compact,
+        splashRadius: 16,
+        iconSize: 16,
+        icon: Icon(icon, color: iconColor),
       ),
     );
   }

@@ -60,6 +60,10 @@ Use the project packaging script so final APK output is always standardized:
 pwsh ./scripts/build_android_release.ps1
 ```
 
+The packaging script automatically increments the `+build` number in `pubspec.yaml`,
+builds the release APK with the new version, and prepends a release entry to
+`docs/version-history.md`.
+
 Final artifacts are placed in:
 
 - `build/android/rst-<version>-release.apk`
