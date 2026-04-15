@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -621,18 +622,19 @@ class _PresetEntryCard extends StatelessWidget {
           ? AppColors.surfaceCard.withValues(alpha: 0.92)
           : AppColors.surfaceOverlay.withValues(alpha: 0.55),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ReorderableDragStartListener(
             index: index,
             child: Container(
-              width: 38,
-              height: 52,
+              width: 34,
+              height: 44,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
                 color: AppColors.surfaceOverlay.withValues(alpha: 0.6),
                 border: Border.all(color: AppColors.borderSubtle),
               ),
-              child: const Icon(Icons.drag_indicator_rounded),
+              child: const Icon(Icons.drag_indicator_rounded, size: 18),
             ),
           ),
           const SizedBox(width: 12),
@@ -646,60 +648,119 @@ class _PresetEntryCard extends StatelessWidget {
                       child: Text(
                         entry.title,
                         style: Theme.of(context).textTheme.titleMedium,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (entry.isBuiltin) const SizedBox(width: 8),
                     if (entry.isBuiltin)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          color: AppColors.accentPrimary.withValues(
-                            alpha: 0.12,
-                          ),
-                        ),
-                        child: Text(
-                          '系统内置',
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(color: AppColors.accentTertiary),
-                        ),
+                      const _EntryMetaPill(
+                        label: '系统内置',
+                        accentColor: AppColors.accentTertiary,
                       ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  '${entry.role.displayLabel} · ${entry.enabled ? '已启用' : '已停用'}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _EntryMetaPill(label: entry.role.displayLabel),
+                    _EntryMetaPill(
+                      label: entry.enabled ? '已启用' : '已停用',
+                      accentColor: entry.enabled
+                          ? AppColors.accentSecondary
+                          : AppColors.textMuted,
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          IconButton(
-            tooltip: '编辑条目',
-            onPressed: onEdit,
-            icon: const Icon(Icons.edit_outlined),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Switch.adaptive(
+                value: entry.enabled,
+                onChanged: onEnabledChanged,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: PopupMenuButton<_PresetEntryAction>(
+                  tooltip: '条目操作',
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.more_horiz_rounded),
+                  color: AppColors.backgroundElevated,
+                  onSelected: (action) {
+                    switch (action) {
+                      case _PresetEntryAction.edit:
+                        onEdit();
+                        break;
+                      case _PresetEntryAction.copy:
+                        onCopy();
+                        break;
+                      case _PresetEntryAction.delete:
+                        onDelete?.call();
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem<_PresetEntryAction>(
+                      value: _PresetEntryAction.edit,
+                      child: Text('编辑'),
+                    ),
+                    const PopupMenuItem<_PresetEntryAction>(
+                      value: _PresetEntryAction.copy,
+                      child: Text('复制'),
+                    ),
+                    PopupMenuItem<_PresetEntryAction>(
+                      value: _PresetEntryAction.delete,
+                      enabled: onDelete != null,
+                      child: Text(
+                        '删除',
+                        style: TextStyle(
+                          color: onDelete == null
+                              ? AppColors.textMuted
+                              : AppColors.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: '复制条目',
-            onPressed: onCopy,
-            icon: const Icon(Icons.content_copy_outlined),
-          ),
-          IconButton(
-            tooltip: entry.isBuiltin ? '系统内置条目不可删除' : '删除条目',
-            onPressed: onDelete,
-            icon: Icon(
-              Icons.delete_outline_rounded,
-              color: onDelete == null
-                  ? AppColors.error.withValues(alpha: 0.35)
-                  : AppColors.error,
-            ),
-          ),
-          Switch.adaptive(value: entry.enabled, onChanged: onEnabledChanged),
         ],
+      ),
+    );
+  }
+}
+
+enum _PresetEntryAction { edit, copy, delete }
+
+class _EntryMetaPill extends StatelessWidget {
+  const _EntryMetaPill({required this.label, this.accentColor});
+
+  final String label;
+  final Color? accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = accentColor ?? AppColors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: tint.withValues(alpha: 0.12),
+        border: Border.all(color: tint.withValues(alpha: 0.24)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(color: tint),
       ),
     );
   }
@@ -717,21 +778,30 @@ class _PresetEntryEditorPage extends StatefulWidget {
 
 class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
   late final TextEditingController _titleController;
-  late final TextEditingController _contentController;
+  late final _StructuredContentController _contentController;
   late StoredPresetEntry _draft;
+  late _EditorContentStatus _contentStatus;
+  Timer? _autoFormatTimer;
+  bool _applyingAutoFormat = false;
+  bool _syncingHighlights = false;
 
   @override
   void initState() {
     super.initState();
     _draft = widget.entry;
     _titleController = TextEditingController(text: widget.entry.title);
-    _contentController = TextEditingController(text: widget.entry.content);
+    _contentController = _StructuredContentController(
+      text: widget.entry.content,
+    );
+    _contentStatus = _EditorContentStatus.analyze(widget.entry.content);
+    _contentController.applyStatus(_contentStatus);
     _titleController.addListener(_handleTitleChanged);
     _contentController.addListener(_handleContentChanged);
   }
 
   @override
   void dispose() {
+    _autoFormatTimer?.cancel();
     _titleController
       ..removeListener(_handleTitleChanged)
       ..dispose();
@@ -743,7 +813,7 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final status = _EditorContentStatus.analyze(_contentController.text);
+    final status = _contentStatus;
     return Scaffold(
       appBar: AppBar(
         title: Text(_draft.title.trim().isEmpty ? '编辑条目' : _draft.title),
@@ -806,64 +876,87 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Expanded(child: Text('内容')),
-                          TextButton(
-                            onPressed: status.canFormat ? _formatContent : null,
-                            child: const Text('格式化'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _StatusChip(label: status.kindLabel),
-                          _StatusChip(label: status.pairLabel),
-                          const _StatusChip(label: '内容自动保存到草稿'),
-                        ],
-                      ),
-                      if (status.message != null) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          status.message!,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                color: status.hasIssue
-                                    ? AppColors.warning
-                                    : AppColors.textSecondary,
-                              ),
-                        ),
-                      ],
+                      const Text('内容'),
                       const SizedBox(height: 12),
                       Container(
                         height: 420,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: AppColors.borderSubtle),
+                          border: Border.all(
+                            color: status.hasIssue
+                                ? AppColors.warning.withValues(alpha: 0.72)
+                                : AppColors.borderSubtle,
+                          ),
                           color: AppColors.surfaceOverlay.withValues(
                             alpha: 0.42,
                           ),
                         ),
-                        child: TextField(
-                          controller: _contentController,
-                          expands: true,
-                          minLines: null,
-                          maxLines: null,
-                          keyboardType: TextInputType.multiline,
-                          textAlignVertical: TextAlignVertical.top,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 13,
-                            height: 1.5,
-                          ),
-                          decoration: const InputDecoration(
-                            hintText: '在这里编辑条目内容',
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.all(16),
-                          ),
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                12,
+                                16,
+                                10,
+                              ),
+                              child: Row(
+                                children: [
+                                  _StatusChip(label: status.kindLabel),
+                                  if (status.message != null) ...[
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        status.message!,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: status.hasIssue
+                                                  ? AppColors.warning
+                                                  : AppColors.textSecondary,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            Divider(
+                              height: 1,
+                              thickness: 1,
+                              color: AppColors.borderSubtle.withValues(
+                                alpha: 0.8,
+                              ),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _contentController,
+                                expands: true,
+                                minLines: null,
+                                maxLines: null,
+                                keyboardType: TextInputType.multiline,
+                                textAlignVertical: TextAlignVertical.top,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 13,
+                                  height: 1.5,
+                                ),
+                                decoration: const InputDecoration(
+                                  hintText: '在这里编辑条目内容',
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.fromLTRB(
+                                    16,
+                                    14,
+                                    16,
+                                    16,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -935,24 +1028,98 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
   }
 
   void _handleContentChanged() {
-    if (_contentController.text == _draft.content) {
+    if (_syncingHighlights) {
       return;
     }
+    final text = _contentController.text;
+    final status = _EditorContentStatus.analyze(text);
+    _syncingHighlights = true;
+    _contentController.applyStatus(status);
+    _syncingHighlights = false;
     setState(() {
-      _draft = _draft.copyWith(content: _contentController.text);
+      _contentStatus = status;
+      _draft = _draft.copyWith(content: text);
     });
     widget.onChanged(_draft);
-  }
 
-  void _formatContent() {
-    final formatted = _EditorContentStatus.format(_contentController.text);
-    if (formatted == null) {
+    if (_applyingAutoFormat) {
       return;
     }
-    _contentController.value = TextEditingValue(
-      text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
+    _autoFormatTimer?.cancel();
+    if (!status.shouldAutoFormat) {
+      return;
+    }
+    _autoFormatTimer = Timer(const Duration(milliseconds: 320), () {
+      if (!mounted) {
+        return;
+      }
+      final current = _contentController.text;
+      final formatted = _EditorContentStatus.format(current);
+      if (formatted == null || formatted == current) {
+        return;
+      }
+      _applyingAutoFormat = true;
+      _contentController.value = TextEditingValue(
+        text: formatted,
+        selection: _remapSelection(
+          before: current,
+          after: formatted,
+          selection: _contentController.selection,
+        ),
+        composing: TextRange.empty,
+      );
+      _applyingAutoFormat = false;
+    });
+  }
+
+  TextSelection _remapSelection({
+    required String before,
+    required String after,
+    required TextSelection selection,
+  }) {
+    int remapOffset(int offset) {
+      if (offset < 0) {
+        return offset;
+      }
+      final prefixLength = _commonPrefixLength(before, after);
+      final suffixLength = _commonSuffixLength(before, after, prefixLength);
+      if (offset <= prefixLength) {
+        return offset.clamp(0, after.length);
+      }
+      if (offset >= before.length - suffixLength) {
+        final distanceFromEnd = before.length - offset;
+        return (after.length - distanceFromEnd).clamp(0, after.length);
+      }
+      return prefixLength.clamp(0, after.length);
+    }
+
+    return TextSelection(
+      baseOffset: remapOffset(selection.baseOffset),
+      extentOffset: remapOffset(selection.extentOffset),
+      affinity: selection.affinity,
+      isDirectional: selection.isDirectional,
     );
+  }
+
+  int _commonPrefixLength(String before, String after) {
+    final limit = before.length < after.length ? before.length : after.length;
+    var index = 0;
+    while (index < limit &&
+        before.codeUnitAt(index) == after.codeUnitAt(index)) {
+      index += 1;
+    }
+    return index;
+  }
+
+  int _commonSuffixLength(String before, String after, int prefixLength) {
+    var count = 0;
+    while (count < before.length - prefixLength &&
+        count < after.length - prefixLength &&
+        before.codeUnitAt(before.length - count - 1) ==
+            after.codeUnitAt(after.length - count - 1)) {
+      count += 1;
+    }
+    return count;
   }
 
   InputDecoration _entryDecoration(String hint) {
@@ -974,6 +1141,106 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
         borderSide: const BorderSide(color: AppColors.borderStrong),
       ),
     );
+  }
+}
+
+class _StructuredContentController extends TextEditingController {
+  _StructuredContentController({required super.text});
+
+  List<TextRange> _highlightRanges = const <TextRange>[];
+
+  void applyStatus(_EditorContentStatus status) {
+    if (_hasSameRanges(status.highlightRanges)) {
+      return;
+    }
+    _highlightRanges = status.highlightRanges;
+    notifyListeners();
+  }
+
+  bool _hasSameRanges(List<TextRange> other) {
+    if (_highlightRanges.length != other.length) {
+      return false;
+    }
+    for (var index = 0; index < other.length; index += 1) {
+      if (_highlightRanges[index].start != other[index].start ||
+          _highlightRanges[index].end != other[index].end) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final baseStyle = style ?? const TextStyle();
+    if (_highlightRanges.isEmpty) {
+      return super.buildTextSpan(
+        context: context,
+        style: style,
+        withComposing: withComposing,
+      );
+    }
+
+    final boundaries = <int>{0, text.length};
+    for (final range in _highlightRanges) {
+      boundaries.add(range.start.clamp(0, text.length));
+      boundaries.add(range.end.clamp(0, text.length));
+    }
+
+    final composingRange =
+        withComposing &&
+            value.isComposingRangeValid &&
+            !value.composing.isCollapsed
+        ? value.composing
+        : TextRange.empty;
+    if (!composingRange.isCollapsed) {
+      boundaries.add(composingRange.start);
+      boundaries.add(composingRange.end);
+    }
+
+    final sortedBoundaries = boundaries.toList()..sort();
+    final children = <InlineSpan>[];
+    for (var index = 0; index < sortedBoundaries.length - 1; index += 1) {
+      final start = sortedBoundaries[index];
+      final end = sortedBoundaries[index + 1];
+      if (start >= end) {
+        continue;
+      }
+      var segmentStyle = baseStyle;
+      if (_isHighlighted(start, end)) {
+        segmentStyle = segmentStyle.merge(
+          const TextStyle(
+            decoration: TextDecoration.underline,
+            decorationColor: AppColors.warning,
+            decorationThickness: 2,
+          ),
+        );
+      }
+      if (!composingRange.isCollapsed &&
+          start >= composingRange.start &&
+          end <= composingRange.end) {
+        segmentStyle = segmentStyle.merge(
+          const TextStyle(decoration: TextDecoration.underline),
+        );
+      }
+      children.add(
+        TextSpan(text: text.substring(start, end), style: segmentStyle),
+      );
+    }
+    return TextSpan(style: baseStyle, children: children);
+  }
+
+  bool _isHighlighted(int start, int end) {
+    for (final range in _highlightRanges) {
+      if (start >= range.start && end <= range.end) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
@@ -1100,57 +1367,74 @@ class _StatusChip extends StatelessWidget {
 
 enum _ContentKind { plain, json, yaml }
 
+class _PairAnalysis {
+  const _PairAnalysis({required this.highlightRanges, this.message});
+
+  final List<TextRange> highlightRanges;
+  final String? message;
+}
+
+class _PairToken {
+  const _PairToken({required this.symbol, required this.offset});
+
+  final String symbol;
+  final int offset;
+}
+
 class _EditorContentStatus {
   const _EditorContentStatus({
     required this.kind,
     required this.canFormat,
-    required this.hasIssue,
+    required this.highlightRanges,
     this.message,
   });
 
   final _ContentKind kind;
   final bool canFormat;
-  final bool hasIssue;
+  final List<TextRange> highlightRanges;
   final String? message;
+  bool get hasIssue => message != null || highlightRanges.isNotEmpty;
+  bool get shouldAutoFormat => canFormat && !hasIssue;
 
   String get kindLabel => switch (kind) {
-    _ContentKind.json => '识别为 JSON',
-    _ContentKind.yaml => '识别为 YAML',
-    _ContentKind.plain => '普通文本',
+    _ContentKind.json => 'JSON',
+    _ContentKind.yaml => 'YAML',
+    _ContentKind.plain => '文本',
   };
 
-  String get pairLabel => hasIssue ? '引号 / 括号待检查' : '引号 / 括号正常';
-
   static _EditorContentStatus analyze(String text) {
-    final pairIssue = _pairIssue(text);
     final trimmed = text.trim();
+    final pairAnalysis = _analyzePairs(text);
+    if (trimmed.isEmpty) {
+      return const _EditorContentStatus(
+        kind: _ContentKind.plain,
+        canFormat: false,
+        highlightRanges: <TextRange>[],
+      );
+    }
     if (_looksLikeJson(trimmed)) {
-      try {
-        jsonDecode(trimmed);
-        return _EditorContentStatus(
-          kind: _ContentKind.json,
-          canFormat: true,
-          hasIssue: pairIssue != null,
-          message: pairIssue ?? '可使用格式化按钮整理缩进。',
-        );
-      } catch (_) {}
+      final validJson = _canParseJson(trimmed);
+      return _EditorContentStatus(
+        kind: _ContentKind.json,
+        canFormat: validJson,
+        highlightRanges: pairAnalysis.highlightRanges,
+        message: pairAnalysis.message ?? (validJson ? null : 'JSON 结构未完成'),
+      );
     }
     if (_looksLikeYaml(trimmed)) {
-      try {
-        loadYaml(trimmed);
-        return _EditorContentStatus(
-          kind: _ContentKind.yaml,
-          canFormat: true,
-          hasIssue: pairIssue != null,
-          message: pairIssue ?? '已识别为 YAML，可整理缩进。',
-        );
-      } catch (_) {}
+      final validYaml = _canParseYaml(trimmed);
+      return _EditorContentStatus(
+        kind: _ContentKind.yaml,
+        canFormat: validYaml,
+        highlightRanges: pairAnalysis.highlightRanges,
+        message: pairAnalysis.message ?? (validYaml ? null : 'YAML 缩进或层级未完成'),
+      );
     }
     return _EditorContentStatus(
       kind: _ContentKind.plain,
       canFormat: false,
-      hasIssue: pairIssue != null,
-      message: pairIssue ?? '未识别为 JSON / YAML，但仍可按普通文本使用。',
+      highlightRanges: pairAnalysis.highlightRanges,
+      message: pairAnalysis.message,
     );
   }
 
@@ -1181,6 +1465,24 @@ class _EditorContentStatus {
         text.contains('\n- ');
   }
 
+  static bool _canParseJson(String text) {
+    try {
+      jsonDecode(text);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static bool _canParseYaml(String text) {
+    try {
+      loadYaml(text);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static dynamic _yamlToPlain(dynamic input) {
     if (input is YamlMap) {
       return Map<String, dynamic>.fromEntries(
@@ -1195,13 +1497,36 @@ class _EditorContentStatus {
     return input;
   }
 
-  static String? _pairIssue(String text) {
-    final stack = <String>[];
+  static _PairAnalysis _analyzePairs(String text) {
+    final stack = <_PairToken>[];
+    final highlights = <TextRange>[];
     var inSingle = false;
     var inDouble = false;
+    var singleStart = -1;
+    var doubleStart = -1;
     var escaped = false;
-    for (final rune in text.runes) {
-      final char = String.fromCharCode(rune);
+    String? message;
+
+    void addHighlight(int offset) {
+      if (offset < 0 || offset >= text.length) {
+        return;
+      }
+      final range = TextRange(start: offset, end: offset + 1);
+      final alreadyExists = highlights.any(
+        (existing) =>
+            existing.start == range.start && existing.end == range.end,
+      );
+      if (!alreadyExists) {
+        highlights.add(range);
+      }
+    }
+
+    void note(String value) {
+      message ??= value;
+    }
+
+    for (var index = 0; index < text.length; index += 1) {
+      final char = String.fromCharCode(text.codeUnitAt(index));
       if (escaped) {
         escaped = false;
         continue;
@@ -1211,10 +1536,20 @@ class _EditorContentStatus {
         continue;
       }
       if (!inSingle && char == '"') {
+        if (!inDouble) {
+          doubleStart = index;
+        } else {
+          doubleStart = -1;
+        }
         inDouble = !inDouble;
         continue;
       }
       if (!inDouble && char == "'") {
+        if (!inSingle) {
+          singleStart = index;
+        } else {
+          singleStart = -1;
+        }
         inSingle = !inSingle;
         continue;
       }
@@ -1222,25 +1557,38 @@ class _EditorContentStatus {
         continue;
       }
       if (char == '{' || char == '[' || char == '(') {
-        stack.add(char);
+        stack.add(_PairToken(symbol: char, offset: index));
       } else if (char == '}' || char == ']' || char == ')') {
         if (stack.isEmpty) {
-          return '检测到未配对的右括号。';
+          addHighlight(index);
+          note('右括号未配对');
+          continue;
         }
         final last = stack.removeLast();
-        if ((last == '{' && char != '}') ||
-            (last == '[' && char != ']') ||
-            (last == '(' && char != ')')) {
-          return '括号类型不匹配。';
+        if ((last.symbol == '{' && char != '}') ||
+            (last.symbol == '[' && char != ']') ||
+            (last.symbol == '(' && char != ')')) {
+          addHighlight(last.offset);
+          addHighlight(index);
+          note('括号类型不匹配');
         }
       }
     }
-    if (inSingle || inDouble) {
-      return '检测到未闭合的引号。';
+    if (inSingle && singleStart >= 0) {
+      addHighlight(singleStart);
+      note('单引号未闭合');
+    }
+    if (inDouble && doubleStart >= 0) {
+      addHighlight(doubleStart);
+      note('双引号未闭合');
     }
     if (stack.isNotEmpty) {
-      return '检测到未闭合的括号。';
+      for (final token in stack) {
+        addHighlight(token.offset);
+      }
+      note('括号未闭合');
     }
-    return null;
+    highlights.sort((left, right) => left.start.compareTo(right.start));
+    return _PairAnalysis(highlightRanges: highlights, message: message);
   }
 }
