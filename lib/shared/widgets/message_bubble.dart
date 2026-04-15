@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../utils/reasoning_markup.dart';
 import '../theme/app_colors.dart';
 import 'tag_chip.dart';
 
@@ -35,6 +36,7 @@ class MessageBubbleAppearance {
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
+    required this.messageId,
     required this.role,
     required this.content,
     this.headerMeta,
@@ -43,9 +45,11 @@ class MessageBubble extends StatelessWidget {
     this.onToggleVisibility,
     this.onDelete,
     this.onCopy,
+    this.onEdit,
     this.onRewrite,
   });
 
+  final String messageId;
   final String role;
   final String content;
   final String? headerMeta;
@@ -54,6 +58,7 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onToggleVisibility;
   final VoidCallback? onDelete;
   final VoidCallback? onCopy;
+  final VoidCallback? onEdit;
   final VoidCallback? onRewrite;
 
   bool get _isUser => role == 'user';
@@ -61,6 +66,7 @@ class MessageBubble extends StatelessWidget {
   bool get _hasActions =>
       onDelete != null ||
       onCopy != null ||
+      onEdit != null ||
       onRewrite != null ||
       onToggleVisibility != null;
 
@@ -79,6 +85,7 @@ class MessageBubble extends StatelessWidget {
         : _isSystem
         ? AppColors.backgroundElevated
         : AppColors.surfaceOverlay;
+    final parsedMarkup = ReasoningMarkup.parse(content);
 
     return Align(
       alignment: _isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -113,7 +120,20 @@ class MessageBubble extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                _MarkdownMessageText(content: content, appearance: appearance),
+                if (parsedMarkup.content.isNotEmpty)
+                  _MarkdownMessageText(
+                    content: parsedMarkup.content,
+                    appearance: appearance,
+                  ),
+                if (parsedMarkup.hasReasoning) ...[
+                  if (parsedMarkup.content.isNotEmpty)
+                    const SizedBox(height: 8),
+                  _ReasoningPanel(
+                    messageId: messageId,
+                    reasoning: parsedMarkup.reasoning,
+                    appearance: appearance,
+                  ),
+                ],
                 if (_hasActions) ...[
                   const SizedBox(height: 8),
                   const Divider(height: 1, color: AppColors.borderSubtle),
@@ -144,6 +164,12 @@ class MessageBubble extends StatelessWidget {
                             tooltip: '复制',
                             onPressed: onCopy!,
                           ),
+                        if (onEdit != null)
+                          _QuickActionButton(
+                            icon: Icons.edit_rounded,
+                            tooltip: '编辑',
+                            onPressed: onEdit!,
+                          ),
                         if (onRewrite != null)
                           _QuickActionButton(
                             icon: Icons.edit_note_rounded,
@@ -157,6 +183,64 @@ class MessageBubble extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReasoningPanel extends StatelessWidget {
+  const _ReasoningPanel({
+    required this.messageId,
+    required this.reasoning,
+    required this.appearance,
+  });
+
+  final String messageId;
+  final String reasoning;
+  final MessageBubbleAppearance appearance;
+
+  @override
+  Widget build(BuildContext context) {
+    final reasoningAppearance = MessageBubbleAppearance(
+      paragraphColor: AppColors.textSecondary,
+      headingColor: appearance.headingColor.withValues(alpha: 0.9),
+      italicColor: appearance.italicColor,
+      boldColor: appearance.boldColor,
+      quotedColor: appearance.quotedColor,
+      fontScale: (appearance.fontScale * 0.95).clamp(0.8, 1.6),
+      bubbleOpacity: appearance.bubbleOpacity,
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderSubtle),
+        color: AppColors.backgroundBase.withValues(alpha: 0.45),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: PageStorageKey<String>('reasoning:$messageId'),
+          initiallyExpanded: false,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+          childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          dense: true,
+          minTileHeight: 32,
+          title: const Text(
+            '思考',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textMuted,
+            ),
+          ),
+          children: [
+            _MarkdownMessageText(
+              content: reasoning,
+              appearance: reasoningAppearance,
+            ),
+          ],
         ),
       ),
     );

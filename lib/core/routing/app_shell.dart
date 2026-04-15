@@ -9,6 +9,7 @@ import '../../features/session/presentation/session_settings_editor_page.dart';
 import '../../features/settings/presentation/api_config_management_page.dart';
 import '../../features/settings/presentation/preset_management_page.dart';
 import '../../features/settings/presentation/resource_management_page.dart';
+import '../../features/settings/presentation/world_book_management_page.dart';
 import '../models/workspace_config.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -37,13 +38,7 @@ class AppShell extends ConsumerStatefulWidget {
       tab: AppTab.worldBook,
       label: '世界书',
       icon: Icons.menu_book_outlined,
-      page: ResourceManagementPage(
-        title: '世界书',
-        emptyTitle: '暂无世界书',
-        emptyDescription: '先创建世界书，再绑定到 ST 会话。',
-        optionType: ManagedOptionType.worldBook,
-        optionsProvider: worldBookOptionsProvider,
-      ),
+      page: const WorldBookManagementPage(),
     ),
     _DrawerNavItem(
       tab: AppTab.preset,

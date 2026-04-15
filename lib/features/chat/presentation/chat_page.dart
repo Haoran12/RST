@@ -10,7 +10,9 @@ import '../../../core/providers/app_state.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/chat_service.dart';
+import '../../../core/services/world_book_injection.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/utils/reasoning_markup.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/error_state_view.dart';
 import '../../../shared/widgets/floating_composer.dart';
@@ -241,9 +243,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               sessionScene:
                   ref.read(sessionRstDataProvider)[roundSessionId]?.scene ??
                   runtime.defaultScene,
-              sessionLores:
-                  ref.read(sessionRstDataProvider)[roundSessionId]?.lores ??
-                  runtime.defaultLores,
+              sessionLores: WorldBookInjection.mergeWithLores(
+                sessionId: roundSessionId,
+                userInput: rawInput,
+                visibleMessages: _messages,
+                baseLores:
+                    ref.read(sessionRstDataProvider)[roundSessionId]?.lores ??
+                    runtime.defaultLores,
+                worldBook: _resolveWorldBookOption(session.stWorldBookId),
+              ),
               onMessageUpdated: (message) {
                 if (!mounted || _session?.sessionId != roundSessionId) {
                   return;
@@ -272,6 +280,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         await _reloadMessages(sessionId: roundSessionId);
       }
     }
+  }
+
+  ManagedOption? _resolveWorldBookOption(String? worldBookId) {
+    if (worldBookId == null || worldBookId.trim().isEmpty) {
+      return null;
+    }
+    final options = ref.read(worldBookOptionsProvider);
+    for (final option in options) {
+      if (option.id == worldBookId) {
+        return option;
+      }
+    }
+    return null;
   }
 
   void _upsertMessage(frb.MessageRecord record) {
@@ -381,7 +402,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _handleRewriteMessage(frb.MessageRecord message) {
-    final source = message.content.trim();
+    final source = ReasoningMarkup.stripReasoning(message.content).trim();
     if (source.isEmpty) {
       return;
     }
@@ -394,6 +415,79 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
     _composerFocusNode.requestFocus();
     _scrollToBottom(force: true);
+  }
+
+  Future<void> _handleEditMessage(frb.MessageRecord message) async {
+    final parsed = ReasoningMarkup.parse(message.content);
+    final contentController = TextEditingController(text: parsed.content);
+    final reasoningController = TextEditingController(text: parsed.reasoning);
+    try {
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('编辑消息'),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: contentController,
+                    maxLines: 8,
+                    minLines: 3,
+                    decoration: const InputDecoration(labelText: '内容'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: reasoningController,
+                    maxLines: 8,
+                    minLines: 2,
+                    decoration: const InputDecoration(labelText: '思考'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('保存'),
+              ),
+            ],
+          );
+        },
+      );
+      if (approved != true) {
+        return;
+      }
+      final merged = ReasoningMarkup.compose(
+        content: contentController.text,
+        reasoning: reasoningController.text,
+      );
+      final updated = await ref
+          .read(rustBridgeProvider)
+          .updateMessageContent(messageId: message.messageId, content: merged);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _upsertMessage(updated);
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('编辑失败: $error')));
+    } finally {
+      contentController.dispose();
+      reasoningController.dispose();
+    }
   }
 
   @override
@@ -485,6 +579,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             final canDelete =
                                 message.status != frb.MessageStatus.pending &&
                                 message.status != frb.MessageStatus.streaming;
+                            final canEdit =
+                                message.status != frb.MessageStatus.pending &&
+                                message.status != frb.MessageStatus.streaming;
                             return _MessageWithMetadata(
                               message: message,
                               floorNo: floorByMessageId[message.messageId],
@@ -492,6 +589,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               onToggleVisibility: _handleToggleVisibility,
                               onDelete: canDelete ? _handleDeleteMessage : null,
                               onCopy: hasContent ? _handleCopyMessage : null,
+                              onEdit: canEdit ? _handleEditMessage : null,
                               onRewrite: hasContent
                                   ? _handleRewriteMessage
                                   : null,
@@ -642,6 +740,7 @@ class _MessageWithMetadata extends StatelessWidget {
     required this.onToggleVisibility,
     this.onDelete,
     this.onCopy,
+    this.onEdit,
     this.onRewrite,
   });
 
@@ -651,6 +750,7 @@ class _MessageWithMetadata extends StatelessWidget {
   final void Function(frb.MessageRecord message) onToggleVisibility;
   final void Function(frb.MessageRecord message)? onDelete;
   final void Function(frb.MessageRecord message)? onCopy;
+  final void Function(frb.MessageRecord message)? onEdit;
   final void Function(frb.MessageRecord message)? onRewrite;
 
   @override
@@ -670,6 +770,7 @@ class _MessageWithMetadata extends StatelessWidget {
       crossAxisAlignment: align,
       children: [
         MessageBubble(
+          messageId: message.messageId,
           role: role,
           content: message.content,
           headerMeta: headerMeta,
@@ -678,6 +779,7 @@ class _MessageWithMetadata extends StatelessWidget {
           onToggleVisibility: () => onToggleVisibility(message),
           onDelete: onDelete == null ? null : () => onDelete!(message),
           onCopy: onCopy == null ? null : () => onCopy!(message),
+          onEdit: onEdit == null ? null : () => onEdit!(message),
           onRewrite: onRewrite == null ? null : () => onRewrite!(message),
         ),
         if (message.errorMessage != null && message.errorMessage!.isNotEmpty)

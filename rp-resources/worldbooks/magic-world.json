@@ -1,0 +1,40 @@
+{
+  "name": "魔法世界设定",
+  "entries": [
+    {
+      "key": ["魔法", "魔力", "法术"],
+      "content": "这个世界存在多种魔法体系：元素魔法（火、水、风、土）、精神魔法、空间魔法、时间魔法（禁忌）。魔力来源于世界的魔力网络，但过度使用会导致魔力枯竭。",
+      "enabled": true,
+      "insertion_order": 100,
+      "position": "before_char"
+    },
+    {
+      "key": ["研究所", "图书馆"],
+      "content": "这座研究所建立于千年前的魔法黄金时代，收藏了大量珍贵的魔法典籍和研究成果。研究所被强大的结界保护，普通人无法进入。",
+      "enabled": true,
+      "insertion_order": 90,
+      "position": "before_char"
+    },
+    {
+      "key": ["结界"],
+      "content": "结界是一种常见的魔法防护手段。研究所的结界由多层复杂的魔法阵构成，能够阻止未授权的进入，同时保护内部不受外界干扰。",
+      "enabled": true,
+      "insertion_order": 80,
+      "position": "before_char"
+    },
+    {
+      "key": ["禁忌", "禁忌魔法"],
+      "content": "禁忌魔法包括：时间魔法、大规模毁灭魔法、灵魂操控魔法。这些魔法被古代魔法议会封禁，相关典籍被封存在研究所的禁区。",
+      "enabled": true,
+      "insertion_order": 70,
+      "position": "before_char"
+    },
+    {
+      "key": ["魔力网络", "魔力源"],
+      "content": "魔力网络是遍布世界的无形能量网络，所有魔法使用者都从中汲取魔力。网络的源头据说是世界核心，但真相已无人知晓。",
+      "enabled": true,
+      "insertion_order": 60,
+      "position": "before_char"
+    }
+  ]
+}

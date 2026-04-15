@@ -7,6 +7,7 @@ import '../bridge/rust_bridge.dart';
 import '../models/common.dart';
 import '../models/provider_specs.dart';
 import '../models/workspace_config.dart';
+import '../../shared/utils/reasoning_markup.dart';
 import 'api_service.dart';
 import 'provider_spec_service.dart';
 
@@ -482,7 +483,8 @@ class ChatService {
     required ProviderType providerType,
     void Function(frb.MessageRecord message)? onMessageUpdated,
   }) async {
-    final buffer = StringBuffer();
+    var textBuffer = '';
+    var reasoningBuffer = '';
     final rawSseLines = <String>[];
     var sseChars = 0;
     var sseTruncated = false;
@@ -533,22 +535,51 @@ class ChatService {
       totalTokens = parsedChunk.totalTokens ?? totalTokens;
       stopReason = parsedChunk.stopReason ?? stopReason;
 
-      if (parsedChunk.deltaText.isEmpty) {
+      var contentChanged = false;
+      if (parsedChunk.deltaText.isNotEmpty) {
+        final mergedText = _mergeStreamingFragment(
+          existing: textBuffer,
+          incoming: parsedChunk.deltaText,
+        );
+        if (mergedText != textBuffer) {
+          textBuffer = mergedText;
+          contentChanged = true;
+        }
+      }
+      if (parsedChunk.reasoningDelta.isNotEmpty) {
+        final mergedReasoning = _mergeStreamingFragment(
+          existing: reasoningBuffer,
+          incoming: parsedChunk.reasoningDelta,
+        );
+        if (mergedReasoning != reasoningBuffer) {
+          reasoningBuffer = mergedReasoning;
+          contentChanged = true;
+        }
+      }
+
+      if (!contentChanged) {
         continue;
       }
 
-      buffer.write(parsedChunk.deltaText);
+      final mergedContent = ReasoningMarkup.compose(
+        content: textBuffer,
+        reasoning: reasoningBuffer,
+      );
       final updated = await _rustBridge.updateMessageContent(
         messageId: assistantMessageId,
-        content: buffer.toString(),
+        content: mergedContent,
       );
       onMessageUpdated?.call(updated);
     }
 
+    final mergedContent = ReasoningMarkup.compose(
+      content: textBuffer,
+      reasoning: reasoningBuffer,
+    );
     return _SseConsumeResult(
       rawSseLines: rawSseLines,
       rawSseTruncated: sseTruncated,
-      normalizedResponse: _redactSensitiveText(buffer.toString()),
+      normalizedResponse: _redactSensitiveText(mergedContent),
       promptTokens: promptTokens,
       completionTokens: completionTokens,
       totalTokens: totalTokens,
@@ -566,15 +597,19 @@ class ChatService {
       throw StateError('provider returned an empty response body');
     }
     final parsed = _parseJsonResponse(providerType: providerType, body: body);
+    final mergedContent = ReasoningMarkup.compose(
+      content: parsed.text,
+      reasoning: parsed.reasoning,
+    );
     final updated = await _rustBridge.updateMessageContent(
       messageId: assistantMessageId,
-      content: parsed.text,
+      content: mergedContent,
     );
     onMessageUpdated?.call(updated);
     return _SseConsumeResult(
       rawSseLines: const <String>[],
       rawSseTruncated: false,
-      normalizedResponse: _redactSensitiveText(parsed.text),
+      normalizedResponse: _redactSensitiveText(mergedContent),
       promptTokens: parsed.promptTokens,
       completionTokens: parsed.completionTokens,
       totalTokens: parsed.totalTokens,
@@ -814,8 +849,14 @@ class ChatService {
         continue;
       }
       if (message.role == frb.MessageRole.user) {
+        final sanitizedContent = ReasoningMarkup.stripReasoning(
+          message.content,
+        ).trim();
+        if (sanitizedContent.isEmpty) {
+          continue;
+        }
         return _ResolvedUserInput(
-          resolvedUserInput: message.content,
+          resolvedUserInput: sanitizedContent,
           source: 'empty:latest_user_visible',
           createUserMessage: false,
           excludedHistoryMessageIds: <String>{message.messageId},
@@ -837,7 +878,7 @@ class ChatService {
     required String role,
     required String content,
   }) {
-    final normalizedContent = content.trim();
+    final normalizedContent = ReasoningMarkup.stripReasoning(content).trim();
     if (normalizedContent.isEmpty) {
       return;
     }
@@ -1193,9 +1234,15 @@ class ChatService {
   ) {
     final wire = <Map<String, String>>[];
     for (final record in records) {
+      final sanitizedContent = ReasoningMarkup.stripReasoning(
+        record.content,
+      ).trim();
+      if (sanitizedContent.isEmpty) {
+        continue;
+      }
       wire.add(<String, String>{
         'role': _wireRole(record.role),
-        'content': record.content,
+        'content': sanitizedContent,
       });
     }
     return wire;
@@ -1204,7 +1251,7 @@ class ChatService {
   bool _isPromptEligible(frb.MessageRecord record) {
     return record.visible &&
         record.status == frb.MessageStatus.completed &&
-        record.content.isNotEmpty;
+        ReasoningMarkup.stripReasoning(record.content).trim().isNotEmpty;
   }
 
   String _wireRole(frb.MessageRole role) {
@@ -1384,8 +1431,16 @@ class ChatService {
 
     final delta = choiceMap?['delta'];
     final deltaMap = delta is Map ? delta.cast<String, dynamic>() : null;
-    final content = deltaMap?['content'];
-    final deltaText = _extractDeltaContent(content);
+    final contentSplit = _extractContentSplit(deltaMap?['content']);
+    final deltaText = contentSplit.text;
+    final reasoningDelta = _joinNonEmpty(<String>[
+      contentSplit.reasoning,
+      _extractReasoningString(deltaMap?['reasoning_content']),
+      _extractReasoningString(deltaMap?['reasoningContent']),
+      _extractReasoningString(deltaMap?['reasoning']),
+      _extractReasoningString(deltaMap?['thinking']),
+      _extractReasoningString(decoded['reasoning']),
+    ]);
 
     final usage = decoded['usage'];
     final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
@@ -1396,6 +1451,7 @@ class ChatService {
     final finishReason = choiceMap?['finish_reason'];
     return _SseChunk(
       deltaText: deltaText,
+      reasoningDelta: reasoningDelta,
       promptTokens: promptTokens,
       completionTokens: completionTokens,
       totalTokens: totalTokens,
@@ -1416,6 +1472,22 @@ class ChatService {
       return _SseChunk(deltaText: delta is String ? delta : '');
     }
 
+    if (eventType.contains('reasoning') && eventType.endsWith('.delta')) {
+      return _SseChunk(
+        reasoningDelta: _extractReasoningString(decoded['delta']),
+      );
+    }
+
+    if (eventType.contains('reasoning') && eventType.endsWith('.done')) {
+      return _SseChunk(
+        reasoningDelta: _joinNonEmpty(<String>[
+          _extractReasoningString(decoded['text']),
+          _extractReasoningString(decoded['summary_text']),
+          _extractOpenAiReasoningFromOutputItem(decoded['item']),
+        ]),
+      );
+    }
+
     if (eventType == 'response.completed') {
       final response = decoded['response'];
       final responseMap = response is Map
@@ -1427,7 +1499,9 @@ class ChatService {
       final completionTokens = _asInt(usageMap?['output_tokens']);
       final totalTokens = _asInt(usageMap?['total_tokens']);
       final status = responseMap?['status'];
+      final output = responseMap?['output'];
       return _SseChunk(
+        reasoningDelta: _extractOpenAiReasoningFromOutput(output),
         promptTokens: promptTokens,
         completionTokens: completionTokens,
         totalTokens: totalTokens,
@@ -1458,6 +1532,10 @@ class ChatService {
       if (deltaMap?['type'] == 'text_delta') {
         final text = deltaMap?['text'];
         return _SseChunk(deltaText: text is String ? text : '');
+      }
+      if (deltaMap?['type'] == 'thinking_delta') {
+        final thinking = deltaMap?['thinking'];
+        return _SseChunk(reasoningDelta: thinking is String ? thinking : '');
       }
     }
     if (type == 'message_start') {
@@ -1499,11 +1577,7 @@ class ChatService {
         ? firstCandidate.cast<String, dynamic>()
         : null;
     final content = candidateMap?['content'];
-    final contentMap = content is Map ? content.cast<String, dynamic>() : null;
-    final parts = contentMap?['parts'];
-    final deltaText = parts is List
-        ? parts.whereType<Map>().map((part) => '${part['text'] ?? ''}').join()
-        : '';
+    final contentSplit = _extractContentSplit(content);
     final usage = decoded['usageMetadata'];
     final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
     final promptTokens = _asInt(usageMap?['promptTokenCount']);
@@ -1511,7 +1585,8 @@ class ChatService {
     final totalTokens = _asInt(usageMap?['totalTokenCount']);
     final finishReason = candidateMap?['finishReason'];
     return _SseChunk(
-      deltaText: deltaText,
+      deltaText: contentSplit.text,
+      reasoningDelta: contentSplit.reasoning,
       promptTokens: promptTokens,
       completionTokens: completionTokens,
       totalTokens: totalTokens,
@@ -1567,11 +1642,21 @@ class ChatService {
     final messageMap = message is Map
         ? message.cast<String, dynamic>()
         : const <String, dynamic>{};
-    final text = _extractDeltaContent(messageMap['content']);
+    final contentSplit = _extractContentSplit(messageMap['content']);
+    final text = contentSplit.text;
+    final reasoning = _joinNonEmpty(<String>[
+      contentSplit.reasoning,
+      _extractReasoningString(messageMap['reasoning_content']),
+      _extractReasoningString(messageMap['reasoningContent']),
+      _extractReasoningString(messageMap['reasoning']),
+      _extractReasoningString(messageMap['thinking']),
+      _extractReasoningString(decoded['reasoning']),
+    ]);
     final usage = decoded['usage'];
     final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
     return _ParsedResponseBody(
       text: text,
+      reasoning: reasoning,
       promptTokens: _asInt(usageMap?['prompt_tokens']),
       completionTokens: _asInt(usageMap?['completion_tokens']),
       totalTokens: _asInt(usageMap?['total_tokens']),
@@ -1585,18 +1670,32 @@ class ChatService {
     Map<String, dynamic> decoded,
   ) {
     final content = decoded['content'];
-    var text = '';
+    final textSegments = <String>[];
+    final reasoningSegments = <String>[];
     if (content is List) {
-      text = content
-          .whereType<Map>()
-          .map((item) => item['text'])
-          .whereType<String>()
-          .join();
+      for (final item in content.whereType<Map>()) {
+        final block = item.cast<String, dynamic>();
+        final type = '${block['type'] ?? ''}'.trim().toLowerCase();
+        if (type == 'thinking') {
+          final thinking = block['thinking'];
+          if (thinking is String && thinking.trim().isNotEmpty) {
+            reasoningSegments.add(thinking);
+          }
+          continue;
+        }
+        if (type == 'text') {
+          final text = block['text'];
+          if (text is String && text.isNotEmpty) {
+            textSegments.add(text);
+          }
+        }
+      }
     }
     final usage = decoded['usage'];
     final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
     return _ParsedResponseBody(
-      text: text,
+      text: textSegments.join(),
+      reasoning: reasoningSegments.join('\n\n'),
       promptTokens: _asInt(usageMap?['input_tokens']),
       completionTokens: _asInt(usageMap?['output_tokens']),
       totalTokens: _combineTokens(
@@ -1613,6 +1712,7 @@ class ChatService {
     final chunk = _parseGeminiChunk(decoded);
     return _ParsedResponseBody(
       text: chunk.deltaText,
+      reasoning: chunk.reasoningDelta,
       promptTokens: chunk.promptTokens,
       completionTokens: chunk.completionTokens,
       totalTokens: chunk.totalTokens,
@@ -1622,11 +1722,15 @@ class ChatService {
 
   _ParsedResponseBody _parseOpenAiJsonResponse(Map<String, dynamic> decoded) {
     final outputText = '${decoded['output_text'] ?? ''}';
+    final outputReasoning = _extractOpenAiReasoningFromOutput(
+      decoded['output'],
+    );
     if (outputText.trim().isNotEmpty) {
       final usage = decoded['usage'];
       final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
       return _ParsedResponseBody(
         text: outputText,
+        reasoning: outputReasoning,
         promptTokens: _asInt(usageMap?['input_tokens']),
         completionTokens: _asInt(usageMap?['output_tokens']),
         totalTokens: _asInt(usageMap?['total_tokens']),
@@ -1638,19 +1742,24 @@ class ChatService {
 
     final output = decoded['output'];
     if (output is List) {
-      final text = output
-          .whereType<Map>()
-          .expand(
-            (item) =>
-                (item['content'] is List ? item['content'] as List : const [])
-                    .whereType<Map>()
-                    .map((part) => '${part['text'] ?? ''}'),
-          )
-          .join();
+      final textSegments = <String>[];
+      for (final item in output.whereType<Map>()) {
+        final itemMap = item.cast<String, dynamic>();
+        final itemType = '${itemMap['type'] ?? ''}'.trim().toLowerCase();
+        if (itemType == 'reasoning') {
+          continue;
+        }
+        final contentSplit = _extractContentSplit(itemMap['content']);
+        if (contentSplit.text.isNotEmpty) {
+          textSegments.add(contentSplit.text);
+        }
+      }
+      final text = textSegments.join();
       final usage = decoded['usage'];
       final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
       return _ParsedResponseBody(
         text: text,
+        reasoning: outputReasoning,
         promptTokens: _asInt(usageMap?['input_tokens']),
         completionTokens: _asInt(usageMap?['output_tokens']),
         totalTokens: _asInt(usageMap?['total_tokens']),
@@ -1659,21 +1768,162 @@ class ChatService {
             : '${decoded['status']}',
       );
     }
-    return const _ParsedResponseBody(text: '');
+    return _ParsedResponseBody(text: '', reasoning: outputReasoning);
   }
 
-  String _extractDeltaContent(Object? content) {
+  _ContentSplit _extractContentSplit(Object? content) {
     if (content is String) {
-      return content;
+      return _ContentSplit(text: content);
     }
     if (content is List) {
-      return content
-          .whereType<Map>()
-          .map((item) => item['text'])
-          .whereType<String>()
-          .join();
+      final textSegments = <String>[];
+      final reasoningSegments = <String>[];
+      for (final item in content) {
+        if (item is String) {
+          textSegments.add(item);
+          continue;
+        }
+        if (item is! Map) {
+          continue;
+        }
+        final map = item.cast<String, dynamic>();
+        final type = '${map['type'] ?? ''}'.trim().toLowerCase();
+        final thoughtFlag = map['thought'] == true;
+        final text = _extractPreferredString(map);
+        if (text.isEmpty) {
+          continue;
+        }
+        if (thoughtFlag || _isReasoningType(type)) {
+          reasoningSegments.add(text);
+        } else {
+          textSegments.add(text);
+        }
+      }
+      return _ContentSplit(
+        text: textSegments.join(),
+        reasoning: reasoningSegments.join('\n\n'),
+      );
+    }
+    if (content is Map) {
+      final map = content.cast<String, dynamic>();
+      final contentParts = map['parts'];
+      if (contentParts is List) {
+        return _extractContentSplit(contentParts);
+      }
+      final text = _extractPreferredString(map);
+      final type = '${map['type'] ?? ''}'.trim().toLowerCase();
+      if (_isReasoningType(type) || map['thought'] == true) {
+        return _ContentSplit(reasoning: text);
+      }
+      return _ContentSplit(text: text);
+    }
+    return const _ContentSplit();
+  }
+
+  String _extractPreferredString(Map<String, dynamic> value) {
+    final candidates = <Object?>[
+      value['text'],
+      value['thinking'],
+      value['reasoning_content'],
+      value['reasoningContent'],
+      value['content'],
+    ];
+    for (final candidate in candidates) {
+      if (candidate is String && candidate.isNotEmpty) {
+        return candidate;
+      }
     }
     return '';
+  }
+
+  bool _isReasoningType(String type) {
+    return type.contains('reasoning') ||
+        type.contains('thinking') ||
+        type == 'summary_text';
+  }
+
+  String _extractReasoningString(Object? value) {
+    if (value is String) {
+      return value;
+    }
+    if (value is List) {
+      final parts = value
+          .map(_extractReasoningString)
+          .where((part) => part.trim().isNotEmpty)
+          .toList(growable: false);
+      return parts.join('\n');
+    }
+    if (value is Map) {
+      final map = value.cast<String, dynamic>();
+      final direct = _extractPreferredString(map);
+      if (direct.isNotEmpty) {
+        return direct;
+      }
+      final nested = map.entries
+          .map((entry) => _extractReasoningString(entry.value))
+          .where((part) => part.trim().isNotEmpty)
+          .toList(growable: false);
+      return nested.join('\n');
+    }
+    return '';
+  }
+
+  String _extractOpenAiReasoningFromOutput(Object? output) {
+    if (output is! List) {
+      return '';
+    }
+    final segments = <String>[];
+    for (final item in output.whereType<Map>()) {
+      segments.add(_extractOpenAiReasoningFromOutputItem(item));
+    }
+    return _joinNonEmpty(segments);
+  }
+
+  String _extractOpenAiReasoningFromOutputItem(Object? item) {
+    if (item is! Map) {
+      return '';
+    }
+    final map = item.cast<String, dynamic>();
+    final itemType = '${map['type'] ?? ''}'.trim().toLowerCase();
+    if (itemType != 'reasoning') {
+      return '';
+    }
+    return _joinNonEmpty(<String>[
+      _extractReasoningString(map['summary']),
+      _extractReasoningString(map['content']),
+      _extractReasoningString(map['text']),
+    ]);
+  }
+
+  String _joinNonEmpty(Iterable<String> values) {
+    final normalized = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+    return normalized.join('\n\n');
+  }
+
+  String _mergeStreamingFragment({
+    required String existing,
+    required String incoming,
+  }) {
+    final next = incoming;
+    if (next.isEmpty) {
+      return existing;
+    }
+    if (existing.isEmpty) {
+      return next;
+    }
+    if (next == existing) {
+      return existing;
+    }
+    if (next.startsWith(existing)) {
+      return next;
+    }
+    if (existing.endsWith(next)) {
+      return existing;
+    }
+    return '$existing$next';
   }
 
   int? _asInt(Object? value) {
@@ -2100,6 +2350,7 @@ class _SseConsumeResult {
 class _SseChunk {
   const _SseChunk({
     this.deltaText = '',
+    this.reasoningDelta = '',
     this.promptTokens,
     this.completionTokens,
     this.totalTokens,
@@ -2107,6 +2358,7 @@ class _SseChunk {
   });
 
   final String deltaText;
+  final String reasoningDelta;
   final int? promptTokens;
   final int? completionTokens;
   final int? totalTokens;
@@ -2114,6 +2366,7 @@ class _SseChunk {
 
   bool get isEmpty =>
       deltaText.isEmpty &&
+      reasoningDelta.isEmpty &&
       promptTokens == null &&
       completionTokens == null &&
       totalTokens == null &&
@@ -2123,6 +2376,7 @@ class _SseChunk {
 class _ParsedResponseBody {
   const _ParsedResponseBody({
     required this.text,
+    this.reasoning = '',
     this.promptTokens,
     this.completionTokens,
     this.totalTokens,
@@ -2130,8 +2384,16 @@ class _ParsedResponseBody {
   });
 
   final String text;
+  final String reasoning;
   final int? promptTokens;
   final int? completionTokens;
   final int? totalTokens;
   final String? stopReason;
+}
+
+class _ContentSplit {
+  const _ContentSplit({this.text = '', this.reasoning = ''});
+
+  final String text;
+  final String reasoning;
 }
