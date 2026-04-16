@@ -264,7 +264,7 @@
       "providerType": "deepseek",
       "label": "DeepSeek",
       "shortDescription": "DeepSeek Chat Completions",
-      "defaultBaseUrl": "https://api.deepseek.com/",
+      "defaultBaseUrl": "https://api.deepseek.com",
       "defaultRequestPath": "/chat/completions",
       "defaultModel": "deepseek-chat",
       "documentationUrl": "https://api-docs.deepseek.com/api/create-chat-completion",

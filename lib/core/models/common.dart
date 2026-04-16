@@ -47,7 +47,7 @@ extension ProviderTypeX on ProviderType {
       ProviderType.openaiCompatible => 'https://api.openai.com/v1',
       ProviderType.anthropic => 'https://api.anthropic.com/v1',
       ProviderType.gemini => 'https://generativelanguage.googleapis.com/v1beta',
-      ProviderType.deepseek => 'https://api.deepseek.com/beta',
+      ProviderType.deepseek => 'https://api.deepseek.com',
       ProviderType.openrouter => 'https://openrouter.ai/api/v1',
     };
   }
