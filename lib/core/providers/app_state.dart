@@ -282,7 +282,7 @@ final sessionRstDataProvider = StateProvider<Map<String, SessionRstData>>(
   (_) => <String, SessionRstData>{},
 );
 
-enum SchedulerMode { direct, rst, agent }
+enum SchedulerMode { sillyTavern, rst, agent }
 
 final sessionSchedulerModeProvider = StateProvider<Map<String, SchedulerMode>>(
   (_) => <String, SchedulerMode>{},
@@ -454,7 +454,7 @@ List<ManagedOptionSection> _buildPresetSections() {
           label: '条目顺序',
           type: ManagedFieldType.multiline,
           value:
-              'Main_Prompt\nlores\nuser_description\nchat_history\nscene\nuser_input',
+              'Main_Prompt\nlore_before\nuser_description\nchat_history\nlore_after\nscene\nuser_input',
           readOnly: true,
           helperText: '用于查看当前条目顺序。',
         ),

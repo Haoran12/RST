@@ -60,7 +60,8 @@ class SendRoundRequest {
     this.maxContextMessages = 16,
     this.sessionUserDescription = '',
     this.sessionScene = '',
-    this.sessionLores = '',
+    this.sessionLoreBefore = '',
+    this.sessionLoreAfter = '',
     this.onRoundPrepared,
     this.onMessageUpdated,
   });
@@ -72,7 +73,8 @@ class SendRoundRequest {
   final int maxContextMessages;
   final String sessionUserDescription;
   final String sessionScene;
-  final String sessionLores;
+  final String sessionLoreBefore;
+  final String sessionLoreAfter;
   final void Function(RoundTripMetadata metadata)? onRoundPrepared;
   final void Function(frb.MessageRecord message)? onMessageUpdated;
 }
@@ -85,7 +87,8 @@ class RetryRoundRequest {
     this.maxContextMessages = 16,
     this.sessionUserDescription = '',
     this.sessionScene = '',
-    this.sessionLores = '',
+    this.sessionLoreBefore = '',
+    this.sessionLoreAfter = '',
     this.assistantMessageId,
     this.onRoundPrepared,
     this.onMessageUpdated,
@@ -97,7 +100,8 @@ class RetryRoundRequest {
   final int maxContextMessages;
   final String sessionUserDescription;
   final String sessionScene;
-  final String sessionLores;
+  final String sessionLoreBefore;
+  final String sessionLoreAfter;
   final String? assistantMessageId;
   final void Function(RoundTripMetadata metadata)? onRoundPrepared;
   final void Function(frb.MessageRecord message)? onMessageUpdated;
@@ -176,7 +180,8 @@ class ChatService {
       userInputSource: resolvedInput.source,
       userDescription: request.sessionUserDescription,
       scene: request.sessionScene,
-      lores: request.sessionLores,
+      loreBefore: request.sessionLoreBefore,
+      loreAfter: request.sessionLoreAfter,
     );
     final assistantMessage = await _rustBridge.createMessage(
       sessionId: sessionId,
@@ -256,7 +261,8 @@ class ChatService {
       maxContextMessages: request.maxContextMessages,
       userDescription: request.sessionUserDescription,
       scene: request.sessionScene,
-      lores: request.sessionLores,
+      loreBefore: request.sessionLoreBefore,
+      loreAfter: request.sessionLoreAfter,
     );
     final providerSpec = await _providerSpecService.getSpec(
       request.apiConfig.providerType,
@@ -627,7 +633,8 @@ class ChatService {
     required String userInputSource,
     required String userDescription,
     required String scene,
-    required String lores,
+    required String loreBefore,
+    required String loreAfter,
   }) async {
     final history = allMessages
         .where(
@@ -644,7 +651,8 @@ class ChatService {
       userInputSource: userInputSource,
       userDescription: userDescription,
       scene: scene,
-      lores: lores,
+      loreBefore: loreBefore,
+      loreAfter: loreAfter,
     );
   }
 
@@ -656,7 +664,8 @@ class ChatService {
     required int maxContextMessages,
     required String userDescription,
     required String scene,
-    required String lores,
+    required String loreBefore,
+    required String loreAfter,
   }) {
     final records = <frb.MessageRecord>[];
     for (final message in allMessages) {
@@ -682,7 +691,8 @@ class ChatService {
       userInputSource: 'retry:user_message',
       userDescription: userDescription,
       scene: scene,
-      lores: lores,
+      loreBefore: loreBefore,
+      loreAfter: loreAfter,
     );
   }
 
@@ -694,7 +704,8 @@ class ChatService {
     required String userInputSource,
     required String userDescription,
     required String scene,
-    required String lores,
+    required String loreBefore,
+    required String loreAfter,
   }) {
     final normalizedHistoryLimit = maxContextMessages < 0
         ? 0
@@ -714,7 +725,8 @@ class ChatService {
       historyMessages: eligibleHistory,
       userDescription: userDescription,
       scene: scene,
-      lores: lores,
+      loreBefore: loreBefore,
+      loreAfter: loreAfter,
     );
 
     for (final entry in presetConfig.entries) {
@@ -736,7 +748,7 @@ class ChatService {
             role: entry.role,
             content: context.mergeDynamicContent(
               entry.content,
-              context.loresContent(),
+              context.loreBeforeContent(),
             ),
           );
           break;
@@ -765,6 +777,16 @@ class ChatService {
             content: context.mergeDynamicContent(
               entry.content,
               context.sceneContent(),
+            ),
+          );
+          break;
+        case PresetBuiltinEntryKeys.loreAfter:
+          _appendMessage(
+            target: promptMessages,
+            role: entry.role,
+            content: context.mergeDynamicContent(
+              entry.content,
+              context.loreAfterContent(),
             ),
           );
           break;
@@ -2238,18 +2260,22 @@ class _PromptContext {
     required this.historyMessages,
     required this.userDescription,
     required this.scene,
-    required this.lores,
+    required this.loreBefore,
+    required this.loreAfter,
   });
 
   final String userInput;
   final List<frb.MessageRecord> historyMessages;
   final String userDescription;
   final String scene;
-  final String lores;
+  final String loreBefore;
+  final String loreAfter;
 
   String mainPromptContent(String entryContent) => entryContent.trim();
 
-  String loresContent() => lores.trim();
+  String loreBeforeContent() => loreBefore.trim();
+
+  String loreAfterContent() => loreAfter.trim();
 
   String userDescriptionContent() => userDescription.trim();
 

@@ -17,6 +17,7 @@ import '../../shared/widgets/glass_panel_card.dart';
 import '../providers/app_state.dart';
 import '../providers/config_catalog_providers.dart';
 import '../providers/service_providers.dart';
+import '../services/world_book_injection.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -521,7 +522,7 @@ class _SessionQuickSettingsSheetState
     if (config.mode == frb.SessionMode.rst) {
       return SchedulerMode.rst;
     }
-    return SchedulerMode.direct;
+    return SchedulerMode.sillyTavern;
   }
 
   frb.SessionMode _modeFromScheduler(SchedulerMode mode) {
@@ -553,6 +554,11 @@ class _SessionQuickSettingsSheetState
             updatedAt: config.updatedAt,
           ),
         );
+    await _syncSessionWorldBookSnapshot(
+      sessionId: saved.sessionId,
+      mode: saved.mode,
+      worldBookId: saved.stWorldBookId,
+    );
 
     ref
         .read(sessionSchedulerModeProvider.notifier)
@@ -593,6 +599,62 @@ class _SessionQuickSettingsSheetState
       _config = saved;
       _draft = draft;
     });
+  }
+
+  Future<void> _syncSessionWorldBookSnapshot({
+    required String sessionId,
+    required frb.SessionMode mode,
+    required String? worldBookId,
+  }) async {
+    final apiService = ref.read(apiServiceProvider);
+    if (mode != frb.SessionMode.st) {
+      await apiService.deleteSessionWorldBookSnapshot(sessionId: sessionId);
+      return;
+    }
+
+    final worldBook = _resolveWorldBookOption(worldBookId);
+    final snapshotJson = _worldBookJsonForSnapshot(worldBook);
+    if (worldBook == null || snapshotJson == null) {
+      await apiService.deleteSessionWorldBookSnapshot(sessionId: sessionId);
+      return;
+    }
+
+    await apiService.writeSessionWorldBookSnapshot(
+      sessionId: sessionId,
+      sourceWorldBookId: worldBook.id,
+      sourceWorldBookName: worldBook.name,
+      worldBookJson: snapshotJson,
+    );
+  }
+
+  ManagedOption? _resolveWorldBookOption(String? worldBookId) {
+    if (worldBookId == null || worldBookId.trim().isEmpty) {
+      return null;
+    }
+    final options = ref.read(worldBookOptionsProvider);
+    for (final option in options) {
+      if (option.id == worldBookId) {
+        return option;
+      }
+    }
+    return null;
+  }
+
+  String? _worldBookJsonForSnapshot(ManagedOption? worldBook) {
+    if (worldBook == null) {
+      return null;
+    }
+    final raw =
+        worldBook.fieldValue(worldBookJsonFieldKey) ??
+        worldBook.fieldValue(worldBookLegacyEntriesFieldKey);
+    if (raw is! String) {
+      return null;
+    }
+    final normalized = raw.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    return normalized;
   }
 
   void _attemptCloseToChat() {

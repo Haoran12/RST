@@ -207,6 +207,7 @@ class PresetBuiltinEntryKeys {
 
   static const String mainPrompt = 'main_prompt';
   static const String loreBefore = 'lore_before';
+  static const String loreAfter = 'lore_after';
   static const String userDescription = 'user_description';
   static const String chatHistory = 'chat_history';
   static const String scene = 'scene';
@@ -216,6 +217,7 @@ class PresetBuiltinEntryKeys {
     loreBefore,
     userDescription,
     chatHistory,
+    loreAfter,
     scene,
   ];
 
@@ -223,6 +225,7 @@ class PresetBuiltinEntryKeys {
     return switch (builtinKey) {
       mainPrompt => 'Main Prompt',
       loreBefore => 'Lore Before',
+      loreAfter => 'Lore After',
       userDescription => 'User Description',
       chatHistory => 'Chat History',
       scene => 'Scene',
@@ -692,6 +695,7 @@ String _sillyTavernIdentifierForEntry(StoredPresetEntry entry) {
     return switch (entry.builtinKey!) {
       PresetBuiltinEntryKeys.mainPrompt => 'main',
       PresetBuiltinEntryKeys.loreBefore => 'worldInfoBefore',
+      PresetBuiltinEntryKeys.loreAfter => 'worldInfoAfter',
       PresetBuiltinEntryKeys.userDescription => 'personaDescription',
       PresetBuiltinEntryKeys.chatHistory => 'chatHistory',
       PresetBuiltinEntryKeys.scene => 'scenario',
@@ -705,6 +709,7 @@ String? _builtinKeyFromSillyTavernIdentifier(String identifier) {
   return switch (identifier) {
     'main' => PresetBuiltinEntryKeys.mainPrompt,
     'worldInfoBefore' => PresetBuiltinEntryKeys.loreBefore,
+    'worldInfoAfter' => PresetBuiltinEntryKeys.loreAfter,
     'personaDescription' => PresetBuiltinEntryKeys.userDescription,
     'chatHistory' => PresetBuiltinEntryKeys.chatHistory,
     'scenario' => PresetBuiltinEntryKeys.scene,

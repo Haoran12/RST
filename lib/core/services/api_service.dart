@@ -347,6 +347,69 @@ class ApiService {
     await ensureDefaults();
   }
 
+  Future<void> writeSessionWorldBookSnapshot({
+    required String sessionId,
+    required String sourceWorldBookId,
+    required String sourceWorldBookName,
+    required String worldBookJson,
+  }) async {
+    final normalizedSessionId = sessionId.trim();
+    final normalizedJson = worldBookJson.trim();
+    if (normalizedSessionId.isEmpty || normalizedJson.isEmpty) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc().toIso8601String();
+    final file = await _sessionWorldBookSnapshotFile(normalizedSessionId);
+    await _writeJson(file, <String, dynamic>{
+      'sessionId': normalizedSessionId,
+      'sourceWorldBookId': sourceWorldBookId.trim(),
+      'sourceWorldBookName': sourceWorldBookName.trim(),
+      'capturedAt': now,
+      'worldBookJson': normalizedJson,
+      'version': 1,
+    });
+  }
+
+  Future<String?> loadSessionWorldBookSnapshotJson({
+    required String sessionId,
+  }) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      return null;
+    }
+
+    final file = await _sessionWorldBookSnapshotFile(normalizedSessionId);
+    if (!await file.exists()) {
+      return null;
+    }
+
+    final raw = await file.readAsString();
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('invalid_session_world_book_snapshot: ${file.path}');
+    }
+    final worldBookJson = '${decoded['worldBookJson'] ?? ''}'.trim();
+    if (worldBookJson.isEmpty) {
+      return null;
+    }
+    return worldBookJson;
+  }
+
+  Future<void> deleteSessionWorldBookSnapshot({
+    required String sessionId,
+  }) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      return;
+    }
+
+    final file = await _sessionWorldBookSnapshotFile(normalizedSessionId);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
   Future<void> ensureDefaults() async {
     final presetsDir = await _presetsDirectory();
     final apisDir = await _apiConfigsDirectory();
@@ -578,6 +641,20 @@ class ApiService {
 
   Future<File> _apiConfigFile(String apiId) async {
     return File('${(await _apiConfigsDirectory()).path}/$apiId.json');
+  }
+
+  Future<Directory> _sessionsDirectory() async {
+    final dir = Directory('${(await _workspaceDir()).path}/sessions');
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return dir;
+  }
+
+  Future<File> _sessionWorldBookSnapshotFile(String sessionId) async {
+    return File(
+      '${(await _sessionsDirectory()).path}/$sessionId.st_worldbook.json',
+    );
   }
 
   Future<List<File>> _jsonFiles(Directory directory) async {

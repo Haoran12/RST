@@ -226,6 +226,25 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       setState(() {
         _runtime = runtime;
       });
+      final sessionScopedData = ref.read(
+        sessionRstDataProvider,
+      )[roundSessionId];
+      final sessionUserDescription =
+          sessionScopedData?.userDescription ?? runtime.defaultUserDescription;
+      final sessionScene = sessionScopedData?.scene ?? runtime.defaultScene;
+      final baseLores = sessionScopedData?.lores ?? runtime.defaultLores;
+      final injectedWorldBook = await _resolveWorldBookForInjection(session);
+      final loreInjection = session.mode == frb.SessionMode.st
+          ? WorldBookInjection.buildStModeLore(
+              sessionId: roundSessionId,
+              userInput: rawInput,
+              visibleMessages: _messages,
+              baseLores: baseLores,
+              userDescription: sessionUserDescription,
+              scene: sessionScene,
+              worldBook: injectedWorldBook,
+            )
+          : StLoreInjectionResult(before: baseLores.trim(), after: '');
       await ref
           .read(chatServiceProvider)
           .sendRound(
@@ -235,23 +254,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               apiConfig: runtime.apiConfig,
               presetConfig: runtime.presetConfig,
               maxContextMessages: runtime.maxContextMessages,
-              sessionUserDescription:
-                  ref
-                      .read(sessionRstDataProvider)[roundSessionId]
-                      ?.userDescription ??
-                  runtime.defaultUserDescription,
-              sessionScene:
-                  ref.read(sessionRstDataProvider)[roundSessionId]?.scene ??
-                  runtime.defaultScene,
-              sessionLores: WorldBookInjection.mergeWithLores(
-                sessionId: roundSessionId,
-                userInput: rawInput,
-                visibleMessages: _messages,
-                baseLores:
-                    ref.read(sessionRstDataProvider)[roundSessionId]?.lores ??
-                    runtime.defaultLores,
-                worldBook: _resolveWorldBookOption(session.stWorldBookId),
-              ),
+              sessionUserDescription: sessionUserDescription,
+              sessionScene: sessionScene,
+              sessionLoreBefore: loreInjection.before,
+              sessionLoreAfter: loreInjection.after,
               onMessageUpdated: (message) {
                 if (!mounted || _session?.sessionId != roundSessionId) {
                   return;
@@ -293,6 +299,44 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
     return null;
+  }
+
+  Future<ManagedOption?> _resolveWorldBookForInjection(
+    frb.SessionConfig session,
+  ) async {
+    final fallback = _resolveWorldBookOption(session.stWorldBookId);
+    if (session.mode != frb.SessionMode.st) {
+      return fallback;
+    }
+
+    final snapshotJson = await ref
+        .read(apiServiceProvider)
+        .loadSessionWorldBookSnapshotJson(sessionId: session.sessionId);
+    if (snapshotJson == null || snapshotJson.trim().isEmpty) {
+      return fallback;
+    }
+
+    return ManagedOption(
+      id: session.stWorldBookId ?? 'snapshot-${session.sessionId}',
+      name: fallback?.name ?? 'Session Snapshot',
+      description: 'Static SillyTavern session snapshot',
+      updatedAt: DateTime.now(),
+      type: ManagedOptionType.worldBook,
+      sections: <ManagedOptionSection>[
+        ManagedOptionSection(
+          title: 'Snapshot',
+          description: '',
+          fields: <ManagedOptionField>[
+            ManagedOptionField(
+              key: worldBookJsonFieldKey,
+              label: 'worldbook_json',
+              type: ManagedFieldType.multiline,
+              value: snapshotJson,
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   void _upsertMessage(frb.MessageRecord record) {

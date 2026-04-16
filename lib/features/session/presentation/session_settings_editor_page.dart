@@ -335,7 +335,7 @@ class _SessionSettingsEditorPageState
 
   String _schedulerLabel(SchedulerMode mode) {
     return switch (mode) {
-      SchedulerMode.direct => 'direct',
+      SchedulerMode.sillyTavern => 'SillyTavern',
       SchedulerMode.rst => 'RST',
       SchedulerMode.agent => 'Agent',
     };
@@ -343,7 +343,7 @@ class _SessionSettingsEditorPageState
 
   String _schedulerDetail(SchedulerMode mode) {
     return switch (mode) {
-      SchedulerMode.direct => '直接拼接上下文，路径最短',
+      SchedulerMode.sillyTavern => 'SillyTavern 调度（关键词世界书注入）',
       SchedulerMode.rst => 'RST 调度，含结构化注入',
       SchedulerMode.agent => 'Agent 调度，适合复杂流程',
     };
@@ -418,9 +418,9 @@ class _SessionSettingsEditorPageState
   Future<void> _openSchedulerPicker() async {
     final options = const <_PickerOption<SchedulerMode>>[
       _PickerOption<SchedulerMode>(
-        value: SchedulerMode.direct,
-        label: 'direct',
-        detail: '直接拼接上下文',
+        value: SchedulerMode.sillyTavern,
+        label: 'SillyTavern',
+        detail: 'SillyTavern 世界书注入',
       ),
       _PickerOption<SchedulerMode>(
         value: SchedulerMode.rst,

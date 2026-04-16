@@ -6,6 +6,7 @@ import '../../../core/models/common.dart';
 import '../../../core/providers/app_state.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
+import '../../../core/services/world_book_injection.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
@@ -228,6 +229,11 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
       presetId: saved.presetId,
       stWorldBookId: mode == frb.SessionMode.st ? saved.worldBookId : null,
     );
+    await _syncSessionWorldBookSnapshot(
+      sessionId: created.sessionId,
+      mode: created.mode,
+      worldBookId: created.stWorldBookId,
+    );
     _applySessionScopedSettings(sessionId: created.sessionId, draft: saved);
     ref.read(currentSessionIdProvider.notifier).state = created.sessionId;
     ref.read(workspaceReloadTickProvider.notifier).state++;
@@ -309,7 +315,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     }
 
     final mode = _modeFromScheduler(saved.schedulerMode);
-    await sessionService.saveSession(
+    final updated = await sessionService.saveSession(
       frb.SessionConfig(
         sessionId: config.sessionId,
         sessionName: saved.sessionName,
@@ -320,6 +326,11 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         createdAt: config.createdAt,
         updatedAt: config.updatedAt,
       ),
+    );
+    await _syncSessionWorldBookSnapshot(
+      sessionId: updated.sessionId,
+      mode: updated.mode,
+      worldBookId: updated.stWorldBookId,
     );
     _applySessionScopedSettings(sessionId: config.sessionId, draft: saved);
     ref.read(workspaceReloadTickProvider.notifier).state++;
@@ -392,7 +403,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     if (config.mode == frb.SessionMode.rst) {
       return SchedulerMode.rst;
     }
-    return SchedulerMode.direct;
+    return SchedulerMode.sillyTavern;
   }
 
   frb.SessionMode _modeFromScheduler(SchedulerMode schedulerMode) {
@@ -400,6 +411,62 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
       return frb.SessionMode.rst;
     }
     return frb.SessionMode.st;
+  }
+
+  Future<void> _syncSessionWorldBookSnapshot({
+    required String sessionId,
+    required frb.SessionMode mode,
+    required String? worldBookId,
+  }) async {
+    final apiService = ref.read(apiServiceProvider);
+    if (mode != frb.SessionMode.st) {
+      await apiService.deleteSessionWorldBookSnapshot(sessionId: sessionId);
+      return;
+    }
+
+    final worldBook = _resolveWorldBookOption(worldBookId);
+    final snapshotJson = _worldBookJsonForSnapshot(worldBook);
+    if (worldBook == null || snapshotJson == null) {
+      await apiService.deleteSessionWorldBookSnapshot(sessionId: sessionId);
+      return;
+    }
+
+    await apiService.writeSessionWorldBookSnapshot(
+      sessionId: sessionId,
+      sourceWorldBookId: worldBook.id,
+      sourceWorldBookName: worldBook.name,
+      worldBookJson: snapshotJson,
+    );
+  }
+
+  ManagedOption? _resolveWorldBookOption(String? worldBookId) {
+    if (worldBookId == null || worldBookId.trim().isEmpty) {
+      return null;
+    }
+    final options = ref.read(worldBookOptionsProvider);
+    for (final option in options) {
+      if (option.id == worldBookId) {
+        return option;
+      }
+    }
+    return null;
+  }
+
+  String? _worldBookJsonForSnapshot(ManagedOption? worldBook) {
+    if (worldBook == null) {
+      return null;
+    }
+    final raw =
+        worldBook.fieldValue(worldBookJsonFieldKey) ??
+        worldBook.fieldValue(worldBookLegacyEntriesFieldKey);
+    if (raw is! String) {
+      return null;
+    }
+    final normalized = raw.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    return normalized;
   }
 
   Future<void> _deleteSession(
@@ -429,6 +496,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     }
 
     await ref.read(sessionServiceProvider).deleteSession(sessionId);
+    await ref
+        .read(apiServiceProvider)
+        .deleteSessionWorldBookSnapshot(sessionId: sessionId);
     if (ref.read(currentSessionIdProvider) == sessionId) {
       ref.read(currentSessionIdProvider.notifier).state = null;
     }
