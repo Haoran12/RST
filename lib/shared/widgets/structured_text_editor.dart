@@ -280,6 +280,7 @@ class _StructuredTextEditorState extends State<StructuredTextEditor> {
           child: _FullscreenStructuredEditorSheet(
             initialText: _controller.text,
             hintText: widget.hintText,
+            initialFormat: _selectedFormat,
           ),
         );
       },
@@ -598,10 +599,12 @@ class _FullscreenStructuredEditorSheet extends StatefulWidget {
   const _FullscreenStructuredEditorSheet({
     required this.initialText,
     required this.hintText,
+    required this.initialFormat,
   });
 
   final String initialText;
   final String hintText;
+  final StructuredTextFormat initialFormat;
 
   @override
   State<_FullscreenStructuredEditorSheet> createState() =>
@@ -611,12 +614,16 @@ class _FullscreenStructuredEditorSheet extends StatefulWidget {
 class _FullscreenStructuredEditorSheetState
     extends State<_FullscreenStructuredEditorSheet> {
   late final TextEditingController _controller;
+  late final _StructuredContentFormatter _formatter;
   late final FocusNode _focusNode;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialText);
+    _formatter = _StructuredContentFormatter(
+      currentKind: () => widget.initialFormat,
+    );
     _focusNode = FocusNode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -733,6 +740,7 @@ class _FullscreenStructuredEditorSheetState
                 child: TextField(
                   controller: _controller,
                   focusNode: _focusNode,
+                  inputFormatters: [_formatter],
                   keyboardType: TextInputType.multiline,
                   maxLines: null,
                   expands: true,
@@ -954,28 +962,18 @@ class _StructuredContentFormatter extends TextInputFormatter {
     }
 
     if (kind == StructuredTextFormat.yaml) {
-      if (trimmedLine.startsWith('- ') && !trimmedLine.endsWith(':')) {
-        return _replaceSelection(
-          oldValue,
-          change.start,
-          change.end,
-          '\n$currentIndent- ',
-        );
-      }
-      if (trimmedLine.endsWith(':')) {
-        return _replaceSelection(
-          oldValue,
-          change.start,
-          change.end,
-          '\n$currentIndent${_indentUnit(kind)}',
-        );
-      }
-      return _replaceSelection(
-        oldValue,
-        change.start,
-        change.end,
-        '\n$currentIndent',
+      final yamlIndent = _yamlNewlineIndent(
+        currentIndent: currentIndent,
+        trimmedLine: trimmedLine,
       );
+      if (yamlIndent != null) {
+        return _replaceSelection(
+          oldValue,
+          change.start,
+          change.end,
+          '\n$yamlIndent',
+        );
+      }
     }
 
     if (kind == StructuredTextFormat.markdown) {
@@ -1110,6 +1108,54 @@ class _StructuredContentFormatter extends TextInputFormatter {
   String _leadingWhitespace(String text) {
     final match = RegExp(r'^\s*').firstMatch(text);
     return match?.group(0) ?? '';
+  }
+
+  String? _yamlNewlineIndent({
+    required String currentIndent,
+    required String trimmedLine,
+  }) {
+    if (trimmedLine.isEmpty) {
+      return currentIndent;
+    }
+
+    if (_isYamlListItemWithoutValue(trimmedLine)) {
+      return '$currentIndent- ';
+    }
+
+    if (_isYamlBlockMappingEntry(trimmedLine)) {
+      return '$currentIndent${_indentUnit(StructuredTextFormat.yaml)}';
+    }
+
+    return currentIndent;
+  }
+
+  bool _isYamlListItemWithoutValue(String trimmedLine) {
+    if (!trimmedLine.startsWith('-')) {
+      return false;
+    }
+    if (trimmedLine == '-') {
+      return true;
+    }
+    if (!trimmedLine.startsWith('- ')) {
+      return false;
+    }
+
+    final payload = trimmedLine.substring(2).trimRight();
+    if (payload.isEmpty) {
+      return true;
+    }
+
+    return !_isYamlBlockMappingEntry(payload);
+  }
+
+  bool _isYamlBlockMappingEntry(String trimmedLine) {
+    final candidate = trimmedLine.trimRight();
+    if (candidate.isEmpty || !candidate.endsWith(':')) {
+      return false;
+    }
+
+    final prefix = candidate.substring(0, candidate.length - 1);
+    return !prefix.contains(':');
   }
 
   bool _shouldAutoClose(String nextChar) {
