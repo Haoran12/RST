@@ -109,6 +109,7 @@ class _StructuredTextEditorState extends State<StructuredTextEditor> {
   @override
   Widget build(BuildContext context) {
     final status = _status;
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
     return Container(
       height: widget.height,
       decoration: BoxDecoration(
@@ -180,14 +181,18 @@ class _StructuredTextEditorState extends State<StructuredTextEditor> {
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 140),
             child: _isFocused
-                ? _StructuredEditorAssistBar(
-                    onFullscreen: _openFullscreenEditor,
-                    onInsertColon: () => _insertLiteral(':'),
-                    onInsertDoubleQuote: () => _insertWrapped('"', '"'),
-                    onInsertBraces: () => _insertWrapped('{', '}'),
-                    onInsertBrackets: () => _insertWrapped('[', ']'),
-                    onInsertParentheses: () => _insertWrapped('(', ')'),
-                    onInsertHash: () => _insertLiteral('#'),
+                ? Padding(
+                    key: const ValueKey('assist-bar-visible'),
+                    padding: EdgeInsets.only(bottom: bottomPadding),
+                    child: _StructuredEditorAssistBar(
+                      onFullscreen: _openFullscreenEditor,
+                      onInsertColon: () => _insertLiteral(':'),
+                      onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+                      onInsertBraces: () => _insertWrapped('{', '}'),
+                      onInsertBrackets: () => _insertWrapped('[', ']'),
+                      onInsertParentheses: () => _insertWrapped('(', ')'),
+                      onInsertHash: () => _insertLiteral('#'),
+                    ),
                   )
                 : const SizedBox.shrink(),
           ),
@@ -631,6 +636,63 @@ class _FullscreenStructuredEditorSheetState
     Navigator.of(context).pop(_controller.text);
   }
 
+  void _insertLiteral(String value) {
+    final selection = _controller.selection;
+    final fallback = _controller.text.length;
+    var start = selection.isValid ? selection.start : fallback;
+    var end = selection.isValid ? selection.end : fallback;
+    if (start < 0 || end < 0) {
+      start = fallback;
+      end = fallback;
+    }
+    if (start > end) {
+      final tmp = start;
+      start = end;
+      end = tmp;
+    }
+
+    final replaced = _controller.text.replaceRange(start, end, value);
+    final cursor = start + value.length;
+    _controller.value = TextEditingValue(
+      text: replaced,
+      selection: TextSelection.collapsed(offset: cursor),
+      composing: TextRange.empty,
+    );
+    _focusNode.requestFocus();
+  }
+
+  void _insertWrapped(String left, String right) {
+    final selection = _controller.selection;
+    final fallback = _controller.text.length;
+    var start = selection.isValid ? selection.start : fallback;
+    var end = selection.isValid ? selection.end : fallback;
+    if (start < 0 || end < 0) {
+      start = fallback;
+      end = fallback;
+    }
+    if (start > end) {
+      final tmp = start;
+      start = end;
+      end = tmp;
+    }
+
+    final selected = _controller.text.substring(start, end);
+    final replacement = '$left$selected$right';
+    final replaced = _controller.text.replaceRange(start, end, replacement);
+    final nextSelection = selected.isEmpty
+        ? TextSelection.collapsed(offset: start + left.length)
+        : TextSelection(
+            baseOffset: start + left.length,
+            extentOffset: start + left.length + selected.length,
+          );
+    _controller.value = TextEditingValue(
+      text: replaced,
+      selection: nextSelection,
+      composing: TextRange.empty,
+    );
+    _focusNode.requestFocus();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -688,6 +750,15 @@ class _FullscreenStructuredEditorSheetState
                   ),
                 ),
               ),
+            ),
+            _StructuredEditorAssistBar(
+              onFullscreen: _applyAndClose,
+              onInsertColon: () => _insertLiteral(':'),
+              onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+              onInsertBraces: () => _insertWrapped('{', '}'),
+              onInsertBrackets: () => _insertWrapped('[', ']'),
+              onInsertParentheses: () => _insertWrapped('(', ')'),
+              onInsertHash: () => _insertLiteral('#'),
             ),
           ],
         ),

@@ -8,14 +8,14 @@ class EmptyStateView extends StatelessWidget {
     super.key,
     required this.title,
     required this.description,
-    required this.actionLabel,
-    required this.onAction,
+    this.actionLabel = '',
+    this.onAction,
   });
 
   final String title;
   final String description;
   final String actionLabel;
-  final VoidCallback onAction;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -29,8 +29,10 @@ class EmptyStateView extends StatelessWidget {
             const SizedBox(height: 8),
             Text(description),
           ],
-          const SizedBox(height: 12),
-          PrimaryPillButton(label: actionLabel, onPressed: onAction),
+          if (onAction != null) ...[
+            const SizedBox(height: 12),
+            PrimaryPillButton(label: actionLabel, onPressed: onAction!),
+          ],
         ],
       ),
     );

@@ -284,19 +284,20 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
       children: [
         Align(
           alignment: Alignment.centerRight,
-          child: PrimaryPillButton(
-            label: '新增条目',
+          child: IconButton(
+            tooltip: '新增条目',
             onPressed: () => _add(category),
+            icon: const Icon(Icons.add),
           ),
         ),
         const SizedBox(height: 8),
         Expanded(
           child: rows.isEmpty
-              ? EmptyStateView(
+              ? const EmptyStateView(
                   title: '暂无条目',
                   description: '',
-                  actionLabel: '新增条目',
-                  onAction: () => _add(category),
+                  actionLabel: '',
+                  onAction: null,
                 )
               : ListView.separated(
                   itemCount: rows.length,
@@ -518,11 +519,23 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
   @override
   Widget build(BuildContext context) {
     final uid = _asInt(_draft.data['uid']);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_entryTitle(_draft.data)),
-        actions: [TextButton(onPressed: _save, child: const Text('保存'))],
-      ),
+    return PopScope<_EntryDraft>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          return;
+        }
+        Navigator.of(context).pop(_buildResult());
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            tooltip: '返回',
+            onPressed: () => Navigator.of(context).pop(_buildResult()),
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          title: Text(_entryTitle(_draft.data)),
+        ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -623,16 +636,12 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
                     },
                   ),
                 ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(onPressed: _save, child: const Text('保存')),
-                ),
               ],
             ),
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -642,7 +651,7 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
     setState(() => _draft = _draft.copyWith(data: next));
   }
 
-  void _save() {
+  _EntryDraft _buildResult() {
     final next = Map<String, dynamic>.from(_draft.data);
     next['comment'] = _comment.text.trim();
     next['key'] = _csvToList(_key.text);
@@ -652,7 +661,7 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
     next['depth'] = _asInt(_depth.text);
     next['probability'] = _asInt(_probability.text).clamp(0, 100);
     next['group'] = _group.text.trim();
-    Navigator.of(context).pop(_draft.copyWith(data: next));
+    return _draft.copyWith(data: next);
   }
 }
 
