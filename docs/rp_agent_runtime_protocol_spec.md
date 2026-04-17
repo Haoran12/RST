@@ -773,7 +773,237 @@ Prefer incremental turn deltas over full-history reprocessing when possible.
 
 ---
 
-## 15. Non-Goals of This Document
+## 16. Scene Filtering Protocol
+
+### 16.1 Responsibility
+Given scene_model + character_position + embodiment_state, produce filtered_scene_view.
+
+This protocol defines how to filter the objective scene into a character-specific view based on sensory capabilities and physical constraints.
+
+### 16.2 Input
+
+```yaml
+scene_filtering_input:
+  scene_model: {}
+  character_id: ""
+  character_position:
+    location_id: ""
+    orientation: ""           # facing direction
+  embodiment_state: {}
+```
+
+### 16.3 Output: `filtered_scene_view`
+
+```yaml
+filtered_scene_view:
+  character_id: ""
+  scene_turn_id: ""
+
+  visible_entities:
+    - entity_id: ""
+      visibility_score: 0.0   # 0.0-1.0
+      clarity: 0.0            # clarity of perception
+      notes: ""
+
+  audible_signals:
+    - signal_id: ""
+      content: ""
+      audibility_score: 0.0
+      direction: ""
+
+  olfactory_signals:
+    - signal_id: ""
+      content: ""
+      intensity: 0.0
+      freshness: ""
+
+  tactile_signals:
+    - signal_id: ""
+      content: ""
+      immediacy: 0.0
+
+  spatial_context:
+    reachable_areas: []
+    nearby_obstacles: []
+```
+
+### 16.4 Basic Filtering Rules (MVP)
+
+#### Visual Filtering
+1. If `vision.availability < 0.1`: return empty `visible_entities`
+2. For each entity in `scene_model.entities`:
+   - Calculate `base_visibility` from `lighting_level`
+   - Check if blocked by obstacles (simple line-of-sight)
+   - Apply `vision.acuity` modifier to `clarity`
+   - Include if `visibility_score > threshold`
+
+#### Auditory Filtering
+1. If `hearing.availability < 0.1`: return empty `audible_signals`
+2. For each `auditory_signal` in `scene_model.auditory_signals`:
+   - Calculate `base_audibility` from `loudness` and `distance`
+   - Check if blocked by sound-blocking obstacles
+   - Apply `hearing.acuity` modifier
+   - Include if `audibility_score > threshold`
+
+#### Olfactory Filtering
+1. If `smell.availability < 0.1`: return empty `olfactory_signals`
+2. For each `odor_source` in `scene_model.olfactory_field.odor_sources`:
+   - Calculate `detectability` from `intensity`, `airflow`, `distance`
+   - Apply species-specific sensitivity modifier (e.g., `fox_spirit: 1.5x-2.0x`)
+   - Include if `detectability > threshold`
+
+#### Tactile Filtering
+1. If `touch.availability < 0.1`: return empty `tactile_signals`
+2. Only include signals within immediate reach radius
+3. Apply injury/pain modifiers to sensitivity
+
+### 16.5 Handoff Rule
+`filtered_scene_view` must be consumed by `PerceptionDistributor` and `BeliefUpdater`.
+It must NOT contain any information the character cannot access.
+
+---
+
+## 17. Memory Access Protocol
+
+### 17.1 Memory Entry Structure
+
+```yaml
+memory_entry:
+  memory_id: ""
+  content: ""
+  owner_character_id: ""       # character who owns this memory
+  known_by: []                 # list of character_ids who know this
+  visibility: public | private | shared
+  emotional_weight: 0.0
+  created_at: ""
+  last_accessed_at: ""
+```
+
+### 17.2 Known_By Mechanism
+
+#### When Event Occurs
+1. Determine which characters directly witnessed the event
+2. Create memory entry with `known_by = [witnessing_character_ids]`
+3. If event is private to one character: `known_by = [that_character_id]`
+4. If event is public knowledge: `visibility = public`, `known_by = [*]`
+
+#### Memory Visibility Types
+- **private**: Only `owner_character_id` can access
+- **shared**: Characters in `known_by` list can access
+- **public**: All characters can access
+
+### 17.3 Memory Retrieval Input
+
+```yaml
+memory_retrieval_input:
+  character_id: ""
+  query_context: ""            # current situation description
+  recent_events: []
+  belief_state: {}
+  emotion_state: {}
+```
+
+### 17.4 Memory Retrieval Output
+
+```yaml
+memory_retrieval_output:
+  accessible_memories: []      # memories where character_id ∈ known_by
+  relevant_memories: []        # ranked by relevance to query_context
+  triggered_memories: []       # activated by belief/emotion state
+```
+
+### 17.5 Retrieval Rules
+1. Character can only retrieve memories where `character_id ∈ known_by` OR `visibility = public`
+2. Relevance ranking considers:
+   - semantic similarity to `query_context`
+   - `emotional_weight` alignment with `emotion_state`
+   - recency (`last_accessed_at`)
+3. Belief state may trigger associated memories (e.g., suspicion triggers related past events)
+
+### 17.6 Handoff Rule
+Memory retrieval must be called during Character Input Assembly.
+Retrieved memories must only include `accessible_memories`.
+
+---
+
+## 18. Character Input Assembly Protocol
+
+### 18.1 Purpose
+Assemble complete filtered input for a character's cognitive pass.
+This is the single entry point for preparing character-specific input.
+
+### 18.2 Assembly Flow
+
+```text
+scene_model + character_runtime_state + event_delta
+    ↓
+[1. Position Resolution]
+    → character_position from scene_state or last known location
+    ↓
+[2. Embodiment Resolution]
+    → embodiment_state from baseline_body_profile + temporary_body_state + scene_conditions
+    ↓
+[3. Scene Filtering]
+    → filtered_scene_view using Scene Filtering Protocol
+    ↓
+[4. Memory Retrieval]
+    → accessible_memories using Memory Access Protocol
+    ↓
+[5. Belief State]
+    → prior_beliefs from character_runtime_state.belief_state
+    ↓
+character_cognitive_pass_input
+```
+
+### 18.3 Input
+
+```yaml
+character_input_assembly_request:
+  scene_model: {}
+  character_runtime_state: {}
+  event_delta: []
+```
+
+### 18.4 Output
+
+```yaml
+character_cognitive_pass_input:
+  character_id: ""
+  scene_turn_id: ""
+
+  # From Scene Filtering
+  filtered_scene_view: {}
+
+  # From Embodiment Resolution
+  embodiment_state: {}
+  body_state: {}
+
+  # From Memory Retrieval
+  accessible_memories: []
+
+  # From Character Runtime State
+  prior_belief_state: {}
+  relation_models: {}
+  emotion_state: {}
+  current_goals: {}
+
+  # Event Context
+  recent_event_delta: []
+```
+
+### 18.5 Rules
+1. Each step must complete before the next begins
+2. Scene Filtering must use `embodiment_state` from step 2
+3. Memory Retrieval must only return accessible memories
+4. No world truth should leak into the output
+
+### 18.6 Per-Character Isolation
+This protocol MUST be executed independently for each character.
+Results for different characters must not influence each other.
+
+---
+
+## 19. Non-Goals of This Document
 
 This document does not define:
 - final exact prompt wording,
@@ -786,7 +1016,7 @@ Those belong to companion documents.
 
 ---
 
-## 16. Summary
+## 20. Summary
 
 This document is the runtime source of truth for:
 - object schemas,

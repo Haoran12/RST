@@ -460,7 +460,53 @@ This helps detect gradual prompt drift or runtime regression.
 
 ---
 
-## 18. Non-Goals of This Document
+## 18. Scene Filtering Validation Rules
+
+### 18.1 Vision Blocking Validation
+**Rule**: If `embodiment_state.sensory_capabilities.vision.availability < 0.1`
+**Check**: `filtered_scene_view.visible_entities` must be empty
+**Failure**: Flag as `embodiment_ignored`
+
+### 18.2 Hearing Blocking Validation
+**Rule**: If `embodiment_state.sensory_capabilities.hearing.availability < 0.1`
+**Check**: `filtered_scene_view.audible_signals` must be empty
+**Failure**: Flag as `embodiment_ignored`
+
+### 18.3 Smell Blocking Validation
+**Rule**: If `embodiment_state.sensory_capabilities.smell.availability < 0.1`
+**Check**: `filtered_scene_view.olfactory_signals` must be empty
+**Failure**: Flag as `embodiment_ignored`
+
+### 18.4 Entity Visibility Validation
+**Rule**: All entities in `filtered_scene_view.visible_entities`
+**Check**: Must satisfy line-of-sight from `character_position`
+**Failure**: Flag as `access_boundary_violation`
+
+---
+
+## 19. Memory Access Validation Rules
+
+### 19.1 Known_By Validation
+**Rule**: For any memory in `accessible_memories`
+**Check**: `character_id` must be in `memory.known_by` OR `memory.visibility = public`
+**Failure**: Flag as `memory_leakage`
+
+### 19.2 Private Memory Validation
+**Rule**: If `memory.visibility = private`
+**Check**: `memory.known_by` must equal `[memory.owner_character_id]`
+**Failure**: Flag as `visibility_inconsistency`
+
+### 19.3 Cognitive Pass Leakage Validation
+**Rule**: Character cognitive pass output
+**Check**: Must not reference:
+  - Memories not in `accessible_memories`
+  - Entities not in `filtered_scene_view`
+  - World truth not derivable from filtered inputs
+**Failure**: Flag as `omniscience_leakage`
+
+---
+
+## 20. Non-Goals of This Document
 
 This document does not define:
 - exact DB table SQL,
@@ -473,7 +519,7 @@ Those should be separate documents if needed.
 
 ---
 
-## 19. Summary
+## 21. Summary
 
 This document defines how RP Agent state is stored, committed, and checked.
 

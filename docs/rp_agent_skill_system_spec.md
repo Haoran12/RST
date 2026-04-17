@@ -1,54 +1,88 @@
-# RP Agent Skill System Specification
+# RP Agent Skill System Specification (Minimal Flexible Edition)
 
 Version: 0.1  
 Status: Draft  
-Audience: Runtime / Combat Resolution / Capability Modeling / Prompt Engineering
+Audience: Runtime / Capability Modeling / Lightweight RP Execution / MVP Development
 
 ---
 
 ## 1. Document Scope
 
-This document summarizes the current design decisions for the RP Agent skill system.
+This document defines a **minimal flexible** skill-system design for the RP Agent project.
 
-It defines:
-- capability-side character stats used by skills,
-- runtime resources,
-- resistance categories,
-- status effect categories,
-- skill template structure,
-- skill delivery and resolution layers,
-- same-skill/different-user handling,
-- skill mastery, scaling, and variant boundaries.
+It exists as a lightweight alternative to the fuller skill-system design.
 
-This document is a companion to:
-- `rp_agent_framework_spec.md`
-- `rp_agent_runtime_protocol_spec.md`
-- `rp_agent_prompt_skill_spec.md`
-- future `rp_agent_multi_character_arbitration_spec.md`
+This edition is designed for the following priorities:
 
-This document focuses on the **skill/capability model**, not full turn arbitration.
+1. keep the character model compact,
+2. reduce implementation cost,
+3. preserve narrative freedom,
+4. avoid premature over-formalization,
+5. support practical RP scenes and basic confrontation,
+6. keep room for later expansion.
+
+This document should be read as an MVP-oriented capability model.
+
+Companion relationship:
+- can coexist with the full `rp_agent_skill_system_spec.md`,
+- may serve as the first implementation target,
+- may later evolve toward the fuller version if needed.
 
 ---
 
 ## 2. Design Goal
 
-The skill system must support all of the following at the same time:
+The design goal of the minimal flexible edition is:
 
-1. the same named skill can be used differently by different characters,
-2. those differences remain rule-grounded rather than fully improvised,
-3. skill performance depends on mastery, attributes, resources, body state, status effects, and environment,
-4. high-fantasy confrontation such as spell clashes, illusion, charm, suppression, sealing, and sensory interference can be resolved consistently,
-5. the system remains expressive for roleplay and does not collapse into a rigid game-only ruleset.
+- keep only the character's essential base attributes,
+- keep only the skill's trigger method and impact scope as hard structure,
+- let the runtime preserve freedom in exact manifestation,
+- allow deterministic program logic to perform coarse validation and arbitration,
+- allow contextual interpretation to remain flexible.
 
 In short:
 
-**The skill system should make character action differences legible, comparable, and narratively usable without destroying flexibility.**
+**Keep the boundary hard, keep the expression soft.**
 
 ---
 
-## 3. Base Attributes
+## 3. What This Edition Intentionally Removes
 
-The current confirmed base attribute set is:
+Compared with a fuller skill system, this edition intentionally avoids or defers:
+
+- detailed resistance tables,
+- extensive formal status-effect taxonomy,
+- large skill template schemas,
+- parameter-heavy scaling systems,
+- detailed skill-binding structures,
+- complex variant systems,
+- high-resolution numeric combat comparison,
+- large numbers of explicit rule branches.
+
+The point is not that these are always bad, but that they are not required for an effective first implementation.
+
+---
+
+## 4. Core Principle
+
+The minimal flexible edition treats skills as **structured boundaries**, not as fully specified simulation objects.
+
+A skill should clearly say:
+- how it is triggered,
+- how it reaches the target,
+- what kind of layer it primarily influences.
+
+It should **not** attempt to fully predefine every consequence numerically.
+
+Therefore:
+- the program enforces coarse constraints,
+- the model or runtime context can interpret the exact manifestation within those constraints.
+
+---
+
+## 5. Base Character Attributes
+
+The confirmed base attribute set remains:
 
 ```yaml
 base_attributes:
@@ -61,34 +95,34 @@ base_attributes:
   soul_strength: 0.0
 ```
 
-## 3.1 Attribute Roles
+## 5.1 Attribute Roles
 
 ### `physique`
-Represents bodily quality and direct physical force baseline.
+Bodily quality, force, structural strength.
 
 ### `agility`
-Represents coordination, motion adjustment, precision movement, and reaction-linked bodily responsiveness.
+Movement adjustment, responsiveness, dexterity, quickness.
 
 ### `endurance`
-Represents sustained effort, fatigue resistance, pain tolerance, and injury persistence.
+Sustain, fatigue tolerance, pain tolerance, longer action continuity.
 
 ### `insight`
-Represents tactical reading, pattern recognition, deception reading, spell recognition, and interpretive sharpness.
+Reading skill, pattern recognition, tactical understanding, deception and anomaly recognition.
 
 ### `mana_capacity`
-Represents total magical energy / mana reserve capacity.
+Total magical reserve potential.
 
 ### `mana_control`
-Represents magical precision, shaping quality, stability, and fine control in skill execution.
+Precision, shaping, stability, and controllability of magical skill use.
 
 ### `soul_strength`
-Represents soul-level firmness, will-root, soul-defense baseline, and resistance to deep mental or spiritual intrusion.
+Soul-level firmness, will-root, and deep mental/spiritual resistance baseline.
 
 ---
 
-## 4. Resources
+## 6. Optional Runtime Resources
 
-The current confirmed runtime resource set is:
+If the runtime wants lightweight resource tracking, the recommended compact resource set is:
 
 ```yaml
 resources:
@@ -98,479 +132,108 @@ resources:
   soul_stability: 0.0
 ```
 
-## 4.1 Resource Roles
+However, the minimal flexible edition allows these resources to be handled more loosely if the implementation prefers.
 
-### `vitality`
-Represents bodily integrity and life-bearing condition.
+### Recommended interpretation
+- `vitality`: bodily integrity
+- `mana`: active magical energy
+- `spirit`: attention/mental operational reserve
+- `soul_stability`: soul-layer stability under deep pressure
 
-### `mana`
-Represents directly usable magical energy.
-
-### `spirit`
-Represents current mental/attentional/spiritual operating reserve for concentration, subtle control, prolonged mental pressure, and fine skill execution.
-
-### `soul_stability`
-Represents current soul-layer structural stability. It should generally be more serious and slower-changing than ordinary mana loss.
-
-## 4.2 No Separate Stamina Pool
-At present, there is no separate `stamina` resource.
-
-Physical exertion and overload should instead be represented through:
-- `endurance`,
-- `vitality` when relevant,
-- attrition-type status effects such as `strained`, `fatigued`, and `exhausted`.
+### Simplification rule
+If needed, the first implementation may use these as coarse scene-state indicators rather than full simulation bars.
 
 ---
 
-## 5. Resistances
+## 7. Skill Model: Minimal Version
 
-Recommended resistance skeleton:
-
-```yaml
-resistances:
-  physical: 0.0
-  elemental: {}
-  poison_toxin: 0.0
-  illusion: 0.0
-  mental: 0.0
-  soul: 0.0
-  binding: 0.0
-  suppression: 0.0
-  sensory_interference: 0.0
-```
-
-## 5.1 Resistance Roles
-
-### `physical`
-Against direct bodily damage and impact.
-
-### `elemental`
-Configurable per setting, e.g. fire / ice / lightning / wind / earth / water / wood.
-
-### `poison_toxin`
-Against poison, corrosive agents, sedatives, smoke, and biologically disruptive substances.
-
-### `illusion`
-Against false sensory interpretation, perception distortion, and deceptive sensory overlays.
-
-### `mental`
-Against emotion manipulation, fear, charm, mental intrusion, and motivational distortion.
-
-### `soul`
-Against direct soul attacks, soul pressure, soul rupture, spiritual invasion, and related effects.
-
-### `binding`
-Against movement-restricting or action-restricting control such as immobilization, capture, restraint, or field locking.
-
-### `suppression`
-Against pressure, domain suppression, magical sealing pressure, cultivation pressure, or spiritual oppression.
-
-### `sensory_interference`
-Against blindness, tinnitus, scent overload, spiritual static, and other perception corruption.
-
-## 5.2 Why `illusion` and `mental` Stay Separate
-These should not be merged.
-
-- `illusion` is about sensing the wrong thing.
-- `mental` is about wanting / feeling / deciding the wrong thing.
-
-Some skills may target both, but they are not the same mechanism.
-
----
-
-## 6. Status Effects
-
-Recommended high-level categories:
+The minimal flexible skill model intentionally keeps only a small number of required fields.
 
 ```yaml
-status_categories:
-  - perception
-  - mobility
-  - casting
-  - mental
-  - defensive
-  - attrition
-  - soul
-```
-
-## 6.1 Category Examples
-
-### `perception`
-- blinded
-- obscured_vision
-- scent_overloaded
-- spiritual_perception_blocked
-- perception_distorted
-
-### `mobility`
-- slowed
-- restrained
-- immobilized
-- off_balance
-- staggered
-- knocked_down
-
-### `casting`
-- casting_unstable
-- mana_disrupted
-- silenced
-- channel_broken
-- backfiring_risk_up
-
-### `mental`
-- charmed
-- feared
-- confused
-- distracted
-- enraged
-- fixated
-
-### `defensive`
-- shielded
-- hardened
-- vulnerable
-- exposed
-- destabilized
-
-### `attrition`
-- bleeding
-- burning
-- poisoned
-- corroded
-- strained
-- fatigued
-- exhausted
-
-### `soul`
-- soul_shaken
-- soul_wounded
-- spirit_suppressed
-- soul_marked
-- will_fragmented
-
-## 6.2 Status Effect Template
-
-```yaml
-status_effect:
-  effect_id: ""
-  name: ""
-  category: perception|mobility|casting|mental|defensive|attrition|soul
-
-  source: ""
-  stacks: 1
-  max_stacks: 1
-
-  duration:
-    type: turns|until_removed|instant|channeled
-    value: 0
-
-  modifiers:
-    base_attributes: {}
-    derived_stats: {}
-    resources: {}
-    resistances: {}
-
-  special_rules:
-    cannot_move: false
-    cannot_cast: false
-    blocks_reaction: false
-    breaks_on_damage: false
-    suppresses_concealment: false
-
-  periodic_effects:
-    vitality_loss: 0.0
-    mana_loss: 0.0
-    spirit_loss: 0.0
-    soul_stability_loss: 0.0
-
-  removal_conditions: []
-
-  visibility:
-    obvious_to_others: true
-    detectable_via_spiritual_perception: false
-```
-
-## 6.3 Fatigue Without a Stamina Pool
-Because the design does not use a separate stamina bar, the following statuses are especially important:
-- `strained`
-- `fatigued`
-- `exhausted`
-
-These should carry most of the physical-overuse expression normally handled by stamina depletion systems.
-
----
-
-## 7. Skill Template
-
-A skill must be more than a name and prose description. It must be structurally resolvable.
-
-Recommended template:
-
-```yaml
-skill_template:
+skill:
   skill_id: ""
   name: ""
-  category: attack|defense|movement|control|illusion|detection|support|sealing|escape
-  tags: []
 
-  activation_type: active|passive|reaction|channeled|triggered
-  domain: physical|mana|mental|soul|hybrid
+  trigger_mode: active|reaction|passive|channeled
+  delivery_channel: gaze|voice|touch|projectile|scent|spiritual_link|ritual|field
+  impact_scope: body|perception|mind|soul|scene
 
-  requirements:
-    realm_minimum: ""
-    hand_free: false
-    voice_required: false
-    line_of_sight: optional
-    target_lock_required: false
-    stance_required: ""
-    artifact_required: []
-    resource_minimum:
-      vitality: 0.0
-      mana: 0.0
-      spirit: 0.0
-      soul_stability: 0.0
-
-  timing:
-    startup_time: 0.0
-    commitment_point: 0.0
-    completion_time: 0.0
-
-  range:
-    type: self|touch|line|single_target|area|field
-    max_distance: 0.0
-    radius: 0.0
-
-  target_rules:
-    valid_targets: []
-    friendly_fire: false
-    can_hit_hidden_targets: false
-
-  cost:
-    vitality: 0.0
-    mana: 0.0
-    spirit: 0.0
-    soul_stability: 0.0
-
-  maintenance_cost_per_turn:
-    vitality: 0.0
-    mana: 0.0
-    spirit: 0.0
-    soul_stability: 0.0
-
-  cooldown: 0
-
-  scaling:
-    primary_stats: []
-    secondary_stats: []
-    power_ratio: 0.0
-
-  effects:
-    - effect_type: damage|status_apply|control|shield|dispel|reposition|perception_distortion|seal|detect
-      value_formula: ""
-      applied_status: ""
-      duration: 0
-
-  checks:
-    hit_check: ""
-    resist_check: ""
-    interrupted_by: []
-    countered_by: []
-
-  detectability:
-    pre_cast_signature: none|low|medium|high
-    visible_effect_strength: 0.0
-    spiritual_trace_strength: 0.0
-
-  side_effects: []
+  notes: ""
 ```
 
----
+## 7.1 Field Roles
 
-## 8. Two Mandatory Skill Fields Added by Discussion
-
-Two additional fields are strongly recommended as part of the skill schema.
-
-## 8.1 `resolution_layer`
-
-```yaml
-resolution_layer:
-  primary: body|perception|mind|soul|scene
-  secondary: []
-```
-
-This field tells the runtime what the skill mainly resolves against.
+### `trigger_mode`
+Tells the runtime how the action begins.
 
 Examples:
-- wind blade → primary `body`
-- charm gaze → primary `mind`, secondary `soul`
-- illusion fog → primary `perception`
-- sealing array → primary `scene` or `soul`, depending on design
+- active: deliberate use,
+- reaction: triggered during a reaction window,
+- passive: always or conditionally present,
+- channeled: requires continued maintenance.
 
-## 8.2 `delivery_channel`
-
-```yaml
-delivery_channel:
-  type: gaze|voice|scent|touch|spiritual_link|projectile|hybrid
-  must_be_established: true
-  broken_by: []
-```
-
-This field matters especially for charm, illusion, detection, and special attack delivery models.
+### `delivery_channel`
+Tells the runtime how the skill reaches or connects with the target.
 
 Examples:
-- wind blade → `projectile`
-- charm gaze → `gaze`
-- voice charm → `voice`
-- scent allure → `scent`
+- projectile,
+- gaze,
+- voice,
+- touch,
+- scent,
+- ritual,
+- spiritual_link,
+- field.
+
+### `impact_scope`
+Tells the runtime which layer the skill mainly acts on.
+
+Examples:
+- `body`: direct physical or bodily harm/effect,
+- `perception`: sensory distortion or concealment,
+- `mind`: motivation, emotion, judgment, charm,
+- `soul`: deep spiritual or soul-layer effect,
+- `scene`: barriers, fields, environmental reshaping.
+
+### `notes`
+A lightweight freeform slot for author intent or special interpretation guidance.
 
 ---
 
-## 9. Skill Resolution Logic
+## 8. Optional Extra Field: Category
 
-A general skill resolution flow should resemble:
-
-```text
-1. Can the action candidate be used?
-2. Can the delivery channel be established?
-3. Is the action noticed?
-4. Can it be interrupted or countered?
-5. Does delivery succeed?
-6. Does hit/contact/mental entry succeed?
-7. Does resistance/defense reduce it?
-8. What effect tier is produced?
-9. What state changes are committed?
-```
-
-Attack-type skills and mental-type skills follow the same overall logic, but differ sharply in which layer and resistance are tested.
-
----
-
-## 10. Example Skill Types from Discussion
-
-## 10.1 Wind Blade
-Used as the baseline attack-type example.
-
-Important characteristics:
-- category: attack
-- domain: mana
-- resolution layer: body
-- delivery channel: projectile
-- scalable axes: startup_time / range / damage / detectability / stability
-
-Typical resolution path:
-- validate cast,
-- detect pre-cast,
-- open interrupt window,
-- resolve path delivery,
-- resolve hit,
-- apply physical / wind mitigation,
-- apply damage and possible secondary status.
-
-## 10.2 Charm Gaze
-Used as the baseline charm/control example.
-
-Important characteristics:
-- category: control
-- domain: mental
-- resolution layer: primary mind, secondary soul
-- delivery channel: gaze
-- scalable axes: startup_time / detectability / influence_strength / duration / break_resistance
-
-Typical resolution path:
-- validate cast,
-- establish channel,
-- determine target notice,
-- open break window,
-- test mental/soul penetration,
-- assign influence tier,
-- degrade or sustain effect,
-- feed back into perception, belief, and intent.
-
-## 10.3 Charm Must Not Default to Total Control
-Charm should typically support graded tiers such as:
-- no effect,
-- brief disturbance,
-- soft bias,
-- strong influence,
-- partial control,
-- dominant control.
-
-Ordinary charm should not default to hard domination.
-
----
-
-## 11. Same Skill, Different Users
-
-This was identified as a core problem: how to make the same named skill behave differently for different characters without losing structural clarity.
-
-The adopted solution is a **three-layer model**.
-
-## 11.1 Layer 1: Skill Template
-Defines what the skill fundamentally is.
-
-## 11.2 Layer 2: Character Skill Binding
-Defines how this character has learned and shaped that skill.
-
-## 11.3 Layer 3: Runtime Skill Instance
-Defines the actual form of that skill in the current turn after applying:
-- template,
-- binding,
-- current attributes,
-- current resources,
-- current statuses,
-- environment,
-- equipment and special factors.
-
----
-
-## 12. Character Skill Binding
-
-Recommended structure:
+If the implementation wants a slightly clearer grouping without much added complexity, this optional field may be used:
 
 ```yaml
-character_skill_binding:
+category: attack|control|support|movement|detection|concealment
+```
+
+This field is not required, but can help organize skill families.
+
+---
+
+## 9. Character Skill Use Profile
+
+To preserve some difference between users of the same skill, the minimal flexible edition recommends a minimal use profile.
+
+```yaml
+character_skill_use_profile:
   character_id: ""
   skill_id: ""
-
-  learned: true
   mastery_rank: 1
-  proficiency_score: 0.0
-
-  style_bias: []
-  specialization_notes: []
-
-  parameter_bias:
-    startup_time_bonus: 0.0
-    mana_cost_modifier: 0.0
-    spirit_cost_modifier: 0.0
-    range_bonus: 0.0
-    effect_power_bonus: 0.0
-    detectability_modifier: 0.0
-    stability_bonus: 0.0
-    break_resistance_bonus: 0.0
-
-  unlock_state:
-    unlocked_features: []
-    locked_features: []
-
-  known_variants: []
-
-  reliability_profile:
-    miscast_risk_base: 0.0
-    under_pressure_penalty: 0.0
-    fatigue_penalty: 0.0
-    injury_penalty: 0.0
-
-  usage_memory:
-    total_usage_count: 0
-    last_used_turn: ""
-    notable_history: []
+  notes: ""
 ```
 
-## 12.1 Role of `mastery_rank`
-Represents broad developmental stage.
+## 9.1 Purpose
+This keeps only the minimum needed to say:
+- the character knows the skill,
+- the character is more or less practiced with it,
+- there may be a short note about their style.
 
-Suggested mapping:
+This intentionally avoids the heavier binding model with many parameter modifiers.
+
+## 9.2 Mastery Rank
+Recommended simple rank scale:
 
 ```yaml
 mastery_rank:
@@ -581,198 +244,239 @@ mastery_rank:
   5: master
 ```
 
-## 12.2 Role of `proficiency_score`
-Provides fine-grained detail inside the mastery tier.
-
-## 12.3 Role of `style_bias`
-Expresses character-specific usage style such as:
-- fast_cast,
-- low_signature,
-- heavy_cut,
-- soft_influence,
-- forceful_invasion,
-- long_hold.
-
-## 12.4 Role of `parameter_bias`
-Represents long-term personal skew in how the character expresses the skill.
-
-Example:
-- faster but weaker,
-- heavier but louder,
-- subtler but shorter range,
-- more stable but higher spirit cost.
+The exact runtime meaning can remain coarse.
 
 ---
 
-## 13. Runtime Skill Instance
+## 10. Same Skill, Different Users
 
-A runtime skill instance should be understood as:
+The minimal flexible edition still supports different expressions of the same named skill.
 
-```text
-runtime_skill_instance
-= skill_template
-+ character_skill_binding
-+ current_runtime_modifiers
-```
+It does so through a simple combination of:
+- base attributes,
+- skill mastery rank,
+- current body/resource state,
+- environment,
+- scene context.
 
-Recommended structure:
+This means that two characters can both use `wind_blade`, but the runtime may still interpret one as:
+- faster,
+- more stable,
+- more forceful,
+- more precise,
+- subtler,
+- broader in effect,
+
+without requiring a large parameter matrix.
+
+### Important rule
+The exact manifestation should stay consistent with the skill's fixed boundary:
+- delivery channel,
+- impact scope,
+- general trigger mode.
+
+That is how the system preserves freedom without losing identity.
+
+---
+
+## 11. Coarse Programmatic Resolution
+
+The minimal flexible edition still expects the runtime to do coarse deterministic checks.
+
+Recommended programmatic checks:
+
+### 11.1 Trigger Legality
+Can the skill be used at all right now?
+
+Examples:
+- gaze requires line of sight,
+- voice requires audibility,
+- touch requires proximity,
+- projectile requires valid path,
+- ritual may require setup.
+
+### 11.2 Delivery Channel Validity
+Can the channel actually connect?
+
+Examples:
+- is the gaze maintained,
+- is the target hearing the voice,
+- does the projectile have line/path,
+- is the scent reaching the target,
+- is the spiritual link possible.
+
+### 11.3 Coarse Impact Layer Contest
+The runtime should map the skill's `impact_scope` to a broad contest axis.
+
+Suggested mapping:
+
+- `body` → compare against bodily mobility / endurance / physique context
+- `perception` → compare against insight and sensory clarity context
+- `mind` → compare against insight and soul-strength context
+- `soul` → compare mainly against soul-strength and soul-stability context
+- `scene` → compare against scene constraints, space, or competing field effects
+
+### 11.4 Result Tier
+The runtime should produce coarse result tiers such as:
+- fail,
+- weak_success,
+- partial_success,
+- strong_success.
+
+This is enough for many RP applications.
+
+---
+
+## 12. Minimal Outcome Tags
+
+Instead of a heavy formal status system, the minimal flexible edition may use a small set of broad outcome tags.
+
+Suggested set:
 
 ```yaml
-runtime_skill_instance:
-  caster: ""
-  skill_id: ""
-
-  effective_timing: {}
-  effective_range: {}
-  effective_cost: {}
-  effective_effects: {}
-  effective_detectability: {}
-  effective_reliability: {}
+effect_tags:
+  - wounded
+  - hindered
+  - disturbed
+  - influenced
+  - suppressed
+  - concealed
+  - revealed
 ```
 
-This is the object that arbitration and conflict resolution should actually consume.
+## 12.1 Interpretation
+These are intentionally broad.
+
+Examples:
+- `wounded`: bodily harm or meaningful damage result,
+- `hindered`: motion or action quality reduced,
+- `disturbed`: perception, concentration, or mental flow disrupted,
+- `influenced`: mind or judgment shifted,
+- `suppressed`: pressure or sealing-like weakening,
+- `concealed`: target or state hidden from ordinary access,
+- `revealed`: hidden state, action, or presence exposed.
+
+The exact narrative manifestation should remain context-sensitive.
 
 ---
 
-## 14. Skill Growth and Scaling Policy
+## 13. Example Skills
 
-The discussion concluded that skill parameters should be divided into three classes.
+## 13.1 Wind Blade
 
-## 14.1 Soft-Scalable
-These may vary continuously within the same template.
-
-Typical examples:
-- startup time,
-- completion time,
-- mana cost,
-- spirit cost,
-- range,
-- effect power,
-- detectability,
-- stability,
-- break resistance.
-
-## 14.2 Threshold-Unlock
-These should not vary freely, but may be unlocked at higher mastery.
-
-Examples:
-- silent_cast,
-- reduced_signature,
-- split_second_blade,
-- lower_notice_probability,
-- partial_control_threshold_unlock.
-
-## 14.3 Variant-Boundary
-These should not be treated as ordinary template scaling.
-If these change, the skill should usually become a named variant.
-
----
-
-## 15. Variant-Boundary Rules
-
-The discussion established four strong boundary rules.
-
-A skill should generally be promoted to a **variant** if it changes any of the following:
-
-### 15.1 Delivery Channel Changes
-Examples:
-- gaze → voice
-- gaze → scent
-- projectile → field
-
-### 15.2 Primary Resolution Layer Changes
-Examples:
-- body → mind
-- mind → soul
-- body → scene
-
-### 15.3 Target Scale Changes
-Examples:
-- single target → area
-- touch → multi-target
-- single-target charm → group aura charm
-
-### 15.4 Primary Effect Type Changes
-Examples:
-- damage → control
-- soft charm → domination
-- projectile cut → binding attack
-
-These are not ordinary growth; they imply a new skill variant.
-
----
-
-## 16. Practical Scaling Guidance
-
-Skill performance should not be determined by prose alone.
-
-A recommended pattern is:
-
-```text
-effective_value
-= template_base
-× mastery_modifier
-× attribute_modifier
-× resource_modifier
-× status_modifier
-× style_modifier
-× environment_modifier
+```yaml
+skill:
+  skill_id: wind_blade
+  name: 风刃
+  trigger_mode: active
+  delivery_channel: projectile
+  impact_scope: body
+  notes: "A wind-formed cutting attack projected toward a target."
 ```
 
-Not every parameter needs every modifier. Which modifiers apply should be explicitly controlled by the skill design.
+Meaning:
+- active cast,
+- travels as projectile-like delivery,
+- primarily contests bodily outcome,
+- exact strength and speed remain context-dependent.
 
-### Example: Wind Blade Startup Time
-Should reasonably depend on:
-- mastery,
-- mana_control,
-- agility,
-- fatigue or instability,
-- fast-cast style bias.
+## 13.2 Charm Gaze
 
-### Example: Charm Influence Strength
-Should reasonably depend on:
-- soul_strength,
-- mana_control,
-- current spirit,
-- mastery,
-- channel quality,
-- target susceptibility,
-- current target state.
+```yaml
+skill:
+  skill_id: charm_gaze
+  name: 魅惑
+  trigger_mode: active
+  delivery_channel: gaze
+  impact_scope: mind
+  notes: "A gaze-based influence skill that affects judgment, trust, or emotional openness."
+```
+
+Meaning:
+- active use,
+- requires gaze connection,
+- primarily contests mental outcome,
+- exact severity should be decided through context and coarse success tier.
 
 ---
 
-## 17. MVP Recommendation
+## 14. What This Edition Gains
 
-If implementation scope needs to be reduced, the minimum viable version should still preserve:
+### 14.1 Lower Implementation Cost
+Fewer fields, fewer interactions, fewer rules to encode.
 
-1. base attributes,
-2. four resources,
-3. resistance skeleton,
-4. status effect template,
-5. skill template,
-6. `resolution_layer`,
-7. `delivery_channel`,
-8. character skill binding,
-9. runtime skill instance,
-10. variant-boundary rules.
+### 14.2 Higher Narrative Flexibility
+Skills retain broad expressive room.
 
-Without these, the skill system will likely become too improvised and lose consistency under conflict resolution.
+### 14.3 Easier MVP Delivery
+This design can be implemented much earlier than a full formalized system.
+
+### 14.4 Better Fit for RP-First Use Cases
+If the main goal is believable character behavior and scene freedom rather than exact tactical balance, this edition is often more appropriate.
+
+---
+
+## 15. What This Edition Sacrifices
+
+### 15.1 Lower Determinism
+Outcomes are less strictly comparable.
+
+### 15.2 Less Formal Balance
+Fine-grained skill balance becomes harder.
+
+### 15.3 More Dependence on Contextual Interpretation
+The runtime or model has to do more soft judgment.
+
+### 15.4 Harder Long-Term Precision Scaling
+Very detailed progression systems will require later extension.
+
+These are acceptable tradeoffs for an MVP-focused flexible RP system.
+
+---
+
+## 16. Recommended Use Cases
+
+This edition is best suited for:
+- first implementation,
+- RP-first systems,
+- narrative-heavy character interaction,
+- light-confrontation fantasy scenes,
+- systems that want to minimize premature rules burden.
+
+It is less suited for:
+- highly balanced tactical combat,
+- deep deterministic PVP-like resolution,
+- large-scale skill catalogues requiring strict comparability.
+
+---
+
+## 17. Upgrade Path
+
+The minimal flexible edition is intentionally compatible with future expansion.
+
+A possible later upgrade path is:
+
+1. keep the same base attributes,
+2. keep the same lightweight skill identity fields,
+3. add fuller resource logic,
+4. add richer effect/state logic,
+5. add stronger skill-binding structure,
+6. add a fuller runtime skill instance model.
+
+This allows the project to evolve without discarding the first implementation.
 
 ---
 
 ## 18. Summary
 
-The current skill-system design can be summarized as follows:
+The minimal flexible edition defines a deliberately small skill system.
 
-- characters use a compact capability stat set,
-- skills consume a compact but expressive resource set,
-- resistances and status effects are organized by mechanism rather than lore name,
-- each skill is defined as a structured template,
-- skill delivery and resolution layers are explicit,
-- the same named skill can behave differently for different users through character skill binding,
-- runtime skill performance is generated from template + binding + current conditions,
-- skills may scale, unlock features, or branch into variants,
-- once delivery channel, resolution layer, target scale, or primary effect type changes, the skill should usually be treated as a variant rather than the same template.
+Its core rule is simple:
 
-This design keeps the system grounded enough for arbitration while preserving narrative flexibility and character individuality.
+- characters have compact base attributes,
+- skills define how they are triggered and what layer they affect,
+- coarse program logic enforces whether the skill can connect and roughly how strong the outcome tier is,
+- exact manifestation remains flexible and context-sensitive.
+
+This approach is intentionally lightweight, RP-friendly, and practical for early implementation.
 
