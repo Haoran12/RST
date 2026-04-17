@@ -202,12 +202,38 @@ class _ReasoningPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLightTheme = Theme.of(context).brightness == Brightness.light;
+    final panelBorderColor = isLightTheme
+        ? const Color(0xFFD7E0EC)
+        : AppColors.borderSubtle;
+    final panelBackgroundColor = isLightTheme
+        ? const Color(0xFFF2F5FA)
+        : AppColors.backgroundBase.withValues(alpha: 0.55);
+    final panelTitleColor = isLightTheme
+        ? const Color(0xFF4C5D72)
+        : AppColors.textMuted;
+    final panelParagraphColor = isLightTheme
+        ? const Color(0xFF2A3A4D)
+        : AppColors.textSecondary;
+    final panelHeadingColor = isLightTheme
+        ? const Color(0xFF172433)
+        : appearance.headingColor.withValues(alpha: 0.92);
+    final panelItalicColor = isLightTheme
+        ? const Color(0xFF596D83)
+        : appearance.italicColor;
+    final panelQuotedColor = isLightTheme
+        ? const Color(0xFF9A6A1A)
+        : appearance.quotedColor;
+    final contentContainerColor = isLightTheme
+        ? Colors.white.withValues(alpha: 0.92)
+        : AppColors.surfaceOverlay.withValues(alpha: 0.28);
+
     final reasoningAppearance = MessageBubbleAppearance(
-      paragraphColor: AppColors.textSecondary,
-      headingColor: appearance.headingColor.withValues(alpha: 0.9),
-      italicColor: appearance.italicColor,
-      boldColor: appearance.boldColor,
-      quotedColor: appearance.quotedColor,
+      paragraphColor: panelParagraphColor,
+      headingColor: panelHeadingColor,
+      italicColor: panelItalicColor,
+      boldColor: panelHeadingColor,
+      quotedColor: panelQuotedColor,
       fontScale: (appearance.fontScale * 0.95).clamp(0.8, 1.6),
       bubbleOpacity: appearance.bubbleOpacity,
     );
@@ -215,8 +241,8 @@ class _ReasoningPanel extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderSubtle),
-        color: AppColors.backgroundBase.withValues(alpha: 0.45),
+        border: Border.all(color: panelBorderColor),
+        color: panelBackgroundColor,
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -227,18 +253,32 @@ class _ReasoningPanel extends StatelessWidget {
           childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
           dense: true,
           minTileHeight: 32,
-          title: const Text(
+          iconColor: panelTitleColor,
+          collapsedIconColor: panelTitleColor,
+          textColor: panelTitleColor,
+          collapsedTextColor: panelTitleColor,
+          title: Text(
             '思考',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: AppColors.textMuted,
+              color: panelTitleColor,
             ),
           ),
           children: [
-            _MarkdownMessageText(
-              content: reasoning,
-              appearance: reasoningAppearance,
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: panelBorderColor.withValues(alpha: 0.7)),
+                color: contentContainerColor,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                child: _MarkdownMessageText(
+                  content: reasoning,
+                  appearance: reasoningAppearance,
+                ),
+              ),
             ),
           ],
         ),
