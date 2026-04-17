@@ -542,7 +542,12 @@ class ChatService {
       stopReason = parsedChunk.stopReason ?? stopReason;
 
       var contentChanged = false;
-      if (parsedChunk.deltaText.isNotEmpty) {
+      if (parsedChunk.snapshotText.isNotEmpty) {
+        if (parsedChunk.snapshotText != textBuffer) {
+          textBuffer = parsedChunk.snapshotText;
+          contentChanged = true;
+        }
+      } else if (parsedChunk.deltaText.isNotEmpty) {
         final mergedText = _mergeStreamingFragment(
           existing: textBuffer,
           incoming: parsedChunk.deltaText,
@@ -552,7 +557,12 @@ class ChatService {
           contentChanged = true;
         }
       }
-      if (parsedChunk.reasoningDelta.isNotEmpty) {
+      if (parsedChunk.snapshotReasoning.isNotEmpty) {
+        if (parsedChunk.snapshotReasoning != reasoningBuffer) {
+          reasoningBuffer = parsedChunk.snapshotReasoning;
+          contentChanged = true;
+        }
+      } else if (parsedChunk.reasoningDelta.isNotEmpty) {
         final mergedReasoning = _mergeStreamingFragment(
           existing: reasoningBuffer,
           incoming: parsedChunk.reasoningDelta,
@@ -1463,6 +1473,18 @@ class ChatService {
       _extractReasoningString(deltaMap?['thinking']),
       _extractReasoningString(decoded['reasoning']),
     ]);
+    final message = choiceMap?['message'];
+    final messageMap = message is Map ? message.cast<String, dynamic>() : null;
+    final messageSplit = _extractContentSplit(messageMap?['content']);
+    final snapshotText = messageSplit.text;
+    final snapshotReasoning = _joinNonEmpty(<String>[
+      messageSplit.reasoning,
+      _extractReasoningString(messageMap?['reasoning_content']),
+      _extractReasoningString(messageMap?['reasoningContent']),
+      _extractReasoningString(messageMap?['reasoning']),
+      _extractReasoningString(messageMap?['thinking']),
+      _extractReasoningString(decoded['reasoning']),
+    ]);
 
     final usage = decoded['usage'];
     final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
@@ -1474,6 +1496,8 @@ class ChatService {
     return _SseChunk(
       deltaText: deltaText,
       reasoningDelta: reasoningDelta,
+      snapshotText: snapshotText,
+      snapshotReasoning: snapshotReasoning,
       promptTokens: promptTokens,
       completionTokens: completionTokens,
       totalTokens: totalTokens,
@@ -1515,19 +1539,16 @@ class ChatService {
       final responseMap = response is Map
           ? response.cast<String, dynamic>()
           : null;
-      final usage = responseMap?['usage'];
-      final usageMap = usage is Map ? usage.cast<String, dynamic>() : null;
-      final promptTokens = _asInt(usageMap?['input_tokens']);
-      final completionTokens = _asInt(usageMap?['output_tokens']);
-      final totalTokens = _asInt(usageMap?['total_tokens']);
-      final status = responseMap?['status'];
-      final output = responseMap?['output'];
+      final parsedResponse = responseMap == null
+          ? const _ParsedResponseBody(text: '')
+          : _parseOpenAiJsonResponse(responseMap);
       return _SseChunk(
-        reasoningDelta: _extractOpenAiReasoningFromOutput(output),
-        promptTokens: promptTokens,
-        completionTokens: completionTokens,
-        totalTokens: totalTokens,
-        stopReason: status is String && status.isNotEmpty ? status : null,
+        snapshotText: parsedResponse.text,
+        snapshotReasoning: parsedResponse.reasoning,
+        promptTokens: parsedResponse.promptTokens,
+        completionTokens: parsedResponse.completionTokens,
+        totalTokens: parsedResponse.totalTokens,
+        stopReason: parsedResponse.stopReason,
       );
     }
 
@@ -2377,6 +2398,8 @@ class _SseChunk {
   const _SseChunk({
     this.deltaText = '',
     this.reasoningDelta = '',
+    this.snapshotText = '',
+    this.snapshotReasoning = '',
     this.promptTokens,
     this.completionTokens,
     this.totalTokens,
@@ -2385,6 +2408,8 @@ class _SseChunk {
 
   final String deltaText;
   final String reasoningDelta;
+  final String snapshotText;
+  final String snapshotReasoning;
   final int? promptTokens;
   final int? completionTokens;
   final int? totalTokens;
@@ -2393,6 +2418,8 @@ class _SseChunk {
   bool get isEmpty =>
       deltaText.isEmpty &&
       reasoningDelta.isEmpty &&
+      snapshotText.isEmpty &&
+      snapshotReasoning.isEmpty &&
       promptTokens == null &&
       completionTokens == null &&
       totalTokens == null &&

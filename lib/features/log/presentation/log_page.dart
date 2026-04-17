@@ -303,16 +303,133 @@ class _LogDetailSheet extends ConsumerWidget {
     if (decoded is Map) {
       final value = decoded['normalized_response'];
       if (value is String && value.trim().isNotEmpty) {
-        return value;
+        return _formatNormalizedResponseForDisplay(value);
       }
       if (value != null) {
         final fallback = '$value'.trim();
         if (fallback.isNotEmpty) {
-          return fallback;
+          return _formatNormalizedResponseForDisplay(fallback);
         }
       }
     }
     return '(empty)';
+  }
+
+  static String _formatNormalizedResponseForDisplay(String raw) {
+    final normalized = raw.replaceAll('\r\n', '\n').trim();
+    if (normalized.isEmpty) {
+      return '(empty)';
+    }
+
+    final lines = normalized.split('\n');
+    final output = <String>[];
+    var paragraph = '';
+    var inCodeFence = false;
+
+    void flushParagraph() {
+      if (paragraph.isEmpty) {
+        return;
+      }
+      output.add(paragraph);
+      paragraph = '';
+    }
+
+    for (final sourceLine in lines) {
+      final line = sourceLine.trimRight();
+      final trimmed = line.trim();
+
+      if (trimmed.startsWith('```')) {
+        flushParagraph();
+        output.add(trimmed);
+        inCodeFence = !inCodeFence;
+        continue;
+      }
+
+      if (inCodeFence) {
+        output.add(line);
+        continue;
+      }
+
+      if (trimmed.isEmpty) {
+        flushParagraph();
+        if (output.isNotEmpty && output.last.isNotEmpty) {
+          output.add('');
+        }
+        continue;
+      }
+
+      if (_isStructuredMarkdownLine(trimmed)) {
+        flushParagraph();
+        output.add(trimmed);
+        continue;
+      }
+
+      if (paragraph.isEmpty) {
+        paragraph = trimmed;
+        continue;
+      }
+      paragraph = _shouldInsertReadableSpace(paragraph, trimmed)
+          ? '$paragraph $trimmed'
+          : '$paragraph$trimmed';
+    }
+
+    flushParagraph();
+    final formatted = output
+        .join('\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+    return formatted.isEmpty ? '(empty)' : formatted;
+  }
+
+  static bool _isStructuredMarkdownLine(String line) {
+    if (line.startsWith('#') ||
+        line.startsWith('>') ||
+        line.startsWith('|') ||
+        line.startsWith('- ') ||
+        line.startsWith('* ') ||
+        line.startsWith('+ ')) {
+      return true;
+    }
+    return RegExp(r'^\d+\.\s').hasMatch(line);
+  }
+
+  static bool _shouldInsertReadableSpace(String previous, String next) {
+    if (previous.isEmpty || next.isEmpty) {
+      return false;
+    }
+    final prevChar = previous.codeUnitAt(previous.length - 1);
+    final nextChar = next.codeUnitAt(0);
+    if (_isAsciiWordChar(prevChar) && _isAsciiWordChar(nextChar)) {
+      return true;
+    }
+    if (_isSentencePunctuation(prevChar) && _isAsciiWordChar(nextChar)) {
+      return true;
+    }
+    if (_isClosingBracket(prevChar) && _isAsciiWordChar(nextChar)) {
+      return true;
+    }
+    return false;
+  }
+
+  static bool _isAsciiWordChar(int codeUnit) {
+    return (codeUnit >= 48 && codeUnit <= 57) ||
+        (codeUnit >= 65 && codeUnit <= 90) ||
+        (codeUnit >= 97 && codeUnit <= 122);
+  }
+
+  static bool _isSentencePunctuation(int codeUnit) {
+    return codeUnit == 33 || // !
+        codeUnit == 44 || // ,
+        codeUnit == 46 || // .
+        codeUnit == 58 || // :
+        codeUnit == 59 || // ;
+        codeUnit == 63; // ?
+  }
+
+  static bool _isClosingBracket(int codeUnit) {
+    return codeUnit == 41 || // )
+        codeUnit == 93 || // ]
+        codeUnit == 125; // }
   }
 }
 
