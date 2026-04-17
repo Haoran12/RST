@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../bridge/frb_api.dart' as frb;
 import '../models/common.dart';
 import '../models/workspace_config.dart';
+import '../providers/app_state.dart';
 
 class RuntimeApiConfig {
   const RuntimeApiConfig({
@@ -410,6 +411,48 @@ class ApiService {
     }
   }
 
+  Future<List<ManagedOption>?> loadWorldBookCatalog() async {
+    final file = await _worldBookCatalogFile();
+    if (!await file.exists()) {
+      return null;
+    }
+
+    final raw = await file.readAsString();
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('invalid_world_book_catalog: ${file.path}');
+    }
+
+    final rawItems = decoded['items'];
+    if (rawItems is! List) {
+      return const <ManagedOption>[];
+    }
+
+    final items = <ManagedOption>[];
+    for (final item in rawItems) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+      final parsed = _managedOptionFromJson(item);
+      if (parsed.type == ManagedOptionType.worldBook) {
+        items.add(parsed);
+      }
+    }
+    return items;
+  }
+
+  Future<void> saveWorldBookCatalog(List<ManagedOption> options) async {
+    final file = await _worldBookCatalogFile();
+    final worldBooks = options
+        .where((item) => item.type == ManagedOptionType.worldBook)
+        .toList(growable: false);
+    await _writeJson(file, <String, dynamic>{
+      'version': 1,
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'items': worldBooks.map(_managedOptionToJson).toList(growable: false),
+    });
+  }
+
   Future<void> ensureDefaults() async {
     final presetsDir = await _presetsDirectory();
     final apisDir = await _apiConfigsDirectory();
@@ -651,10 +694,22 @@ class ApiService {
     return dir;
   }
 
+  Future<Directory> _worldBooksDirectory() async {
+    final dir = Directory('${(await _workspaceDir()).path}/config/world_books');
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return dir;
+  }
+
   Future<File> _sessionWorldBookSnapshotFile(String sessionId) async {
     return File(
       '${(await _sessionsDirectory()).path}/$sessionId.st_worldbook.json',
     );
+  }
+
+  Future<File> _worldBookCatalogFile() async {
+    return File('${(await _worldBooksDirectory()).path}/catalog.json');
   }
 
   Future<List<File>> _jsonFiles(Directory directory) async {
@@ -695,6 +750,146 @@ class ApiService {
 
   Future<void> _writeJson(File file, Map<String, dynamic> json) async {
     await file.writeAsString(const JsonEncoder.withIndent('  ').convert(json));
+  }
+
+  ManagedOption _managedOptionFromJson(Map<String, dynamic> json) {
+    return ManagedOption(
+      id: '${json['id'] ?? ''}'.trim(),
+      name: '${json['name'] ?? ''}'.trim(),
+      description: '${json['description'] ?? ''}',
+      updatedAt: _parseDateTime(json['updatedAt']),
+      type: _managedOptionTypeFromWire(json['type']),
+      sections: _managedOptionSectionsFromJson(json['sections']),
+    );
+  }
+
+  List<ManagedOptionSection> _managedOptionSectionsFromJson(Object? raw) {
+    if (raw is! List) {
+      return const <ManagedOptionSection>[];
+    }
+    final sections = <ManagedOptionSection>[];
+    for (final item in raw) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+      sections.add(
+        ManagedOptionSection(
+          title: '${item['title'] ?? ''}',
+          description: '${item['description'] ?? ''}',
+          fields: _managedOptionFieldsFromJson(item['fields']),
+        ),
+      );
+    }
+    return sections;
+  }
+
+  List<ManagedOptionField> _managedOptionFieldsFromJson(Object? raw) {
+    if (raw is! List) {
+      return const <ManagedOptionField>[];
+    }
+    final fields = <ManagedOptionField>[];
+    for (final item in raw) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+      fields.add(
+        ManagedOptionField(
+          key: '${item['key'] ?? ''}',
+          label: '${item['label'] ?? ''}',
+          type: _managedFieldTypeFromWire(item['type']),
+          value: item['value'],
+          helperText: _normalizeOptional(item['helperText']),
+          placeholder: _normalizeOptional(item['placeholder']),
+          readOnly: item['readOnly'] == true,
+          choices: _managedFieldChoicesFromJson(item['choices']),
+          min: _parseDouble(item['min']),
+          max: _parseDouble(item['max']),
+          step: _parseDouble(item['step']),
+        ),
+      );
+    }
+    return fields;
+  }
+
+  List<ManagedFieldChoice> _managedFieldChoicesFromJson(Object? raw) {
+    if (raw is! List) {
+      return const <ManagedFieldChoice>[];
+    }
+    final choices = <ManagedFieldChoice>[];
+    for (final item in raw) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+      choices.add(
+        ManagedFieldChoice(
+          label: '${item['label'] ?? ''}',
+          value: '${item['value'] ?? ''}',
+        ),
+      );
+    }
+    return choices;
+  }
+
+  Map<String, dynamic> _managedOptionToJson(ManagedOption option) {
+    return <String, dynamic>{
+      'id': option.id,
+      'name': option.name,
+      'description': option.description,
+      'updatedAt': option.updatedAt.toUtc().toIso8601String(),
+      'type': option.type.name,
+      'sections': option.sections
+          .map(
+            (section) => <String, dynamic>{
+              'title': section.title,
+              'description': section.description,
+              'fields': section.fields
+                  .map(
+                    (field) => <String, dynamic>{
+                      'key': field.key,
+                      'label': field.label,
+                      'type': field.type.name,
+                      'value': field.value,
+                      'helperText': field.helperText,
+                      'placeholder': field.placeholder,
+                      'readOnly': field.readOnly,
+                      'choices': field.choices
+                          .map(
+                            (choice) => <String, dynamic>{
+                              'label': choice.label,
+                              'value': choice.value,
+                            },
+                          )
+                          .toList(growable: false),
+                      'min': field.min,
+                      'max': field.max,
+                      'step': field.step,
+                    },
+                  )
+                  .toList(growable: false),
+            },
+          )
+          .toList(growable: false),
+    };
+  }
+
+  ManagedOptionType _managedOptionTypeFromWire(Object? raw) {
+    final normalized = '$raw'.trim();
+    for (final value in ManagedOptionType.values) {
+      if (value.name == normalized) {
+        return value;
+      }
+    }
+    return ManagedOptionType.worldBook;
+  }
+
+  ManagedFieldType _managedFieldTypeFromWire(Object? raw) {
+    final normalized = '$raw'.trim();
+    for (final value in ManagedFieldType.values) {
+      if (value.name == normalized) {
+        return value;
+      }
+    }
+    return ManagedFieldType.text;
   }
 
   String _newId(String prefix) {
@@ -886,6 +1081,26 @@ class ApiService {
       return null;
     }
     return int.tryParse(normalized);
+  }
+
+  double? _parseDouble(Object? value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    final normalized = '$value'.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    return double.tryParse(normalized);
+  }
+
+  DateTime _parseDateTime(Object? value) {
+    final normalized = '$value'.trim();
+    if (normalized.isEmpty) {
+      return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    }
+    return DateTime.tryParse(normalized)?.toUtc() ??
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   }
 
   Uri _resolveRequestUri({

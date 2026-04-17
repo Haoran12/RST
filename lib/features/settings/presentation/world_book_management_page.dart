@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_state.dart';
+import '../../../core/providers/service_providers.dart';
 import '../../../core/services/world_book_injection.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/buttons.dart';
@@ -72,9 +73,15 @@ class WorldBookManagementPage extends ConsumerWidget {
 
   Widget _buildCard(BuildContext context, WidgetRef ref, ManagedOption option) {
     final entries = _loadEntries(option);
-    final c1 = entries.where((e) => e.category == _WorldBookCategory.character).length;
-    final c2 = entries.where((e) => e.category == _WorldBookCategory.setting).length;
-    final c3 = entries.where((e) => e.category == _WorldBookCategory.memory).length;
+    final c1 = entries
+        .where((e) => e.category == _WorldBookCategory.character)
+        .length;
+    final c2 = entries
+        .where((e) => e.category == _WorldBookCategory.setting)
+        .length;
+    final c3 = entries
+        .where((e) => e.category == _WorldBookCategory.memory)
+        .length;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GlassPanelCard(
@@ -84,7 +91,10 @@ class WorldBookManagementPage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(option.name, style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    option.name,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     '人物 $c1 · 其他设定 $c2 · 世界记忆 $c3',
@@ -103,7 +113,10 @@ class WorldBookManagementPage extends ConsumerWidget {
             IconButton(
               tooltip: '删除',
               onPressed: () => _delete(context, ref, option),
-              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+              icon: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.error,
+              ),
             ),
           ],
         ),
@@ -128,10 +141,19 @@ class WorldBookManagementPage extends ConsumerWidget {
       return;
     }
     final notifier = ref.read(worldBookOptionsProvider.notifier);
-    notifier.state = <ManagedOption>[saved, ...notifier.state];
+    final next = <ManagedOption>[saved, ...notifier.state];
+    notifier.state = next;
+    if (!context.mounted) {
+      return;
+    }
+    await _persistWorldBookCatalog(context, ref, next);
   }
 
-  Future<void> _edit(BuildContext context, WidgetRef ref, ManagedOption option) async {
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    ManagedOption option,
+  ) async {
     final saved = await Navigator.of(context).push<ManagedOption>(
       MaterialPageRoute<ManagedOption>(
         fullscreenDialog: true,
@@ -142,12 +164,21 @@ class WorldBookManagementPage extends ConsumerWidget {
       return;
     }
     final notifier = ref.read(worldBookOptionsProvider.notifier);
-    notifier.state = notifier.state
+    final next = notifier.state
         .map((item) => item.id == saved.id ? saved : item)
         .toList(growable: false);
+    notifier.state = next;
+    if (!context.mounted) {
+      return;
+    }
+    await _persistWorldBookCatalog(context, ref, next);
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, ManagedOption option) async {
+  Future<void> _delete(
+    BuildContext context,
+    WidgetRef ref,
+    ManagedOption option,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -169,9 +200,31 @@ class WorldBookManagementPage extends ConsumerWidget {
       return;
     }
     final notifier = ref.read(worldBookOptionsProvider.notifier);
-    notifier.state = notifier.state
+    final next = notifier.state
         .where((item) => item.id != option.id)
         .toList(growable: false);
+    notifier.state = next;
+    if (!context.mounted) {
+      return;
+    }
+    await _persistWorldBookCatalog(context, ref, next);
+  }
+
+  Future<void> _persistWorldBookCatalog(
+    BuildContext context,
+    WidgetRef ref,
+    List<ManagedOption> options,
+  ) async {
+    try {
+      await ref.read(apiServiceProvider).saveWorldBookCatalog(options);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('世界书保存失败: $error')));
+    }
   }
 }
 
@@ -187,10 +240,18 @@ class _WorldBookEditorPage extends StatefulWidget {
 
 class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
     with SingleTickerProviderStateMixin {
-  late final TextEditingController _name = TextEditingController(text: widget.initial.name);
-  late final TabController _tabs = TabController(length: _WorldBookCategory.values.length, vsync: this);
+  late final TextEditingController _name = TextEditingController(
+    text: widget.initial.name,
+  );
+  late final TabController _tabs = TabController(
+    length: _WorldBookCategory.values.length,
+    vsync: this,
+  );
   late List<_EntryDraft> _entries = _loadEntries(widget.initial);
-  late final String _initialSignature = _signature(widget.initial.name, _entries);
+  late final String _initialSignature = _signature(
+    widget.initial.name,
+    _entries,
+  );
 
   @override
   void dispose() {
@@ -279,7 +340,9 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   }
 
   Widget _buildTab(_WorldBookCategory category) {
-    final rows = _entries.where((item) => item.category == category).toList(growable: false);
+    final rows = _entries
+        .where((item) => item.category == category)
+        .toList(growable: false);
     return Column(
       children: [
         Align(
@@ -306,7 +369,10 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
                     final entry = rows[index];
                     final uid = _asInt(entry.data['uid']);
                     return GlassPanelCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       backgroundColor: entry.data['disable'] == true
                           ? AppColors.surfaceOverlay.withValues(alpha: 0.55)
                           : AppColors.surfaceCard.withValues(alpha: 0.92),
@@ -320,12 +386,16 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
                                   _entryTitle(entry.data),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 14, height: 1.15),
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(fontSize: 14, height: 1.15),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   'uid $uid · order ${_asInt(entry.data['order'])} · position ${_asInt(entry.data['position'])}',
-                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
                                 ),
                               ],
                             ),
@@ -351,7 +421,8 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
                             child: Switch.adaptive(
                               value: !(entry.data['disable'] == true),
                               onChanged: (value) => _toggle(uid, value),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
                             ),
                           ),
                         ],
@@ -374,7 +445,9 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   }
 
   Future<void> _edit(int uid) async {
-    final index = _entries.indexWhere((item) => _asInt(item.data['uid']) == uid);
+    final index = _entries.indexWhere(
+      (item) => _asInt(item.data['uid']) == uid,
+    );
     if (index < 0) {
       return;
     }
@@ -394,7 +467,9 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   }
 
   void _copy(int uid) {
-    final index = _entries.indexWhere((item) => _asInt(item.data['uid']) == uid);
+    final index = _entries.indexWhere(
+      (item) => _asInt(item.data['uid']) == uid,
+    );
     if (index < 0) {
       return;
     }
@@ -418,7 +493,9 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   }
 
   void _toggle(int uid, bool enabled) {
-    final index = _entries.indexWhere((item) => _asInt(item.data['uid']) == uid);
+    final index = _entries.indexWhere(
+      (item) => _asInt(item.data['uid']) == uid,
+    );
     if (index < 0) {
       return;
     }
@@ -434,7 +511,9 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   void _save() {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('世界书名称不能为空')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('世界书名称不能为空')));
       return;
     }
 
@@ -474,8 +553,14 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
         title: const Text('放弃未保存的修改？'),
         content: const Text('你已经修改了内容，现在返回会丢失本次填写。'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('继续编辑')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('放弃修改')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('放弃修改'),
+          ),
         ],
       ),
     );
@@ -494,14 +579,30 @@ class _EntryEditorPage extends StatefulWidget {
 
 class _EntryEditorPageState extends State<_EntryEditorPage> {
   late _EntryDraft _draft = widget.initial;
-  late final TextEditingController _comment = TextEditingController(text: '${_draft.data['comment'] ?? ''}');
-  late final TextEditingController _key = TextEditingController(text: _listToCsv(_draft.data['key']));
-  late final TextEditingController _keysecondary = TextEditingController(text: _listToCsv(_draft.data['keysecondary']));
-  late final TextEditingController _order = TextEditingController(text: '${_asInt(_draft.data['order'])}');
-  late final TextEditingController _position = TextEditingController(text: '${_asInt(_draft.data['position'])}');
-  late final TextEditingController _depth = TextEditingController(text: '${_asInt(_draft.data['depth'])}');
-  late final TextEditingController _probability = TextEditingController(text: '${_asInt(_draft.data['probability'])}');
-  late final TextEditingController _group = TextEditingController(text: '${_draft.data['group'] ?? ''}');
+  late final TextEditingController _comment = TextEditingController(
+    text: '${_draft.data['comment'] ?? ''}',
+  );
+  late final TextEditingController _key = TextEditingController(
+    text: _listToCsv(_draft.data['key']),
+  );
+  late final TextEditingController _keysecondary = TextEditingController(
+    text: _listToCsv(_draft.data['keysecondary']),
+  );
+  late final TextEditingController _order = TextEditingController(
+    text: '${_asInt(_draft.data['order'])}',
+  );
+  late final TextEditingController _position = TextEditingController(
+    text: '${_asInt(_draft.data['position'])}',
+  );
+  late final TextEditingController _depth = TextEditingController(
+    text: '${_asInt(_draft.data['depth'])}',
+  );
+  late final TextEditingController _probability = TextEditingController(
+    text: '${_asInt(_draft.data['probability'])}',
+  );
+  late final TextEditingController _group = TextEditingController(
+    text: '${_draft.data['group'] ?? ''}',
+  );
 
   @override
   void dispose() {
@@ -536,112 +637,155 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
           ),
           title: Text(_entryTitle(_draft.data)),
         ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              children: [
-                GlassPanelCard(
-                  child: Column(
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text('uid: $uid'),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<_WorldBookCategory>(
-                        initialValue: _draft.category,
-                        items: _WorldBookCategory.values
-                            .map((item) => DropdownMenuItem<_WorldBookCategory>(value: item, child: Text(item.label)))
-                            .toList(growable: false),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setState(() => _draft = _draft.copyWith(category: value));
-                        },
-                        decoration: const InputDecoration(labelText: 'tab'),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(controller: _comment, decoration: const InputDecoration(labelText: 'comment')),
-                      const SizedBox(height: 8),
-                      TextField(controller: _key, decoration: const InputDecoration(labelText: 'key')),
-                      const SizedBox(height: 8),
-                      TextField(controller: _keysecondary, decoration: const InputDecoration(labelText: 'keysecondary')),
-                    ],
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 920),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                children: [
+                  GlassPanelCard(
+                    child: Column(
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('uid: $uid'),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<_WorldBookCategory>(
+                          initialValue: _draft.category,
+                          items: _WorldBookCategory.values
+                              .map(
+                                (item) => DropdownMenuItem<_WorldBookCategory>(
+                                  value: item,
+                                  child: Text(item.label),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(
+                              () => _draft = _draft.copyWith(category: value),
+                            );
+                          },
+                          decoration: const InputDecoration(labelText: 'tab'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _comment,
+                          decoration: const InputDecoration(
+                            labelText: 'comment',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _key,
+                          decoration: const InputDecoration(labelText: 'key'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _keysecondary,
+                          decoration: const InputDecoration(
+                            labelText: 'keysecondary',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                GlassPanelCard(
-                  child: Column(
-                    children: [
-                      SwitchListTile(
-                        value: _draft.data['constant'] == true,
-                        onChanged: (v) => _setBool('constant', v),
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('constant'),
-                      ),
-                      SwitchListTile(
-                        value: _draft.data['disable'] == true,
-                        onChanged: (v) => _setBool('disable', v),
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('disable'),
-                      ),
-                      SwitchListTile(
-                        value: _draft.data['selective'] != false,
-                        onChanged: (v) => _setBool('selective', v),
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('selective'),
-                      ),
-                      SwitchListTile(
-                        value: _draft.data['useProbability'] != false,
-                        onChanged: (v) => _setBool('useProbability', v),
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('useProbability'),
-                      ),
-                      SwitchListTile(
-                        value: _draft.data['preventRecursion'] == true,
-                        onChanged: (v) => _setBool('preventRecursion', v),
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('preventRecursion'),
-                      ),
-                    ],
+                  const SizedBox(height: 10),
+                  GlassPanelCard(
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          value: _draft.data['constant'] == true,
+                          onChanged: (v) => _setBool('constant', v),
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('constant'),
+                        ),
+                        SwitchListTile(
+                          value: _draft.data['disable'] == true,
+                          onChanged: (v) => _setBool('disable', v),
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('disable'),
+                        ),
+                        SwitchListTile(
+                          value: _draft.data['selective'] != false,
+                          onChanged: (v) => _setBool('selective', v),
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('selective'),
+                        ),
+                        SwitchListTile(
+                          value: _draft.data['useProbability'] != false,
+                          onChanged: (v) => _setBool('useProbability', v),
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('useProbability'),
+                        ),
+                        SwitchListTile(
+                          value: _draft.data['preventRecursion'] == true,
+                          onChanged: (v) => _setBool('preventRecursion', v),
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('preventRecursion'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                GlassPanelCard(
-                  child: Column(
-                    children: [
-                      TextField(controller: _order, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'order')),
-                      const SizedBox(height: 8),
-                      TextField(controller: _position, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'position')),
-                      const SizedBox(height: 8),
-                      TextField(controller: _depth, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'depth')),
-                      const SizedBox(height: 8),
-                      TextField(controller: _probability, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'probability')),
-                      const SizedBox(height: 8),
-                      TextField(controller: _group, decoration: const InputDecoration(labelText: 'group')),
-                    ],
+                  const SizedBox(height: 10),
+                  GlassPanelCard(
+                    child: Column(
+                      children: [
+                        TextField(
+                          controller: _order,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'order'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _position,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'position',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _depth,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'depth'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _probability,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'probability',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _group,
+                          decoration: const InputDecoration(labelText: 'group'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                GlassPanelCard(
-                  child: StructuredTextEditor(
-                    initialText: '${_draft.data['content'] ?? ''}',
-                    hintText: 'content',
-                    onChanged: (value) {
-                      final next = Map<String, dynamic>.from(_draft.data);
-                      next['content'] = value;
-                      setState(() => _draft = _draft.copyWith(data: next));
-                    },
+                  const SizedBox(height: 10),
+                  GlassPanelCard(
+                    child: StructuredTextEditor(
+                      initialText: '${_draft.data['content'] ?? ''}',
+                      hintText: 'content',
+                      onChanged: (value) {
+                        final next = Map<String, dynamic>.from(_draft.data);
+                        next['content'] = value;
+                        setState(() => _draft = _draft.copyWith(data: next));
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 
@@ -699,12 +843,18 @@ List<_EntryDraft> _loadEntries(ManagedOption option) {
   final parsed = parseWorldBookEntries(option);
   final categoryMap = _loadCategoryMap(option);
   final rows = parsed
-      .map((item) => _EntryDraft(
-            data: Map<String, dynamic>.from(item),
-            category: _categoryFromName(categoryMap['${_asInt(item['uid'])}']),
-          ))
+      .map(
+        (item) => _EntryDraft(
+          data: Map<String, dynamic>.from(item),
+          category: _categoryFromName(categoryMap['${_asInt(item['uid'])}']),
+        ),
+      )
       .toList(growable: false);
-  rows.sort((a, b) => _asInt(a.data['displayIndex']).compareTo(_asInt(b.data['displayIndex'])));
+  rows.sort(
+    (a, b) => _asInt(
+      a.data['displayIndex'],
+    ).compareTo(_asInt(b.data['displayIndex'])),
+  );
   return rows;
 }
 
@@ -858,10 +1008,12 @@ String _entryTitle(Map<String, dynamic> entry) {
 
 String _signature(String name, List<_EntryDraft> entries) {
   final normalized = entries
-      .map((entry) => <String, dynamic>{
-            'category': entry.category.name,
-            'data': entry.data,
-          })
+      .map(
+        (entry) => <String, dynamic>{
+          'category': entry.category.name,
+          'data': entry.data,
+        },
+      )
       .toList(growable: false);
   return '$name::${jsonEncode(normalized)}';
 }

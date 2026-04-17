@@ -106,6 +106,36 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _worldBookCatalogHydrated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hydrateWorldBookCatalog();
+  }
+
+  Future<void> _hydrateWorldBookCatalog() async {
+    if (_worldBookCatalogHydrated) {
+      return;
+    }
+    _worldBookCatalogHydrated = true;
+
+    final apiService = ref.read(apiServiceProvider);
+    try {
+      final loaded = await apiService.loadWorldBookCatalog();
+      if (!mounted) {
+        return;
+      }
+      if (loaded == null) {
+        final defaults = ref.read(worldBookOptionsProvider);
+        await apiService.saveWorldBookCatalog(defaults);
+        return;
+      }
+      ref.read(worldBookOptionsProvider.notifier).state = loaded;
+    } catch (_) {
+      // Keep default in-memory world books when hydration fails.
+    }
+  }
 
   /// Android 系统返回层级（由高到低）：
   /// 1. 子页面路由（Navigator.push 打开的详细设置页）先返回上一页；
