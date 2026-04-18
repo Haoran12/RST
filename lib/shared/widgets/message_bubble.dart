@@ -205,28 +205,28 @@ class _ReasoningPanel extends StatelessWidget {
     final isLightTheme = Theme.of(context).brightness == Brightness.light;
     final panelBorderColor = isLightTheme
         ? const Color(0xFFD7E0EC)
-        : AppColors.borderSubtle;
+        : const Color(0xFF3D5168);
     final panelBackgroundColor = isLightTheme
         ? const Color(0xFFF2F5FA)
-        : AppColors.backgroundBase.withValues(alpha: 0.55);
+        : const Color(0xFF131C27);
     final panelTitleColor = isLightTheme
         ? const Color(0xFF4C5D72)
-        : AppColors.textMuted;
+        : const Color(0xFFAABBD0);
     final panelParagraphColor = isLightTheme
         ? const Color(0xFF2A3A4D)
-        : AppColors.textSecondary;
+        : const Color(0xFFE3EAF3);
     final panelHeadingColor = isLightTheme
         ? const Color(0xFF172433)
-        : appearance.headingColor.withValues(alpha: 0.92);
+        : const Color(0xFFF6FAFF);
     final panelItalicColor = isLightTheme
         ? const Color(0xFF596D83)
-        : appearance.italicColor;
+        : const Color(0xFFC7D4E3);
     final panelQuotedColor = isLightTheme
         ? const Color(0xFF9A6A1A)
-        : appearance.quotedColor;
+        : const Color(0xFFF3C472);
     final contentContainerColor = isLightTheme
         ? Colors.white.withValues(alpha: 0.92)
-        : AppColors.surfaceOverlay.withValues(alpha: 0.28);
+        : const Color(0xFF1B2735);
 
     final reasoningAppearance = MessageBubbleAppearance(
       paragraphColor: panelParagraphColor,
@@ -269,7 +269,9 @@ class _ReasoningPanel extends StatelessWidget {
             DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: panelBorderColor.withValues(alpha: 0.7)),
+                border: Border.all(
+                  color: panelBorderColor.withValues(alpha: 0.7),
+                ),
                 color: contentContainerColor,
               ),
               child: Padding(
