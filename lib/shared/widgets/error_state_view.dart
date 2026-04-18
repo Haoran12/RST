@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
+import 'app_notice.dart';
 import 'buttons.dart';
 import 'glass_panel_card.dart';
 
@@ -38,9 +39,12 @@ class ErrorStateView extends StatelessWidget {
                   if (!context.mounted) {
                     return;
                   }
-                  ScaffoldMessenger.of(
+                  AppNotice.show(
                     context,
-                  ).showSnackBar(const SnackBar(content: Text('错误信息已复制')));
+                    message: '错误信息已复制',
+                    tone: AppNoticeTone.success,
+                    category: 'copy_error_message',
+                  );
                 },
                 icon: const Icon(Icons.copy_all_outlined, size: 18),
               ),

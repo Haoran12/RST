@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_state.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
 
@@ -722,9 +723,12 @@ class _SessionSettingsEditorPageState
   Future<void> _submit() async {
     final normalizedName = _draft.sessionName.trim();
     if (normalizedName.isEmpty) {
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('会话名称不能为空')));
+        message: '会话名称不能为空',
+        tone: AppNoticeTone.warning,
+        category: 'session_name_required',
+      );
       return;
     }
 
@@ -751,9 +755,12 @@ class _SessionSettingsEditorPageState
         Navigator.of(context).pop(normalizedDraft);
         return;
       }
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('会话设置已保存')));
+        message: '会话设置已保存',
+        tone: AppNoticeTone.success,
+        category: 'session_settings_saved',
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -1209,9 +1216,12 @@ class _BasicConfigPageState extends State<_BasicConfigPage> {
   void _submit() {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('会话名称不能为空')));
+        message: '会话名称不能为空',
+        tone: AppNoticeTone.warning,
+        category: 'session_name_required',
+      );
       return;
     }
     Navigator.of(context).pop(

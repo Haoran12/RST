@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_state.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
@@ -302,9 +303,12 @@ class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
   void _submit() {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('名称不能为空')));
+        message: '名称不能为空',
+        tone: AppNoticeTone.warning,
+        category: 'resource_name_required',
+      );
       return;
     }
     Navigator.of(context).pop(

@@ -9,6 +9,7 @@ import '../../../core/providers/app_state.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
@@ -569,12 +570,11 @@ class _ApiConfigEditorDialogState
                                           if (!context.mounted) {
                                             return;
                                           }
-                                          ScaffoldMessenger.of(
+                                          AppNotice.show(
                                             context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('错误信息已复制'),
-                                            ),
+                                            message: '错误信息已复制',
+                                            tone: AppNoticeTone.success,
+                                            category: 'copy_error_message',
                                           );
                                         },
                                         icon: const Icon(

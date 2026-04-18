@@ -16,6 +16,7 @@ import '../../../shared/utils/reasoning_markup.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/error_state_view.dart';
 import '../../../shared/widgets/floating_composer.dart';
+import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/message_bubble.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -379,6 +380,28 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (session == null) {
       return;
     }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('删除消息'),
+          content: const Text('确定删除这条消息？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
     try {
       await ref
           .read(rustBridgeProvider)
@@ -394,16 +417,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             .where((item) => item.messageId != message.messageId)
             .toList(growable: false);
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('消息已删除')));
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(SnackBar(content: Text('删除失败: $error')));
+        message: '删除失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'chat_delete_failed',
+      );
     }
   }
 
@@ -416,9 +439,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(
+    AppNotice.show(
       context,
-    ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+      message: '已复制到剪贴板',
+      tone: AppNoticeTone.success,
+      category: 'chat_message_copied',
+    );
   }
 
   Future<void> _handleToggleVisibility(frb.MessageRecord message) async {
@@ -439,9 +465,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(SnackBar(content: Text('设置可见性失败: $error')));
+        message: '设置可见性失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'chat_visibility_failed',
+      );
     }
   }
 
@@ -525,9 +554,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(SnackBar(content: Text('编辑失败: $error')));
+        message: '编辑失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'chat_edit_failed',
+      );
     } finally {
       contentController.dispose();
       reasoningController.dispose();

@@ -213,16 +213,31 @@ List<Map<String, dynamic>> parseWorldBookEntries(ManagedOption worldBook) {
 
   final decoded = _safeDecode(rawValue.trim());
   if (decoded is Map && decoded['entries'] is Map) {
-    final entries = (decoded['entries'] as Map).values
-        .whereType<Map>()
-        .map((item) => _normalizeEntry(Map<String, dynamic>.from(item)))
-        .toList(growable: false);
-    return entries;
+    final sourceEntries = decoded['entries'] as Map;
+    final parsed = <Map<String, dynamic>>[];
+    var fallbackIndex = 0;
+    for (final item in sourceEntries.entries) {
+      final rawEntry = item.value;
+      if (rawEntry is! Map) {
+        continue;
+      }
+      parsed.add(
+        _normalizeEntry(
+          Map<String, dynamic>.from(rawEntry),
+          fallbackUid: _fallbackUidFromMapKey(
+            mapKey: item.key,
+            fallbackIndex: fallbackIndex,
+          ),
+        ),
+      );
+      fallbackIndex += 1;
+    }
+    return _ensureUniqueUids(parsed);
   }
 
   // Legacy UI format fallback.
   if (decoded is List) {
-    return decoded
+    final parsed = decoded
         .whereType<Map>()
         .toList(growable: false)
         .asMap()
@@ -232,6 +247,7 @@ List<Map<String, dynamic>> parseWorldBookEntries(ManagedOption worldBook) {
               _legacyToStEntry(Map<String, dynamic>.from(item.value), item.key),
         )
         .toList(growable: false);
+    return _ensureUniqueUids(parsed);
   }
   return const <Map<String, dynamic>>[];
 }
@@ -257,8 +273,11 @@ Map<String, dynamic> _legacyToStEntry(Map<String, dynamic> old, int index) {
   });
 }
 
-Map<String, dynamic> _normalizeEntry(Map<String, dynamic> source) {
-  final uid = _asInt(source['uid']);
+Map<String, dynamic> _normalizeEntry(
+  Map<String, dynamic> source, {
+  int? fallbackUid,
+}) {
+  final uid = _intOrDefault(source['uid'], fallbackUid ?? 0);
   return <String, dynamic>{
     'uid': uid,
     'key': _asStringList(source['key']),
@@ -308,6 +327,54 @@ Map<String, dynamic> _normalizeEntry(Map<String, dynamic> source) {
             'tags': <String>[],
           },
   };
+}
+
+int _fallbackUidFromMapKey({
+  required Object? mapKey,
+  required int fallbackIndex,
+}) {
+  if (mapKey is int) {
+    return mapKey;
+  }
+  final parsed = int.tryParse('$mapKey'.trim());
+  return parsed ?? fallbackIndex;
+}
+
+List<Map<String, dynamic>> _ensureUniqueUids(
+  List<Map<String, dynamic>> entries,
+) {
+  if (entries.isEmpty) {
+    return const <Map<String, dynamic>>[];
+  }
+  final used = <int>{};
+  var maxUid = -1;
+  for (final entry in entries) {
+    final uid = _asInt(entry['uid']);
+    if (uid > maxUid) {
+      maxUid = uid;
+    }
+  }
+
+  final normalized = <Map<String, dynamic>>[];
+  for (final entry in entries) {
+    final next = Map<String, dynamic>.from(entry);
+    var uid = _asInt(next['uid']);
+    if (uid < 0) {
+      uid = 0;
+    }
+    if (used.contains(uid)) {
+      maxUid += 1;
+      uid = maxUid;
+    }
+    if (uid > maxUid) {
+      maxUid = uid;
+    }
+    used.add(uid);
+    next['uid'] = uid;
+    next['displayIndex'] = _intOrDefault(next['displayIndex'], uid);
+    normalized.add(next);
+  }
+  return normalized;
 }
 
 List<_ActivatedEntry> _applyGroupCompetition({

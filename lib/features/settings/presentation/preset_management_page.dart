@@ -7,6 +7,7 @@ import '../../../core/models/workspace_config.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
@@ -364,9 +365,12 @@ class _PresetEditorPageState extends ConsumerState<_PresetEditorPage> {
 
     if (target.presetId == _draft.presetId) {
       if (source.isBuiltin) {
-        ScaffoldMessenger.of(
+        AppNotice.show(
           context,
-        ).showSnackBar(const SnackBar(content: Text('当前预设已包含该系统内置条目，不重复复制。')));
+          message: '当前预设已包含该系统内置条目，不重复复制。',
+          tone: AppNoticeTone.warning,
+          category: 'preset_builtin_duplicate',
+        );
         return;
       }
       final entries = _draft.entries.toList(growable: true);
@@ -383,9 +387,12 @@ class _PresetEditorPageState extends ConsumerState<_PresetEditorPage> {
     final updatedPreset = _copyEntryToPreset(targetPreset, source);
     await ref.read(presetCatalogProvider.notifier).save(updatedPreset);
     if (mounted) {
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(SnackBar(content: Text('条目已复制到“${target.presetName}”')));
+        message: '条目已复制到“${target.presetName}”',
+        tone: AppNoticeTone.success,
+        category: 'preset_entry_copied',
+      );
     }
   }
 
@@ -467,9 +474,12 @@ class _PresetEditorPageState extends ConsumerState<_PresetEditorPage> {
 
   Future<void> _save() async {
     if (_draft.name.trim().isEmpty) {
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('预设名称不能为空')));
+        message: '预设名称不能为空',
+        tone: AppNoticeTone.warning,
+        category: 'preset_name_required',
+      );
       return;
     }
     setState(() {
@@ -493,9 +503,12 @@ class _PresetEditorPageState extends ConsumerState<_PresetEditorPage> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        AppNotice.show(
           context,
-        ).showSnackBar(SnackBar(content: Text('保存失败: $error')));
+          message: '保存失败: $error',
+          tone: AppNoticeTone.error,
+          category: 'preset_save_failed',
+        );
       }
     } finally {
       if (mounted) {

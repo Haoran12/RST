@@ -7,6 +7,7 @@ import '../../../core/providers/app_state.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../core/services/world_book_injection.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
@@ -221,9 +222,12 @@ class WorldBookManagementPage extends ConsumerWidget {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(SnackBar(content: Text('世界书保存失败: $error')));
+        message: '世界书保存失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'worldbook_save_failed',
+      );
     }
   }
 }
@@ -511,9 +515,12 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   void _save() {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(
+      AppNotice.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text('世界书名称不能为空')));
+        message: '世界书名称不能为空',
+        tone: AppNoticeTone.warning,
+        category: 'worldbook_name_required',
+      );
       return;
     }
 

@@ -6,6 +6,89 @@ import 'package:rst/core/providers/app_state.dart';
 import 'package:rst/core/services/world_book_injection.dart';
 
 void main() {
+  group('parseWorldBookEntries', () {
+    test('uses map key as fallback uid when entry uid is missing', () {
+      final worldBook = _buildWorldBookFromRawJson(<String, dynamic>{
+        'entries': <String, dynamic>{
+          '12': <String, dynamic>{
+            'key': <String>['alpha'],
+            'content': 'alpha',
+          },
+          '40': <String, dynamic>{
+            'key': <String>['beta'],
+            'content': 'beta',
+          },
+        },
+      });
+
+      final parsed = parseWorldBookEntries(worldBook);
+      final uids = parsed.map((item) => item['uid']).toList(growable: false);
+      final serialized = <String, dynamic>{
+        for (final entry in parsed) '${entry['uid']}': entry,
+      };
+
+      expect(uids, containsAll(<int>[12, 40]));
+      expect(serialized.length, 2);
+    });
+
+    test('normalizes duplicate uid values to keep entries saveable', () {
+      final worldBook = _buildWorldBookFromRawJson(<String, dynamic>{
+        'entries': <String, dynamic>{
+          '0': <String, dynamic>{
+            'uid': 7,
+            'key': <String>['alpha'],
+            'content': 'alpha',
+          },
+          '1': <String, dynamic>{
+            'uid': 7,
+            'key': <String>['beta'],
+            'content': 'beta',
+          },
+        },
+      });
+
+      final parsed = parseWorldBookEntries(worldBook);
+      final uids = parsed.map((item) => item['uid'] as int).toList();
+      final serialized = <String, dynamic>{
+        for (final entry in parsed) '${entry['uid']}': entry,
+      };
+
+      expect(parsed, hasLength(2));
+      expect(uids.toSet(), hasLength(2));
+      expect(serialized.length, 2);
+    });
+  });
+
+  group('world book editor save compatibility', () {
+    test('editor-like save map keeps all parsed entries', () {
+      final worldBook = _buildWorldBookFromRawJson(<String, dynamic>{
+        'entries': <String, dynamic>{
+          '12': <String, dynamic>{
+            'key': <String>['alpha'],
+            'content': 'alpha',
+          },
+          '13': <String, dynamic>{
+            'uid': 7,
+            'key': <String>['beta'],
+            'content': 'beta',
+          },
+          '14': <String, dynamic>{
+            'uid': 7,
+            'key': <String>['gamma'],
+            'content': 'gamma',
+          },
+        },
+      });
+
+      final parsed = parseWorldBookEntries(worldBook);
+      final editorEntries = _serializeEntriesLikeWorldBookEditor(parsed);
+
+      expect(parsed, hasLength(3));
+      expect(editorEntries.length, 3);
+      expect(editorEntries.keys.toSet().length, 3);
+    });
+  });
+
   group('WorldBookInjection.buildStModeLore', () {
     test('injects lore into before and after blocks', () {
       final worldBook = _buildWorldBook(<Map<String, dynamic>>[
@@ -112,12 +195,8 @@ void main() {
   });
 }
 
-ManagedOption _buildWorldBook(List<Map<String, dynamic>> entries) {
-  final json = jsonEncode(<String, dynamic>{
-    'entries': <String, dynamic>{
-      for (final entry in entries) '${entry['uid']}': entry,
-    },
-  });
+ManagedOption _buildWorldBookFromRawJson(Map<String, dynamic> rawJson) {
+  final json = jsonEncode(rawJson);
   return ManagedOption(
     id: 'wb-test',
     name: 'wb-test',
@@ -139,6 +218,14 @@ ManagedOption _buildWorldBook(List<Map<String, dynamic>> entries) {
       ),
     ],
   );
+}
+
+ManagedOption _buildWorldBook(List<Map<String, dynamic>> entries) {
+  return _buildWorldBookFromRawJson(<String, dynamic>{
+    'entries': <String, dynamic>{
+      for (final entry in entries) '${entry['uid']}': entry,
+    },
+  });
 }
 
 Map<String, dynamic> _entry({
@@ -198,4 +285,17 @@ Map<String, dynamic> _entry({
       'tags': <String>[],
     },
   };
+}
+
+Map<String, Map<String, dynamic>> _serializeEntriesLikeWorldBookEditor(
+  List<Map<String, dynamic>> parsed,
+) {
+  final entries = <String, Map<String, dynamic>>{};
+  for (var i = 0; i < parsed.length; i += 1) {
+    final data = Map<String, dynamic>.from(parsed[i]);
+    final uid = data['uid'] as int;
+    data['displayIndex'] = i;
+    entries['$uid'] = data;
+  }
+  return entries;
 }
