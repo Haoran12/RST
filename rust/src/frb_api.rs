@@ -240,6 +240,9 @@ struct SessionFile {
     messages: Vec<MessageRecord>,
 }
 
+const WORLDBOOK_SNAPSHOT_FILE_SUFFIX: &str = ".st_worldbook.json";
+const WORLDBOOK_SNAPSHOT_ID_SUFFIX: &str = ".st_worldbook";
+
 pub fn list_sessions() -> Result<Vec<SessionSummary>> {
     let mut sessions = Vec::new();
     for path in session_paths()? {
@@ -276,7 +279,8 @@ pub fn create_session(seed: CreateSessionRequest) -> Result<SessionConfig> {
 }
 
 pub fn save_session(mut config: SessionConfig) -> Result<SessionConfig> {
-    if config.session_id.trim().is_empty() {
+    config.session_id = normalize_session_id(&config.session_id);
+    if config.session_id.is_empty() {
         return Err(anyhow!("validation_error: sessionId cannot be empty"));
     }
     validate_session_name(&config.session_name)?;
@@ -325,14 +329,18 @@ pub fn save_session(mut config: SessionConfig) -> Result<SessionConfig> {
 }
 
 pub fn rename_session(session_id: String, session_name: String) -> Result<SessionConfig> {
-    if session_id.trim().is_empty() {
+    let normalized_session_id = normalize_session_id(&session_id);
+    if normalized_session_id.is_empty() {
         return Err(anyhow!("validation_error: sessionId cannot be empty"));
     }
     validate_session_name(&session_name)?;
 
-    let path = session_file_path(&session_id)?;
+    let path = session_file_path(&normalized_session_id)?;
     if !path.exists() {
-        return Err(anyhow!("not_found: session {} does not exist", session_id));
+        return Err(anyhow!(
+            "not_found: session {} does not exist",
+            normalized_session_id
+        ));
     }
 
     let mut file = read_session_file(&path)?;
@@ -345,11 +353,12 @@ pub fn rename_session(session_id: String, session_name: String) -> Result<Sessio
 }
 
 pub fn delete_session(session_id: String) -> Result<DeleteResult> {
-    if session_id.trim().is_empty() {
+    let normalized_session_id = normalize_session_id(&session_id);
+    if normalized_session_id.is_empty() {
         return Err(anyhow!("validation_error: sessionId cannot be empty"));
     }
 
-    let path = session_file_path(&session_id)?;
+    let path = session_file_path(&normalized_session_id)?;
     if !path.exists() {
         return Ok(DeleteResult { deleted: false });
     }
@@ -359,13 +368,17 @@ pub fn delete_session(session_id: String) -> Result<DeleteResult> {
 }
 
 pub fn load_session(session_id: String) -> Result<LoadSessionResult> {
-    if session_id.trim().is_empty() {
+    let normalized_session_id = normalize_session_id(&session_id);
+    if normalized_session_id.is_empty() {
         return Err(anyhow!("validation_error: sessionId cannot be empty"));
     }
 
-    let path = session_file_path(&session_id)?;
+    let path = session_file_path(&normalized_session_id)?;
     if !path.exists() {
-        return Err(anyhow!("not_found: session {} does not exist", session_id));
+        return Err(anyhow!(
+            "not_found: session {} does not exist",
+            normalized_session_id
+        ));
     }
 
     let mut file = read_session_file(&path)?;
@@ -388,15 +401,16 @@ pub fn load_session(session_id: String) -> Result<LoadSessionResult> {
 }
 
 pub fn create_message(message: CreateMessageRequest) -> Result<MessageRecord> {
-    if message.session_id.trim().is_empty() {
+    let normalized_session_id = normalize_session_id(&message.session_id);
+    if normalized_session_id.is_empty() {
         return Err(anyhow!("validation_error: sessionId cannot be empty"));
     }
 
-    let path = session_file_path(&message.session_id)?;
+    let path = session_file_path(&normalized_session_id)?;
     if !path.exists() {
         return Err(anyhow!(
             "not_found: session {} does not exist",
-            message.session_id
+            normalized_session_id
         ));
     }
 
@@ -405,7 +419,7 @@ pub fn create_message(message: CreateMessageRequest) -> Result<MessageRecord> {
     let now = now_rfc3339();
     let record = MessageRecord {
         message_id: Uuid::new_v4().to_string(),
-        session_id: message.session_id,
+        session_id: file.config.session_id.clone(),
         role: message.role,
         floor_no: next_floor_no(&file.messages, message.role),
         content: message.content,
@@ -498,13 +512,17 @@ pub fn delete_messages(
     session_id: String,
     message_ids: Vec<String>,
 ) -> Result<DeleteMessagesResult> {
-    if session_id.trim().is_empty() {
+    let normalized_session_id = normalize_session_id(&session_id);
+    if normalized_session_id.is_empty() {
         return Err(anyhow!("validation_error: sessionId cannot be empty"));
     }
 
-    let path = session_file_path(&session_id)?;
+    let path = session_file_path(&normalized_session_id)?;
     if !path.exists() {
-        return Err(anyhow!("not_found: session {} does not exist", session_id));
+        return Err(anyhow!(
+            "not_found: session {} does not exist",
+            normalized_session_id
+        ));
     }
 
     let id_set: HashSet<String> = message_ids
@@ -554,13 +572,17 @@ pub fn delete_messages(
 }
 
 pub fn list_messages(session_id: String, limit: Option<u32>) -> Result<Vec<MessageRecord>> {
-    if session_id.trim().is_empty() {
+    let normalized_session_id = normalize_session_id(&session_id);
+    if normalized_session_id.is_empty() {
         return Err(anyhow!("validation_error: sessionId cannot be empty"));
     }
 
-    let path = session_file_path(&session_id)?;
+    let path = session_file_path(&normalized_session_id)?;
     if !path.exists() {
-        return Err(anyhow!("not_found: session {} does not exist", session_id));
+        return Err(anyhow!(
+            "not_found: session {} does not exist",
+            normalized_session_id
+        ));
     }
 
     let mut file = read_session_file(&path)?;
@@ -778,7 +800,8 @@ fn request_logs_dir() -> Result<PathBuf> {
 }
 
 fn session_file_path(session_id: &str) -> Result<PathBuf> {
-    Ok(sessions_dir()?.join(format!("{session_id}.json")))
+    let normalized_session_id = normalize_session_id(session_id);
+    Ok(sessions_dir()?.join(format!("{normalized_session_id}.json")))
 }
 
 fn session_paths() -> Result<Vec<PathBuf>> {
@@ -790,9 +813,16 @@ fn session_paths() -> Result<Vec<PathBuf>> {
     for entry in entries {
         let entry = entry.with_context(|| "failed to iterate sessions directory")?;
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
-            paths.push(path);
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
         }
+
+        let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("");
+        if is_worldbook_snapshot_sidecar_file_name(file_name) {
+            continue;
+        }
+
+        paths.push(path);
     }
     Ok(paths)
 }
@@ -1036,6 +1066,21 @@ fn now_rfc3339() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
+fn normalize_session_id(session_id: &str) -> String {
+    let trimmed = session_id.trim();
+    let without_json = trimmed.strip_suffix(".json").unwrap_or(trimmed);
+    without_json
+        .strip_suffix(WORLDBOOK_SNAPSHOT_ID_SUFFIX)
+        .unwrap_or(without_json)
+        .to_string()
+}
+
+fn is_worldbook_snapshot_sidecar_file_name(file_name: &str) -> bool {
+    file_name
+        .to_ascii_lowercase()
+        .ends_with(WORLDBOOK_SNAPSHOT_FILE_SUFFIX)
+}
+
 fn normalize_optional(value: Option<String>) -> Option<String> {
     value
         .map(|v| v.trim().to_string())
@@ -1204,6 +1249,100 @@ mod tests {
             loaded_after_complete.runtime.streaming_status,
             StreamingStatus::Idle
         );
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
+    }
+
+    #[test]
+    fn list_sessions_ignores_worldbook_snapshot_sidecar() {
+        let _guard = test_lock();
+        let workspace_dir = std::env::temp_dir().join(format!("rst-frb-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let created = create_session(CreateSessionRequest {
+            session_name: "Session With Snapshot".to_string(),
+            mode: SessionMode::St,
+            main_api_config_id: "api-default".to_string(),
+            preset_id: "preset-default".to_string(),
+            st_world_book_id: Some("wb-main".to_string()),
+        })
+        .expect("create_session should succeed");
+
+        let snapshot_path = sessions_dir()
+            .expect("sessions_dir should work")
+            .join(format!("{}.st_worldbook.json", created.session_id));
+        fs::write(
+            snapshot_path,
+            r#"{
+  "sessionId": "ignored",
+  "sourceWorldBookId": "wb-main",
+  "sourceWorldBookName": "Main",
+  "capturedAt": "2026-04-10T10:00:00Z",
+  "worldBookJson": "{\"entries\":[]}",
+  "version": 1
+}"#,
+        )
+        .expect("snapshot sidecar should be writable");
+
+        let listed = list_sessions().expect("list_sessions should succeed");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].session_id, created.session_id);
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
+    }
+
+    #[test]
+    fn load_session_accepts_snapshot_style_suffix() {
+        let _guard = test_lock();
+        let workspace_dir = std::env::temp_dir().join(format!("rst-frb-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let created = create_session(CreateSessionRequest {
+            session_name: "Suffix Session".to_string(),
+            mode: SessionMode::St,
+            main_api_config_id: "api-default".to_string(),
+            preset_id: "preset-default".to_string(),
+            st_world_book_id: Some("wb-main".to_string()),
+        })
+        .expect("create_session should succeed");
+
+        let loaded = load_session(format!("{}.st_worldbook", created.session_id))
+            .expect("load_session should normalize snapshot suffix");
+        assert_eq!(loaded.config.session_id, created.session_id);
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
+    }
+
+    #[test]
+    fn create_message_normalizes_snapshot_style_session_id() {
+        let _guard = test_lock();
+        let workspace_dir = std::env::temp_dir().join(format!("rst-frb-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let created = create_session(CreateSessionRequest {
+            session_name: "Message Session".to_string(),
+            mode: SessionMode::Rst,
+            main_api_config_id: "api-default".to_string(),
+            preset_id: "preset-default".to_string(),
+            st_world_book_id: None,
+        })
+        .expect("create_session should succeed");
+
+        let message = create_message(CreateMessageRequest {
+            session_id: format!("{}.st_worldbook", created.session_id),
+            role: MessageRole::User,
+            content: "hello".to_string(),
+            visible: true,
+            status: MessageStatus::Completed,
+        })
+        .expect("create_message should normalize snapshot suffix");
+        assert_eq!(message.session_id, created.session_id);
 
         let _ = std::fs::remove_dir_all(workspace_dir);
     }
