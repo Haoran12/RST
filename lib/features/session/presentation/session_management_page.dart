@@ -265,6 +265,8 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         ? appearanceOptions.first.id
         : 'appearance-default';
     final rstData = rstDataMap[config.sessionId];
+    var editingConfig = config;
+    var hasAutoSavedChanges = false;
 
     final initialDraft = SessionSettingsDraft(
       sessionName: config.sessionName,
@@ -280,7 +282,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
       backgroundImagePath: backgroundMap[config.sessionId] ?? '',
     );
 
-    final saved = await _openSessionEditor(
+    await _openSessionEditor(
       context,
       title: '编辑会话',
       actionLabel: '保存',
@@ -309,31 +311,38 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         labelSelector: (item) => item.name,
         fallbackId: initialDraft.appearanceId,
       ),
+      popAfterSubmit: false,
+      autoSave: true,
+      onSubmit: (draft) async {
+        final mode = _modeFromScheduler(draft.schedulerMode);
+        final updated = await sessionService.saveSession(
+          frb.SessionConfig(
+            sessionId: editingConfig.sessionId,
+            sessionName: draft.sessionName,
+            mode: mode,
+            mainApiConfigId: draft.apiConfigId,
+            presetId: draft.presetId,
+            stWorldBookId: mode == frb.SessionMode.st
+                ? draft.worldBookId
+                : null,
+            createdAt: editingConfig.createdAt,
+            updatedAt: editingConfig.updatedAt,
+          ),
+        );
+        await _syncSessionWorldBookSnapshot(
+          sessionId: updated.sessionId,
+          mode: updated.mode,
+          worldBookId: updated.stWorldBookId,
+        );
+        _applySessionScopedSettings(sessionId: updated.sessionId, draft: draft);
+        ref.read(workspaceReloadTickProvider.notifier).state++;
+        editingConfig = updated;
+        hasAutoSavedChanges = true;
+      },
     );
-    if (saved == null) {
+    if (!context.mounted || !hasAutoSavedChanges) {
       return;
     }
-
-    final mode = _modeFromScheduler(saved.schedulerMode);
-    final updated = await sessionService.saveSession(
-      frb.SessionConfig(
-        sessionId: config.sessionId,
-        sessionName: saved.sessionName,
-        mode: mode,
-        mainApiConfigId: saved.apiConfigId,
-        presetId: saved.presetId,
-        stWorldBookId: mode == frb.SessionMode.st ? saved.worldBookId : null,
-        createdAt: config.createdAt,
-        updatedAt: config.updatedAt,
-      ),
-    );
-    await _syncSessionWorldBookSnapshot(
-      sessionId: updated.sessionId,
-      mode: updated.mode,
-      worldBookId: updated.stWorldBookId,
-    );
-    _applySessionScopedSettings(sessionId: config.sessionId, draft: saved);
-    ref.read(workspaceReloadTickProvider.notifier).state++;
     _reload();
   }
 
@@ -346,6 +355,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     required List<SessionSettingsOptionEntry> presetOptions,
     required List<SessionSettingsOptionEntry> worldBookOptions,
     required List<SessionSettingsOptionEntry> appearanceOptions,
+    Future<void> Function(SessionSettingsDraft draft)? onSubmit,
+    bool popAfterSubmit = true,
+    bool autoSave = false,
   }) async {
     return Navigator.of(context).push<SessionSettingsDraft>(
       MaterialPageRoute<SessionSettingsDraft>(
@@ -358,6 +370,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
           presetOptions: presetOptions,
           worldBookOptions: worldBookOptions,
           appearanceOptions: appearanceOptions,
+          onSubmit: onSubmit,
+          popAfterSubmit: popAfterSubmit,
+          autoSave: autoSave,
         ),
       ),
     );

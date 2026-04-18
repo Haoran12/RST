@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -96,6 +98,7 @@ class SessionSettingsEditorPage extends ConsumerStatefulWidget {
     this.onSubmit,
     this.popAfterSubmit = true,
     this.enableDetailJump = false,
+    this.autoSave = false,
   });
 
   final String title;
@@ -108,6 +111,7 @@ class SessionSettingsEditorPage extends ConsumerStatefulWidget {
   final Future<void> Function(SessionSettingsDraft draft)? onSubmit;
   final bool popAfterSubmit;
   final bool enableDetailJump;
+  final bool autoSave;
 
   @override
   ConsumerState<SessionSettingsEditorPage> createState() =>
@@ -121,12 +125,22 @@ class _SessionSettingsEditorPageState
   late SessionSettingsDraft _baseline;
   bool _submitting = false;
   String? _submitError;
+  Timer? _autoSaveTimer;
+  bool _pendingAutoSave = false;
+
+  bool get _autoSaveEnabled => widget.autoSave && widget.onSubmit != null;
 
   @override
   void initState() {
     super.initState();
     _draft = widget.initialDraft;
     _baseline = widget.initialDraft;
+  }
+
+  @override
+  void dispose() {
+    _autoSaveTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -179,13 +193,15 @@ class _SessionSettingsEditorPageState
             icon: const Icon(Icons.menu_rounded),
           ),
           title: Text(widget.title),
-          actions: [
-            TextButton(
-              onPressed: _submitting ? null : _submit,
-              child: Text(_submitting ? '保存中...' : widget.actionLabel),
-            ),
-            const SizedBox(width: 4),
-          ],
+          actions: _autoSaveEnabled
+              ? const <Widget>[]
+              : <Widget>[
+                  TextButton(
+                    onPressed: _submitting ? null : () => _submit(),
+                    child: Text(_submitting ? '保存中...' : widget.actionLabel),
+                  ),
+                  const SizedBox(width: 4),
+                ],
         ),
         body: SafeArea(
           child: ListView(
@@ -262,11 +278,13 @@ class _SessionSettingsEditorPageState
                   style: const TextStyle(color: AppColors.error, fontSize: 12),
                 ),
               ],
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _submitting ? null : _submit,
-                child: Text(_submitting ? '保存中...' : widget.actionLabel),
-              ),
+              if (!_autoSaveEnabled) ...[
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: _submitting ? null : () => _submit(),
+                  child: Text(_submitting ? '保存中...' : widget.actionLabel),
+                ),
+              ],
             ],
           ),
         ),
@@ -384,9 +402,7 @@ class _SessionSettingsEditorPageState
     if (!mounted || selected == null) {
       return;
     }
-    setState(() {
-      _draft = _draft.copyWith(apiConfigId: selected.value);
-    });
+    _updateDraft(_draft.copyWith(apiConfigId: selected.value));
   }
 
   Future<void> _openPresetPicker(
@@ -411,9 +427,7 @@ class _SessionSettingsEditorPageState
     if (!mounted || selected == null) {
       return;
     }
-    setState(() {
-      _draft = _draft.copyWith(presetId: selected.value);
-    });
+    _updateDraft(_draft.copyWith(presetId: selected.value));
   }
 
   Future<void> _openSchedulerPicker() async {
@@ -445,9 +459,7 @@ class _SessionSettingsEditorPageState
     if (!mounted || selected == null) {
       return;
     }
-    setState(() {
-      _draft = _draft.copyWith(schedulerMode: selected.value);
-    });
+    _updateDraft(_draft.copyWith(schedulerMode: selected.value));
   }
 
   Future<void> _openWorldBookPicker(
@@ -475,12 +487,9 @@ class _SessionSettingsEditorPageState
     if (!mounted || selected == null) {
       return;
     }
-    setState(() {
-      _draft = _draft.copyWith(
-        worldBookId: selected.value,
-        replaceWorldBookId: true,
-      );
-    });
+    _updateDraft(
+      _draft.copyWith(worldBookId: selected.value, replaceWorldBookId: true),
+    );
   }
 
   Future<void> _openAppearancePicker(
@@ -503,9 +512,7 @@ class _SessionSettingsEditorPageState
     if (!mounted || selected == null) {
       return;
     }
-    setState(() {
-      _draft = _draft.copyWith(appearanceId: selected.value);
-    });
+    _updateDraft(_draft.copyWith(appearanceId: selected.value));
   }
 
   Future<_PickerSelection<T>?> _showPickerDrawer<T>({
@@ -642,12 +649,12 @@ class _SessionSettingsEditorPageState
     if (result == null || !mounted) {
       return;
     }
-    setState(() {
-      _draft = _draft.copyWith(
+    _updateDraft(
+      _draft.copyWith(
         sessionName: result.sessionName,
         userDescription: result.userDescription,
-      );
-    });
+      ),
+    );
   }
 
   Future<void> _openWorldBook(
@@ -667,14 +674,14 @@ class _SessionSettingsEditorPageState
     if (result == null || !mounted) {
       return;
     }
-    setState(() {
-      _draft = _draft.copyWith(
+    _updateDraft(
+      _draft.copyWith(
         worldBookId: result.worldBookId,
         replaceWorldBookId: true,
         worldDescription: result.worldDescription,
         characterDescription: result.characterDescription,
-      );
-    });
+      ),
+    );
   }
 
   Future<void> _openAppearance(
@@ -693,12 +700,12 @@ class _SessionSettingsEditorPageState
     if (result == null || !mounted) {
       return;
     }
-    setState(() {
-      _draft = _draft.copyWith(
+    _updateDraft(
+      _draft.copyWith(
         appearanceId: result.appearanceId,
         backgroundImagePath: result.backgroundImagePath,
-      );
-    });
+      ),
+    );
   }
 
   String _buildBasicSummary() {
@@ -720,24 +727,82 @@ class _SessionSettingsEditorPageState
     return '${normalized.substring(0, 40)}...';
   }
 
-  Future<void> _submit() async {
+  void _updateDraft(SessionSettingsDraft nextDraft) {
+    setState(() {
+      _draft = nextDraft;
+      _submitError = null;
+    });
+    _scheduleAutoSave();
+  }
+
+  void _scheduleAutoSave({bool immediate = false}) {
+    if (!_autoSaveEnabled) {
+      return;
+    }
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(
+      immediate ? Duration.zero : const Duration(milliseconds: 450),
+      () async {
+        if (!mounted) {
+          return;
+        }
+        await _submit(
+          fromAutoSave: true,
+          showSuccessNotice: false,
+          overridePopAfterSubmit: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> _submit({
+    bool fromAutoSave = false,
+    bool showSuccessNotice = true,
+    bool? overridePopAfterSubmit,
+  }) async {
+    if (_submitting) {
+      if (fromAutoSave) {
+        _pendingAutoSave = true;
+      }
+      return false;
+    }
+
     final normalizedName = _draft.sessionName.trim();
     if (normalizedName.isEmpty) {
-      AppNotice.show(
-        context,
-        message: '会话名称不能为空',
-        tone: AppNoticeTone.warning,
-        category: 'session_name_required',
-      );
-      return;
+      if (fromAutoSave) {
+        if (mounted) {
+          setState(() {
+            _submitError = '会话名称不能为空';
+          });
+        }
+      } else {
+        AppNotice.show(
+          context,
+          message: '会话名称不能为空',
+          tone: AppNoticeTone.warning,
+          category: 'session_name_required',
+        );
+      }
+      return false;
     }
 
     final normalizedDraft = _draft.copyWith(sessionName: normalizedName);
-    if (widget.onSubmit == null) {
-      Navigator.of(context).pop(normalizedDraft);
-      return;
+    if (normalizedDraft.sameAs(_baseline)) {
+      if (_draft.sessionName != normalizedDraft.sessionName) {
+        setState(() {
+          _draft = normalizedDraft;
+        });
+      }
+      return true;
     }
 
+    if (widget.onSubmit == null) {
+      Navigator.of(context).pop(normalizedDraft);
+      return true;
+    }
+
+    final shouldPopAfterSubmit =
+        overridePopAfterSubmit ?? widget.popAfterSubmit;
     setState(() {
       _submitting = true;
       _submitError = null;
@@ -746,38 +811,61 @@ class _SessionSettingsEditorPageState
     try {
       await widget.onSubmit!(normalizedDraft);
       if (!mounted) {
-        return;
+        return true;
       }
       setState(() {
         _baseline = normalizedDraft;
       });
-      if (widget.popAfterSubmit) {
+      if (shouldPopAfterSubmit) {
         Navigator.of(context).pop(normalizedDraft);
-        return;
+        return true;
       }
-      AppNotice.show(
-        context,
-        message: '会话设置已保存',
-        tone: AppNoticeTone.success,
-        category: 'session_settings_saved',
-      );
+      if (!fromAutoSave && showSuccessNotice) {
+        AppNotice.show(
+          context,
+          message: '会话设置已保存',
+          tone: AppNoticeTone.success,
+          category: 'session_settings_saved',
+        );
+      }
+      return true;
     } catch (error) {
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _submitError = '$error';
       });
+      return false;
     } finally {
       if (mounted) {
         setState(() {
           _submitting = false;
         });
       }
+      if (_pendingAutoSave) {
+        _pendingAutoSave = false;
+        _scheduleAutoSave(immediate: true);
+      }
     }
   }
 
   Future<bool> _handleAttemptDismiss() async {
+    if (_autoSaveEnabled && !_draft.sameAs(_baseline)) {
+      _autoSaveTimer?.cancel();
+      await _submit(
+        fromAutoSave: true,
+        showSuccessNotice: false,
+        overridePopAfterSubmit: false,
+      );
+      if (!mounted) {
+        return false;
+      }
+      if (_draft.sameAs(_baseline)) {
+        return true;
+      }
+    }
+
     if (_draft.sameAs(_baseline)) {
       return true;
     }
