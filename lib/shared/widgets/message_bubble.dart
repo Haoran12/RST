@@ -279,6 +279,7 @@ class _ReasoningPanel extends StatelessWidget {
                 child: _MarkdownMessageText(
                   content: reasoning,
                   appearance: reasoningAppearance,
+                  selectable: false,
                 ),
               ),
             ),
@@ -290,23 +291,29 @@ class _ReasoningPanel extends StatelessWidget {
 }
 
 class _MarkdownMessageText extends StatelessWidget {
-  const _MarkdownMessageText({required this.content, required this.appearance});
+  const _MarkdownMessageText({
+    required this.content,
+    required this.appearance,
+    this.selectable = true,
+  });
 
   static final RegExp _headingPattern = RegExp(r'^\s{0,3}(#{1,6})\s+(.*)$');
   static final RegExp _tokenPattern = RegExp(
     r'(\*\*[^*\n]+?\*\*|__[^_\n]+?__|\*[^*\n]+?\*|_[^_\n]+?_|"[^"\n]+"|“[^”\n]+”)',
   );
+  static final RegExp _invisibleCharsPattern = RegExp(
+    r'[\u200B\u200C\u200D\uFEFF]',
+  );
 
   final String content;
   final MessageBubbleAppearance appearance;
+  final bool selectable;
 
   @override
   Widget build(BuildContext context) {
-    final blocks = _parseBlocks(content);
-    if (blocks.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
+    final normalizedContent = content
+        .replaceAll('\r\n', '\n')
+        .replaceAll(_invisibleCharsPattern, '');
     final textTheme = Theme.of(context).textTheme;
     final baseSize =
         ((textTheme.bodyLarge?.fontSize ?? 15.0) * appearance.fontScale).clamp(
@@ -323,23 +330,35 @@ class _MarkdownMessageText extends StatelessWidget {
       fontWeight: FontWeight.w700,
       fontSize: baseSize + 1.0,
     );
+    final blocks = _parseBlocks(normalizedContent);
+    if (blocks.isEmpty) {
+      final normalized = normalizedContent.trim();
+      if (normalized.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      return _buildTextWidget(normalized, paragraphStyle);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < blocks.length; i++) ...[
           if (i > 0) const SizedBox(height: 6),
-          SelectableText.rich(
-            TextSpan(
-              children: _buildInlineSpans(
-                blocks[i].text,
-                blocks[i].isHeading ? headingStyle : paragraphStyle,
-              ),
-            ),
+          _buildTextWidget(
+            blocks[i].text,
+            blocks[i].isHeading ? headingStyle : paragraphStyle,
           ),
         ],
       ],
     );
+  }
+
+  Widget _buildTextWidget(String text, TextStyle baseStyle) {
+    final span = TextSpan(children: _buildInlineSpans(text, baseStyle));
+    if (selectable) {
+      return SelectableText.rich(span);
+    }
+    return Text.rich(span);
   }
 
   List<_MarkdownBlock> _parseBlocks(String raw) {
