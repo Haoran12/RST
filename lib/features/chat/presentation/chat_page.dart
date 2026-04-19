@@ -235,6 +235,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       final sessionScene = sessionScopedData?.scene ?? runtime.defaultScene;
       final baseLores = sessionScopedData?.lores ?? runtime.defaultLores;
       final injectedWorldBook = await _resolveWorldBookForInjection(session);
+      final worldBookScanDepth = injectedWorldBook != null
+          ? loadWorldBookScanDepth(injectedWorldBook)
+          : 4;
       final loreInjection = session.mode == frb.SessionMode.st
           ? WorldBookInjection.buildStModeLore(
               sessionId: roundSessionId,
@@ -244,6 +247,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               userDescription: sessionUserDescription,
               scene: sessionScene,
               worldBook: injectedWorldBook,
+              defaultScanDepth: worldBookScanDepth,
             )
           : StLoreInjectionResult(before: baseLores.trim(), after: '');
       await ref

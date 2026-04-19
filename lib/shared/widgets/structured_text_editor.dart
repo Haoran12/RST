@@ -44,14 +44,14 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
   late final _StructuredContentController _controller;
   late final _StructuredContentFormatter _formatter;
   late final FocusNode _focusNode;
-  final GlobalKey _assistBarAnchorKey = GlobalKey();
   late StructuredTextFormat _selectedFormat;
   late _EditorContentStatus _status;
   Timer? _autoFormatTimer;
   bool _applyingAutoFormat = false;
   bool _syncingHighlights = false;
   bool _isFocused = false;
-  double _lastKeyboardInset = 0;
+  double _keyboardHeight = 0;
+  bool _keyboardVisible = false;
 
   @override
   void initState() {
@@ -114,7 +114,6 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
   @override
   Widget build(BuildContext context) {
     final status = _status;
-    final bottomPadding = _resolveKeyboardInset();
     return Container(
       height: widget.height,
       decoration: BoxDecoration(
@@ -183,27 +182,19 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
               ),
             ),
           ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 140),
-            child: _isFocused
-                ? Container(
-                    key: _assistBarAnchorKey,
-                    child: Padding(
-                      key: const ValueKey('assist-bar-visible'),
-                      padding: EdgeInsets.only(bottom: bottomPadding),
-                      child: _StructuredEditorAssistBar(
-                        onFullscreen: _openFullscreenEditor,
-                        onInsertColon: () => _insertLiteral(':'),
-                        onInsertDoubleQuote: () => _insertWrapped('"', '"'),
-                        onInsertBraces: () => _insertWrapped('{', '}'),
-                        onInsertBrackets: () => _insertWrapped('[', ']'),
-                        onInsertParentheses: () => _insertWrapped('(', ')'),
-                        onInsertHash: () => _insertLiteral('#'),
-                      ),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
+          if (_isFocused)
+            Transform.translate(
+              offset: Offset(0, _keyboardHeight),
+              child: _StructuredEditorAssistBar(
+                onFullscreen: _openFullscreenEditor,
+                onInsertColon: () => _insertLiteral(':'),
+                onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+                onInsertBraces: () => _insertWrapped('{', '}'),
+                onInsertBrackets: () => _insertWrapped('[', ']'),
+                onInsertParentheses: () => _insertWrapped('(', ')'),
+                onInsertHash: () => _insertLiteral('#'),
+              ),
+            ),
         ],
       ),
     );
@@ -217,24 +208,22 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
     setState(() {
       _isFocused = focused;
     });
-    if (focused) {
-      _ensureAssistBarVisible();
-    }
   }
 
   @override
   void didChangeMetrics() {
-    if (!mounted || !_isFocused) {
+    if (!mounted) {
       return;
     }
-    final currentInset = _resolveKeyboardInset();
-    if ((currentInset - _lastKeyboardInset).abs() < 0.1) {
+    final keyboardHeight = _resolveKeyboardInset();
+    final keyboardVisible = keyboardHeight > 0;
+    if (_keyboardHeight == keyboardHeight && _keyboardVisible == keyboardVisible) {
       return;
     }
-    _lastKeyboardInset = currentInset;
-    if (currentInset > 0) {
-      _ensureAssistBarVisible();
-    }
+    setState(() {
+      _keyboardHeight = keyboardHeight;
+      _keyboardVisible = keyboardVisible;
+    });
   }
 
   double _resolveKeyboardInset() {
@@ -245,25 +234,6 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
     }
     final rawInset = view.viewInsets.bottom / view.devicePixelRatio;
     return rawInset > mediaInset ? rawInset : mediaInset;
-  }
-
-  void _ensureAssistBarVisible() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_isFocused) {
-        return;
-      }
-      final anchorContext = _assistBarAnchorKey.currentContext;
-      if (anchorContext == null) {
-        return;
-      }
-      Scrollable.ensureVisible(
-        anchorContext,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        alignment: 1,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-      );
-    });
   }
 
   void _insertLiteral(String value) {
@@ -667,14 +637,17 @@ class _FullscreenStructuredEditorSheet extends StatefulWidget {
 }
 
 class _FullscreenStructuredEditorSheetState
-    extends State<_FullscreenStructuredEditorSheet> {
+    extends State<_FullscreenStructuredEditorSheet>
+    with WidgetsBindingObserver {
   late final TextEditingController _controller;
   late final _StructuredContentFormatter _formatter;
   late final FocusNode _focusNode;
+  double _keyboardHeight = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = TextEditingController(text: widget.initialText);
     _formatter = _StructuredContentFormatter(
       currentKind: () => widget.initialFormat,
@@ -689,9 +662,24 @@ class _FullscreenStructuredEditorSheetState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted) {
+      return;
+    }
+    final keyboardHeight = MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0;
+    if (_keyboardHeight == keyboardHeight) {
+      return;
+    }
+    setState(() {
+      _keyboardHeight = keyboardHeight;
+    });
   }
 
   void _applyAndClose() {
@@ -768,7 +756,7 @@ class _FullscreenStructuredEditorSheetState
                 children: [
                   IconButton(
                     tooltip: '关闭',
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(context).pop(_controller.text),
                     icon: const Icon(Icons.close_rounded),
                   ),
                   const SizedBox(width: 4),
@@ -817,14 +805,17 @@ class _FullscreenStructuredEditorSheetState
                 ),
               ),
             ),
-            _StructuredEditorAssistBar(
-              onFullscreen: _applyAndClose,
-              onInsertColon: () => _insertLiteral(':'),
-              onInsertDoubleQuote: () => _insertWrapped('"', '"'),
-              onInsertBraces: () => _insertWrapped('{', '}'),
-              onInsertBrackets: () => _insertWrapped('[', ']'),
-              onInsertParentheses: () => _insertWrapped('(', ')'),
-              onInsertHash: () => _insertLiteral('#'),
+            Padding(
+              padding: EdgeInsets.only(bottom: _keyboardHeight),
+              child: _StructuredEditorAssistBar(
+                onFullscreen: _applyAndClose,
+                onInsertColon: () => _insertLiteral(':'),
+                onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+                onInsertBraces: () => _insertWrapped('{', '}'),
+                onInsertBrackets: () => _insertWrapped('[', ']'),
+                onInsertParentheses: () => _insertWrapped('(', ')'),
+                onInsertHash: () => _insertLiteral('#'),
+              ),
             ),
           ],
         ),

@@ -14,6 +14,7 @@ import '../../../shared/widgets/glass_panel_card.dart';
 import '../../../shared/widgets/structured_text_editor.dart';
 
 const String _worldBookCategoryFieldKey = 'worldbook_ui_categories';
+const String _worldBookScanDepthFieldKey = 'worldbook_scan_depth';
 
 enum _WorldBookCategory {
   character('人物'),
@@ -314,6 +315,9 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   late final TextEditingController _name = TextEditingController(
     text: widget.initial.name,
   );
+  late final TextEditingController _scanDepth = TextEditingController(
+    text: '${_loadScanDepth(widget.initial)}',
+  );
   late final TabController _tabs = TabController(
     length: _WorldBookCategory.values.length,
     vsync: this,
@@ -327,6 +331,7 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   @override
   void dispose() {
     _name.dispose();
+    _scanDepth.dispose();
     _tabs.dispose();
     super.dispose();
   }
@@ -370,9 +375,34 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
                 child: Column(
                   children: [
                     GlassPanelCard(
-                      child: TextField(
-                        controller: _name,
-                        decoration: const InputDecoration(labelText: '世界书名称'),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _name,
+                            decoration: const InputDecoration(labelText: '世界书名称'),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Text('扫描深度'),
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                width: 80,
+                                height: 36,
+                                child: TextField(
+                                  controller: _scanDepth,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                  ),
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                              const Spacer(),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -602,10 +632,12 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
     }
     final worldbookJson = jsonEncode(<String, dynamic>{'entries': entries});
     final categoryJson = jsonEncode(categories);
+    final scanDepthValue = _asInt(_scanDepth.text).clamp(0, 2048);
 
     var sections = widget.initial.sections;
     sections = _upsertField(sections, worldBookJsonFieldKey, worldbookJson);
     sections = _upsertField(sections, _worldBookCategoryFieldKey, categoryJson);
+    sections = _upsertField(sections, _worldBookScanDepthFieldKey, '$scanDepthValue');
 
     Navigator.of(context).pop(
       widget.initial.copyWith(
@@ -662,32 +694,26 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
   late final TextEditingController _keysecondary = TextEditingController(
     text: _listToCsv(_draft.data['keysecondary']),
   );
-  late final TextEditingController _order = TextEditingController(
-    text: '${_asInt(_draft.data['order'])}',
+  late final TextEditingController _probabilityPercent = TextEditingController(
+    text: _getProbabilityPercentText(_draft.data),
   );
-  late final TextEditingController _position = TextEditingController(
-    text: '${_asInt(_draft.data['position'])}',
-  );
-  late final TextEditingController _depth = TextEditingController(
-    text: '${_asInt(_draft.data['depth'])}',
-  );
-  late final TextEditingController _probability = TextEditingController(
-    text: '${_asInt(_draft.data['probability'])}',
-  );
-  late final TextEditingController _group = TextEditingController(
-    text: '${_draft.data['group'] ?? ''}',
-  );
+  late final String _initialSignature = _entrySignature(_draft);
+
+  static String _getProbabilityPercentText(Map<String, dynamic> data) {
+    final useProbability = data['useProbability'] != false;
+    if (useProbability) {
+      return '100';
+    }
+    final probability = _asInt(data['probability']).clamp(0, 100);
+    return '$probability';
+  }
 
   @override
   void dispose() {
     _comment.dispose();
     _key.dispose();
     _keysecondary.dispose();
-    _order.dispose();
-    _position.dispose();
-    _depth.dispose();
-    _probability.dispose();
-    _group.dispose();
+    _probabilityPercent.dispose();
     super.dispose();
   }
 
@@ -696,8 +722,12 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
     final uid = _asInt(_draft.data['uid']);
     return PopScope<_EntryDraft>(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) {
+          return;
+        }
+        final shouldClose = await _confirmDiscard();
+        if (!mounted || !shouldClose) {
           return;
         }
         Navigator.of(context).pop(_buildResult());
@@ -706,7 +736,13 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
         appBar: AppBar(
           leading: IconButton(
             tooltip: '返回',
-            onPressed: () => Navigator.of(context).pop(_buildResult()),
+            onPressed: () async {
+              final shouldClose = await _confirmDiscard();
+              if (!mounted || !shouldClose) {
+                return;
+              }
+              Navigator.of(context).pop(_buildResult());
+            },
             icon: const Icon(Icons.arrow_back_rounded),
           ),
           title: Text(_entryTitle(_draft.data)),
@@ -768,82 +804,6 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
                   ),
                   const SizedBox(height: 10),
                   GlassPanelCard(
-                    child: Column(
-                      children: [
-                        SwitchListTile(
-                          value: _draft.data['constant'] == true,
-                          onChanged: (v) => _setBool('constant', v),
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('constant'),
-                        ),
-                        SwitchListTile(
-                          value: _draft.data['disable'] == true,
-                          onChanged: (v) => _setBool('disable', v),
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('disable'),
-                        ),
-                        SwitchListTile(
-                          value: _draft.data['selective'] != false,
-                          onChanged: (v) => _setBool('selective', v),
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('selective'),
-                        ),
-                        SwitchListTile(
-                          value: _draft.data['useProbability'] != false,
-                          onChanged: (v) => _setBool('useProbability', v),
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('useProbability'),
-                        ),
-                        SwitchListTile(
-                          value: _draft.data['preventRecursion'] == true,
-                          onChanged: (v) => _setBool('preventRecursion', v),
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('preventRecursion'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  GlassPanelCard(
-                    child: Column(
-                      children: [
-                        TextField(
-                          controller: _order,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'order'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _position,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'position',
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _depth,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'depth'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _probability,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'probability',
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _group,
-                          decoration: const InputDecoration(labelText: 'group'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  GlassPanelCard(
                     child: StructuredTextEditor(
                       initialText: '${_draft.data['content'] ?? ''}',
                       hintText: 'content',
@@ -852,6 +812,50 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
                         next['content'] = value;
                         setState(() => _draft = _draft.copyWith(data: next));
                       },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  GlassPanelCard(
+                    child: Column(
+                      children: [
+                        SwitchListTile(
+                          value: _draft.data['constant'] == true,
+                          onChanged: (v) => _setBool('constant', v),
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('constant'),
+                        ),
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text('概率 (%)'),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              height: 36,
+                              child: TextField(
+                                controller: _probabilityPercent,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                  hintText: '0.1-100',
+                                ),
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  GlassPanelCard(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('高级选项'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _openAdvancedOptions(),
                     ),
                   ),
                 ],
@@ -869,17 +873,65 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
     setState(() => _draft = _draft.copyWith(data: next));
   }
 
+  Future<void> _openAdvancedOptions() async {
+    final updated = await Navigator.of(context).push<_EntryDraft>(
+      MaterialPageRoute<_EntryDraft>(
+        builder: (_) => _EntryAdvancedOptionsPage(initial: _draft),
+      ),
+    );
+    if (updated != null) {
+      setState(() => _draft = updated);
+    }
+  }
+
   _EntryDraft _buildResult() {
     final next = Map<String, dynamic>.from(_draft.data);
     next['comment'] = _comment.text.trim();
     next['key'] = _csvToList(_key.text);
     next['keysecondary'] = _csvToList(_keysecondary.text);
-    next['order'] = _asInt(_order.text);
-    next['position'] = _asInt(_position.text);
-    next['depth'] = _asInt(_depth.text);
-    next['probability'] = _asInt(_probability.text).clamp(0, 100);
-    next['group'] = _group.text.trim();
+    final percentValue = _parseProbabilityPercent(_probabilityPercent.text);
+    if (percentValue > 99) {
+      next['useProbability'] = false;
+      next['probability'] = 100;
+    } else {
+      next['useProbability'] = true;
+      next['probability'] = percentValue.round();
+    }
     return _draft.copyWith(data: next);
+  }
+
+  Future<bool> _confirmDiscard() async {
+    final currentSignature = _entrySignature(_buildResult());
+    if (currentSignature == _initialSignature) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('放弃未保存的修改？'),
+        content: const Text('你已经修改了内容，现在返回会丢失本次填写。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('放弃修改'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  static int _parseProbabilityPercent(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return 100;
+    final parsed = double.tryParse(trimmed);
+    if (parsed == null) return 100;
+    return parsed.clamp(0.0, 100.0).round();
   }
 }
 
@@ -913,6 +965,307 @@ class _MiniIcon extends StatelessWidget {
   }
 }
 
+class _EntryAdvancedOptionsPage extends StatefulWidget {
+  const _EntryAdvancedOptionsPage({required this.initial});
+
+  final _EntryDraft initial;
+
+  @override
+  State<_EntryAdvancedOptionsPage> createState() => _EntryAdvancedOptionsPageState();
+}
+
+class _EntryAdvancedOptionsPageState extends State<_EntryAdvancedOptionsPage> {
+  late Map<String, dynamic> _data = Map<String, dynamic>.from(widget.initial.data);
+  late final TextEditingController _order = TextEditingController(
+    text: '${_asInt(_data['order'])}',
+  );
+  late final TextEditingController _position = TextEditingController(
+    text: '${_asInt(_data['position'])}',
+  );
+  late final TextEditingController _depth = TextEditingController(
+    text: '${_asInt(_data['depth'])}',
+  );
+  late final TextEditingController _probability = TextEditingController(
+    text: '${_asInt(_data['probability'])}',
+  );
+  late final TextEditingController _group = TextEditingController(
+    text: '${_data['group'] ?? ''}',
+  );
+  late final TextEditingController _scanDepth = TextEditingController(
+    text: '${_data['scanDepth'] ?? ''}',
+  );
+  late final TextEditingController _selectiveLogic = TextEditingController(
+    text: '${_asInt(_data['selectiveLogic'])}',
+  );
+  late final TextEditingController _groupWeight = TextEditingController(
+    text: '${_asInt(_data['groupWeight'])}',
+  );
+  late final TextEditingController _sticky = TextEditingController(
+    text: '${_asInt(_data['sticky'])}',
+  );
+  late final TextEditingController _cooldown = TextEditingController(
+    text: '${_asInt(_data['cooldown'])}',
+  );
+  late final TextEditingController _delay = TextEditingController(
+    text: '${_asInt(_data['delay'])}',
+  );
+  late final TextEditingController _automationId = TextEditingController(
+    text: '${_data['automationId'] ?? ''}',
+  );
+
+  @override
+  void dispose() {
+    _order.dispose();
+    _position.dispose();
+    _depth.dispose();
+    _probability.dispose();
+    _group.dispose();
+    _scanDepth.dispose();
+    _selectiveLogic.dispose();
+    _groupWeight.dispose();
+    _sticky.dispose();
+    _cooldown.dispose();
+    _delay.dispose();
+    _automationId.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: '返回',
+          onPressed: () => Navigator.of(context).pop(_buildResult()),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text('高级选项'),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 920),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              children: [
+                GlassPanelCard(
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        value: _data['disable'] == true,
+                        onChanged: (v) => _setBool('disable', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('disable'),
+                      ),
+                      SwitchListTile(
+                        value: _data['selective'] != false,
+                        onChanged: (v) => _setBool('selective', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('selective'),
+                      ),
+                      SwitchListTile(
+                        value: _data['preventRecursion'] == true,
+                        onChanged: (v) => _setBool('preventRecursion', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('preventRecursion'),
+                      ),
+                      SwitchListTile(
+                        value: _data['vectorized'] == true,
+                        onChanged: (v) => _setBool('vectorized', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('vectorized'),
+                      ),
+                      SwitchListTile(
+                        value: _data['addMemo'] != false,
+                        onChanged: (v) => _setBool('addMemo', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('addMemo'),
+                      ),
+                      SwitchListTile(
+                        value: _data['ignoreBudget'] == true,
+                        onChanged: (v) => _setBool('ignoreBudget', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('ignoreBudget'),
+                      ),
+                      SwitchListTile(
+                        value: _data['excludeRecursion'] == true,
+                        onChanged: (v) => _setBool('excludeRecursion', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('excludeRecursion'),
+                      ),
+                      SwitchListTile(
+                        value: _data['groupOverride'] == true,
+                        onChanged: (v) => _setBool('groupOverride', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('groupOverride'),
+                      ),
+                      SwitchListTile(
+                        value: _data['delayUntilRecursion'] == true,
+                        onChanged: (v) => _setBool('delayUntilRecursion', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('delayUntilRecursion'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                GlassPanelCard(
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        value: _data['matchPersonaDescription'] == true,
+                        onChanged: (v) => _setBool('matchPersonaDescription', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('matchPersonaDescription'),
+                      ),
+                      SwitchListTile(
+                        value: _data['matchCharacterDescription'] == true,
+                        onChanged: (v) => _setBool('matchCharacterDescription', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('matchCharacterDescription'),
+                      ),
+                      SwitchListTile(
+                        value: _data['matchCharacterPersonality'] == true,
+                        onChanged: (v) => _setBool('matchCharacterPersonality', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('matchCharacterPersonality'),
+                      ),
+                      SwitchListTile(
+                        value: _data['matchCharacterDepthPrompt'] == true,
+                        onChanged: (v) => _setBool('matchCharacterDepthPrompt', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('matchCharacterDepthPrompt'),
+                      ),
+                      SwitchListTile(
+                        value: _data['matchScenario'] == true,
+                        onChanged: (v) => _setBool('matchScenario', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('matchScenario'),
+                      ),
+                      SwitchListTile(
+                        value: _data['matchCreatorNotes'] == true,
+                        onChanged: (v) => _setBool('matchCreatorNotes', v),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('matchCreatorNotes'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                GlassPanelCard(
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _order,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'order'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _position,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'position'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _depth,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'depth'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _probability,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'probability'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _group,
+                        decoration: const InputDecoration(labelText: 'group'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _scanDepth,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'scanDepth (留空使用世界书默认值)'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _selectiveLogic,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'selectiveLogic'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _groupWeight,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'groupWeight'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                GlassPanelCard(
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _sticky,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'sticky'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _cooldown,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'cooldown'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _delay,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'delay'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _automationId,
+                        decoration: const InputDecoration(labelText: 'automationId'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setBool(String key, bool value) {
+    final next = Map<String, dynamic>.from(_data);
+    next[key] = value;
+    setState(() => _data = next);
+  }
+
+  _EntryDraft _buildResult() {
+    final next = Map<String, dynamic>.from(_data);
+    next['order'] = _asInt(_order.text);
+    next['position'] = _asInt(_position.text);
+    next['depth'] = _asInt(_depth.text);
+    next['probability'] = _asInt(_probability.text).clamp(0, 100);
+    next['group'] = _group.text.trim();
+    final scanDepthText = _scanDepth.text.trim();
+    next['scanDepth'] = scanDepthText.isEmpty ? null : _asInt(scanDepthText);
+    next['selectiveLogic'] = _asInt(_selectiveLogic.text);
+    next['groupWeight'] = _asInt(_groupWeight.text);
+    next['sticky'] = _asInt(_sticky.text);
+    next['cooldown'] = _asInt(_cooldown.text);
+    next['delay'] = _asInt(_delay.text);
+    next['automationId'] = _automationId.text.trim();
+    return widget.initial.copyWith(data: next);
+  }
+}
+
 List<_EntryDraft> _loadEntries(ManagedOption option) {
   final parsed = parseWorldBookEntries(option);
   final categoryMap = _loadCategoryMap(option);
@@ -943,6 +1296,14 @@ Map<String, String> _loadCategoryMap(ManagedOption option) {
     } catch (_) {}
   }
   return const <String, String>{};
+}
+
+int _loadScanDepth(ManagedOption option) {
+  final raw = option.fieldValue(_worldBookScanDepthFieldKey);
+  if (raw is String && raw.trim().isNotEmpty) {
+    return _asInt(raw);
+  }
+  return 4;
 }
 
 List<ManagedOptionSection> _upsertField(
@@ -1078,6 +1439,10 @@ String _entryTitle(Map<String, dynamic> entry) {
     return '${key.first}';
   }
   return 'uid ${_asInt(entry['uid'])}';
+}
+
+String _entrySignature(_EntryDraft entry) {
+  return jsonEncode(entry.data);
 }
 
 String _signature(String name, List<_EntryDraft> entries) {

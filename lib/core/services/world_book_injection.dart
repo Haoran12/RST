@@ -5,6 +5,18 @@ import '../providers/app_state.dart';
 
 const String worldBookJsonFieldKey = 'worldbook_json';
 const String worldBookLegacyEntriesFieldKey = 'entries_json';
+const String worldBookScanDepthFieldKey = 'worldbook_scan_depth';
+
+int loadWorldBookScanDepth(ManagedOption worldBook) {
+  final raw = worldBook.fieldValue(worldBookScanDepthFieldKey);
+  if (raw is String && raw.trim().isNotEmpty) {
+    final value = int.tryParse(raw.trim());
+    if (value != null && value >= 0) {
+      return value;
+    }
+  }
+  return 4;
+}
 
 class StLoreInjectionResult {
   const StLoreInjectionResult({
@@ -55,7 +67,7 @@ class WorldBookInjection {
     required String scene,
     required ManagedOption? worldBook,
     String trigger = 'chat',
-    int defaultScanDepth = 12,
+    int defaultScanDepth = 4,
   }) {
     final base = baseLores.trim();
     if (worldBook == null) {
