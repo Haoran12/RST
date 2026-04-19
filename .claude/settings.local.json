@@ -3,7 +3,8 @@
     "allow": [
       "Bash(pwsh:*)",
       "Bash(flutter analyze:*)",
-      "Bash(dart run --enable-asserts -e ':*)"
+      "Bash(dart run --enable-asserts -e ':*)",
+      "Bash(flutter test *)"
     ]
   }
 }

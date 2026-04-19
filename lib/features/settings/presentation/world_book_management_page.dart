@@ -53,9 +53,34 @@ class WorldBookManagementPage extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: PrimaryPillButton(
-              label: '新建世界书',
-              onPressed: () => _create(context, ref),
+            child: Row(
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    PrimaryPillButton(
+                      label: '新建世界书',
+                      onPressed: () => _create(context, ref),
+                    ),
+                    SecondaryOutlineButton(
+                      label: '刷新',
+                      onPressed: () => _refresh(context, ref),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: '导入',
+                  onPressed: () => _import(context, ref),
+                  icon: const Icon(Icons.file_download_outlined),
+                ),
+                IconButton(
+                  tooltip: '导出',
+                  onPressed: () => _export(context, ref),
+                  icon: const Icon(Icons.file_upload_outlined),
+                ),
+              ],
             ),
           ),
           if (options.isEmpty)
@@ -229,6 +254,48 @@ class WorldBookManagementPage extends ConsumerWidget {
         category: 'worldbook_save_failed',
       );
     }
+  }
+
+  Future<void> _refresh(BuildContext context, WidgetRef ref) async {
+    try {
+      final loaded = await ref.read(apiServiceProvider).loadWorldBookCatalog();
+      if (!context.mounted) {
+        return;
+      }
+      if (loaded != null) {
+        ref.read(worldBookOptionsProvider.notifier).state = loaded;
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '刷新失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'worldbook_refresh_failed',
+      );
+    }
+  }
+
+  Future<void> _import(BuildContext context, WidgetRef ref) async {
+    // TODO: 实现导入功能
+    AppNotice.show(
+      context,
+      message: '导入功能即将上线',
+      tone: AppNoticeTone.info,
+      category: 'worldbook_import_placeholder',
+    );
+  }
+
+  Future<void> _export(BuildContext context, WidgetRef ref) async {
+    // TODO: 实现导出功能
+    AppNotice.show(
+      context,
+      message: '导出功能即将上线',
+      tone: AppNoticeTone.info,
+      category: 'worldbook_export_placeholder',
+    );
   }
 }
 

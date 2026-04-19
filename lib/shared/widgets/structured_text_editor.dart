@@ -39,20 +39,24 @@ class StructuredTextEditor extends StatefulWidget {
   State<StructuredTextEditor> createState() => _StructuredTextEditorState();
 }
 
-class _StructuredTextEditorState extends State<StructuredTextEditor> {
+class _StructuredTextEditorState extends State<StructuredTextEditor>
+    with WidgetsBindingObserver {
   late final _StructuredContentController _controller;
   late final _StructuredContentFormatter _formatter;
   late final FocusNode _focusNode;
+  final GlobalKey _assistBarAnchorKey = GlobalKey();
   late StructuredTextFormat _selectedFormat;
   late _EditorContentStatus _status;
   Timer? _autoFormatTimer;
   bool _applyingAutoFormat = false;
   bool _syncingHighlights = false;
   bool _isFocused = false;
+  double _lastKeyboardInset = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = _StructuredContentController(text: widget.initialText);
     _selectedFormat =
         widget.initialFormat ??
@@ -96,6 +100,7 @@ class _StructuredTextEditorState extends State<StructuredTextEditor> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoFormatTimer?.cancel();
     _focusNode
       ..removeListener(_handleFocusChanged)
@@ -109,7 +114,7 @@ class _StructuredTextEditorState extends State<StructuredTextEditor> {
   @override
   Widget build(BuildContext context) {
     final status = _status;
-    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    final bottomPadding = _resolveKeyboardInset();
     return Container(
       height: widget.height,
       decoration: BoxDecoration(
@@ -181,17 +186,20 @@ class _StructuredTextEditorState extends State<StructuredTextEditor> {
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 140),
             child: _isFocused
-                ? Padding(
-                    key: const ValueKey('assist-bar-visible'),
-                    padding: EdgeInsets.only(bottom: bottomPadding),
-                    child: _StructuredEditorAssistBar(
-                      onFullscreen: _openFullscreenEditor,
-                      onInsertColon: () => _insertLiteral(':'),
-                      onInsertDoubleQuote: () => _insertWrapped('"', '"'),
-                      onInsertBraces: () => _insertWrapped('{', '}'),
-                      onInsertBrackets: () => _insertWrapped('[', ']'),
-                      onInsertParentheses: () => _insertWrapped('(', ')'),
-                      onInsertHash: () => _insertLiteral('#'),
+                ? Container(
+                    key: _assistBarAnchorKey,
+                    child: Padding(
+                      key: const ValueKey('assist-bar-visible'),
+                      padding: EdgeInsets.only(bottom: bottomPadding),
+                      child: _StructuredEditorAssistBar(
+                        onFullscreen: _openFullscreenEditor,
+                        onInsertColon: () => _insertLiteral(':'),
+                        onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+                        onInsertBraces: () => _insertWrapped('{', '}'),
+                        onInsertBrackets: () => _insertWrapped('[', ']'),
+                        onInsertParentheses: () => _insertWrapped('(', ')'),
+                        onInsertHash: () => _insertLiteral('#'),
+                      ),
                     ),
                   )
                 : const SizedBox.shrink(),
@@ -208,6 +216,53 @@ class _StructuredTextEditorState extends State<StructuredTextEditor> {
     }
     setState(() {
       _isFocused = focused;
+    });
+    if (focused) {
+      _ensureAssistBarVisible();
+    }
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted || !_isFocused) {
+      return;
+    }
+    final currentInset = _resolveKeyboardInset();
+    if ((currentInset - _lastKeyboardInset).abs() < 0.1) {
+      return;
+    }
+    _lastKeyboardInset = currentInset;
+    if (currentInset > 0) {
+      _ensureAssistBarVisible();
+    }
+  }
+
+  double _resolveKeyboardInset() {
+    final mediaInset = MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0;
+    final view = View.maybeOf(context);
+    if (view == null) {
+      return mediaInset;
+    }
+    final rawInset = view.viewInsets.bottom / view.devicePixelRatio;
+    return rawInset > mediaInset ? rawInset : mediaInset;
+  }
+
+  void _ensureAssistBarVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isFocused) {
+        return;
+      }
+      final anchorContext = _assistBarAnchorKey.currentContext;
+      if (anchorContext == null) {
+        return;
+      }
+      Scrollable.ensureVisible(
+        anchorContext,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        alignment: 1,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
     });
   }
 
@@ -729,7 +784,10 @@ class _FullscreenStructuredEditorSheetState
                       ),
                     ),
                   ),
-                  TextButton(onPressed: _applyAndClose, child: const Text('应用')),
+                  TextButton(
+                    onPressed: _applyAndClose,
+                    child: const Text('应用'),
+                  ),
                 ],
               ),
             ),

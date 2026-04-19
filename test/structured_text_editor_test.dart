@@ -23,25 +23,26 @@ void main() {
     return tester.widget<TextField>(finder).controller!;
   }
 
-  testWidgets('yaml newline indents child blocks and keeps sibling indentation', (
-    WidgetTester tester,
-  ) async {
-    await pumpEditor(tester);
+  testWidgets(
+    'yaml newline indents child blocks and keeps sibling indentation',
+    (WidgetTester tester) async {
+      await pumpEditor(tester);
 
-    final editor = find.byType(TextField).first;
+      final editor = find.byType(TextField).first;
 
-    await tester.enterText(editor, 'profile:');
-    await tester.pump();
-    await tester.enterText(editor, 'profile:\n');
-    await tester.pump();
-    expect(controllerOf(tester, editor).text, 'profile:\n  ');
+      await tester.enterText(editor, 'profile:');
+      await tester.pump();
+      await tester.enterText(editor, 'profile:\n');
+      await tester.pump();
+      expect(controllerOf(tester, editor).text, 'profile:\n  ');
 
-    await tester.enterText(editor, 'profile:\n  name: Alice');
-    await tester.pump();
-    await tester.enterText(editor, 'profile:\n  name: Alice\n');
-    await tester.pump();
-    expect(controllerOf(tester, editor).text, 'profile:\n  name: Alice\n  ');
-  });
+      await tester.enterText(editor, 'profile:\n  name: Alice');
+      await tester.pump();
+      await tester.enterText(editor, 'profile:\n  name: Alice\n');
+      await tester.pump();
+      expect(controllerOf(tester, editor).text, 'profile:\n  name: Alice\n  ');
+    },
+  );
 
   testWidgets('fullscreen editor uses the same yaml indentation rules', (
     WidgetTester tester,
@@ -62,4 +63,43 @@ void main() {
 
     expect(controllerOf(tester, fullscreenEditor).text, 'profile:\n  ');
   });
+
+  testWidgets(
+    'assist bar uses keyboard inset even when MediaQuery inset is zero',
+    (WidgetTester tester) async {
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      addTearDown(tester.view.resetViewInsets);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(viewInsets: EdgeInsets.zero),
+                child: StructuredTextEditor(
+                  initialText: '',
+                  initialFormat: StructuredTextFormat.yaml,
+                  height: 320,
+                  onChanged: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byType(TextField).first);
+      await tester.pump();
+
+      final paddingWidget = tester.widget<Padding>(
+        find.byKey(const ValueKey('assist-bar-visible')),
+      );
+      final bottomPadding = (paddingWidget.padding as EdgeInsets).bottom;
+      final expected = 280 / tester.view.devicePixelRatio;
+      expect(bottomPadding, closeTo(expected, 0.001));
+    },
+  );
 }

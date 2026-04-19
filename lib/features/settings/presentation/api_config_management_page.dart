@@ -27,18 +27,33 @@ class ApiConfigManagementPage extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            child: Row(
               children: [
-                PrimaryPillButton(
-                  label: '新建配置',
-                  onPressed: () => _openEditor(context, ref),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    PrimaryPillButton(
+                      label: '新建配置',
+                      onPressed: () => _openEditor(context, ref),
+                    ),
+                    SecondaryOutlineButton(
+                      label: '刷新',
+                      onPressed: () =>
+                          ref.read(apiConfigCatalogProvider.notifier).refresh(),
+                    ),
+                  ],
                 ),
-                SecondaryOutlineButton(
-                  label: '刷新',
-                  onPressed: () =>
-                      ref.read(apiConfigCatalogProvider.notifier).refresh(),
+                const Spacer(),
+                IconButton(
+                  tooltip: '导入',
+                  onPressed: () => _import(context, ref),
+                  icon: const Icon(Icons.file_download_outlined),
+                ),
+                IconButton(
+                  tooltip: '导出',
+                  onPressed: () => _export(context, ref),
+                  icon: const Icon(Icons.file_upload_outlined),
                 ),
               ],
             ),
@@ -201,6 +216,26 @@ class ApiConfigManagementPage extends ConsumerWidget {
       return;
     }
     await ref.read(apiConfigCatalogProvider.notifier).delete(config.apiId);
+  }
+
+  Future<void> _import(BuildContext context, WidgetRef ref) async {
+    // TODO: 实现导入功能
+    AppNotice.show(
+      context,
+      message: '导入功能即将上线',
+      tone: AppNoticeTone.info,
+      category: 'apiconfig_import_placeholder',
+    );
+  }
+
+  Future<void> _export(BuildContext context, WidgetRef ref) async {
+    // TODO: 实现导出功能
+    AppNotice.show(
+      context,
+      message: '导出功能即将上线',
+      tone: AppNoticeTone.info,
+      category: 'apiconfig_export_placeholder',
+    );
   }
 }
 
