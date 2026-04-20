@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../utils/reasoning_markup.dart';
+import '../utils/responsive.dart';
 import '../theme/app_colors.dart';
 import 'tag_chip.dart';
 
@@ -86,11 +87,12 @@ class MessageBubble extends StatelessWidget {
         ? AppColors.backgroundElevated
         : AppColors.surfaceOverlay;
     final parsedMarkup = ReasoningMarkup.parse(content);
+    final maxBubbleWidth = Responsive.isDesktop(context) ? 680.0 : 420.0;
 
     return Align(
       alignment: _isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
+        constraints: BoxConstraints(maxWidth: maxBubbleWidth),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: background.withValues(alpha: appearance.bubbleOpacity),

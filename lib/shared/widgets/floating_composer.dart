@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
 
 class FloatingComposer extends StatefulWidget {
   const FloatingComposer({
@@ -105,6 +106,36 @@ class _FloatingComposerState extends State<FloatingComposer> {
 
   Future<void> _openFullscreenComposer() async {
     final initialText = widget.controller.text;
+
+    if (Responsive.isDesktop(context)) {
+      final next = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          return Dialog(
+            backgroundColor: AppColors.backgroundElevated,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640, maxHeight: 600),
+              child: _FullscreenComposerSheet(
+                initialText: initialText,
+                isSending: widget.isSending,
+                onSend: widget.onSend,
+              ),
+            ),
+          );
+        },
+      );
+      if (next == null) {
+        return;
+      }
+      widget.controller.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: next.length),
+      );
+      _effectiveFocusNode.requestFocus();
+      return;
+    }
+
     final next = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,

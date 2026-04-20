@@ -13,6 +13,7 @@ import '../../../core/services/chat_service.dart';
 import '../../../core/services/world_book_injection.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/utils/reasoning_markup.dart';
+import '../../../shared/utils/responsive.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/error_state_view.dart';
 import '../../../shared/widgets/floating_composer.dart';
@@ -498,6 +499,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final parsed = ReasoningMarkup.parse(message.content);
     final contentController = TextEditingController(text: parsed.content);
     final reasoningController = TextEditingController(text: parsed.reasoning);
+    final dialogWidth = Responsive.isDesktop(context) ? 640.0 : 480.0;
     try {
       final approved = await showDialog<bool>(
         context: context,
@@ -505,7 +507,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           return AlertDialog(
             title: const Text('编辑消息'),
             content: SizedBox(
-              width: 480,
+              width: dialogWidth,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

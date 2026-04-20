@@ -14,6 +14,7 @@ import '../models/workspace_config.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/glass_panel_card.dart';
+import '../../shared/utils/responsive.dart';
 import '../providers/app_state.dart';
 import '../providers/config_catalog_providers.dart';
 import '../providers/service_providers.dart';
@@ -164,6 +165,140 @@ class _AppShellState extends ConsumerState<AppShell> {
         currentTab == AppTab.chat && currentSessionId != null
         ? sessionBackgroundMap[currentSessionId]
         : null;
+    final useSidebar = Responsive.useSidebar(context);
+
+    final drawer = Drawer(
+      backgroundColor: AppColors.backgroundElevated,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GlassPanelCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'RST',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: AppShell._items.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = AppShell._items[index];
+                    return _DrawerExpandableSection(
+                      label: item.label,
+                      icon: item.icon,
+                      selected: index == currentIndex,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        ref.read(appTabProvider.notifier).state = item.tab;
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final sidebar = Container(
+      width: 240,
+      decoration: const BoxDecoration(
+        color: AppColors.backgroundElevated,
+        border: Border(
+          right: BorderSide(color: AppColors.borderSubtle, width: 1),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GlassPanelCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'RST',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: AppShell._items.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final item = AppShell._items[index];
+                    return _DrawerExpandableSection(
+                      label: item.label,
+                      icon: item.icon,
+                      selected: index == currentIndex,
+                      onTap: () {
+                        ref.read(appTabProvider.notifier).state = item.tab;
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final content = KeyedSubtree(
+      key: ValueKey(AppShell._items[currentIndex].tab),
+      child: AppShell._items[currentIndex].page,
+    );
+
+    if (useSidebar) {
+      return PopScope<void>(
+        canPop: currentTab == AppTab.chat,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) {
+            return;
+          }
+          _handleRootBack(currentTab);
+        },
+        child: Row(
+          children: [
+            sidebar,
+            Expanded(
+              child: AppScaffold(
+                scaffoldKey: _scaffoldKey,
+                backgroundImagePath: backgroundImagePath,
+                headerCenter: const _CurrentSessionHeaderTitle(),
+                headerTrailing: const _SessionQuickSettingsTrigger(),
+                showMenuButton: false,
+                child: content,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return PopScope<void>(
       canPop: currentTab == AppTab.chat,
@@ -178,57 +313,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         backgroundImagePath: backgroundImagePath,
         headerCenter: const _CurrentSessionHeaderTitle(),
         headerTrailing: const _SessionQuickSettingsTrigger(),
-        drawer: Drawer(
-          backgroundColor: AppColors.backgroundElevated,
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  GlassPanelCard(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'RST',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: AppShell._items.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final item = AppShell._items[index];
-                        return _DrawerExpandableSection(
-                          label: item.label,
-                          icon: item.icon,
-                          selected: index == currentIndex,
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            ref.read(appTabProvider.notifier).state = item.tab;
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        child: KeyedSubtree(
-          key: ValueKey(AppShell._items[currentIndex].tab),
-          child: AppShell._items[currentIndex].page,
-        ),
+        drawer: drawer,
+        child: content,
       ),
     );
   }
@@ -339,6 +425,21 @@ class _TopStatusIndicator extends StatelessWidget {
 }
 
 Future<void> _showSessionQuickSettingsBottomSheet(BuildContext context) async {
+  if (Responsive.isDesktop(context)) {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.backgroundElevated,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640, maxHeight: 720),
+          child: const _SessionQuickSettingsSheet(),
+        ),
+      ),
+    );
+    return;
+  }
+
   await showModalBottomSheet<void>(
     context: context,
     useSafeArea: true,
