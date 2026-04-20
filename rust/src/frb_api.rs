@@ -260,17 +260,26 @@ pub fn list_sessions() -> Result<Vec<SessionSummary>> {
 }
 
 pub fn create_session(seed: CreateSessionRequest) -> Result<SessionConfig> {
-    validate_session_name(&seed.session_name)?;
-    validate_mode_binding(seed.mode, seed.st_world_book_id.as_deref())?;
+    let CreateSessionRequest {
+        session_name,
+        mode,
+        main_api_config_id,
+        preset_id,
+        st_world_book_id,
+    } = seed;
+    let normalized_world_book_id = normalize_world_book_id(st_world_book_id);
+
+    validate_session_name(&session_name)?;
+    validate_mode_binding(mode, normalized_world_book_id.as_deref())?;
 
     let now = now_rfc3339();
     let config = SessionConfig {
         session_id: Uuid::new_v4().to_string(),
-        session_name: seed.session_name.trim().to_string(),
-        mode: seed.mode,
-        main_api_config_id: seed.main_api_config_id,
-        preset_id: seed.preset_id,
-        st_world_book_id: seed.st_world_book_id,
+        session_name: session_name.trim().to_string(),
+        mode,
+        main_api_config_id,
+        preset_id,
+        st_world_book_id: normalized_world_book_id,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -283,6 +292,7 @@ pub fn save_session(mut config: SessionConfig) -> Result<SessionConfig> {
     if config.session_id.is_empty() {
         return Err(anyhow!("validation_error: sessionId cannot be empty"));
     }
+    config.st_world_book_id = normalize_world_book_id(config.st_world_book_id);
     validate_session_name(&config.session_name)?;
     validate_mode_binding(config.mode, config.st_world_book_id.as_deref())?;
 
@@ -908,13 +918,18 @@ fn validate_session_name(session_name: &str) -> Result<()> {
     Ok(())
 }
 
-fn validate_mode_binding(mode: SessionMode, st_world_book_id: Option<&str>) -> Result<()> {
-    if mode == SessionMode::St && st_world_book_id.is_none() {
-        return Err(anyhow!(
-            "validation_error: stWorldBookId is required when mode is ST"
-        ));
-    }
+fn normalize_world_book_id(st_world_book_id: Option<String>) -> Option<String> {
+    st_world_book_id.and_then(|raw| {
+        let normalized = raw.trim();
+        if normalized.is_empty() {
+            None
+        } else {
+            Some(normalized.to_string())
+        }
+    })
+}
 
+fn validate_mode_binding(mode: SessionMode, st_world_book_id: Option<&str>) -> Result<()> {
     if mode == SessionMode::Rst && st_world_book_id.is_some() {
         return Err(anyhow!(
             "validation_error: stWorldBookId must be null when mode is RST"
@@ -1289,6 +1304,75 @@ mod tests {
         let listed = list_sessions().expect("list_sessions should succeed");
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].session_id, created.session_id);
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
+    }
+
+    #[test]
+    fn st_mode_allows_missing_world_book_binding() {
+        let _guard = test_lock();
+        let workspace_dir = std::env::temp_dir().join(format!("rst-frb-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let created = create_session(CreateSessionRequest {
+            session_name: "No World Book Session".to_string(),
+            mode: SessionMode::St,
+            main_api_config_id: "api-default".to_string(),
+            preset_id: "preset-default".to_string(),
+            st_world_book_id: None,
+        })
+        .expect("create_session should allow ST mode without world book");
+        assert_eq!(created.mode, SessionMode::St);
+        assert!(created.st_world_book_id.is_none());
+
+        let loaded = load_session(created.session_id.clone()).expect("load_session should succeed");
+        assert_eq!(loaded.config.mode, SessionMode::St);
+        assert!(loaded.config.st_world_book_id.is_none());
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
+    }
+
+    #[test]
+    fn st_mode_normalizes_blank_world_book_binding_to_none() {
+        let _guard = test_lock();
+        let workspace_dir = std::env::temp_dir().join(format!("rst-frb-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let created = create_session(CreateSessionRequest {
+            session_name: "Blank World Book Session".to_string(),
+            mode: SessionMode::St,
+            main_api_config_id: "api-default".to_string(),
+            preset_id: "preset-default".to_string(),
+            st_world_book_id: Some("   ".to_string()),
+        })
+        .expect("create_session should trim blank world book id");
+        assert!(created.st_world_book_id.is_none());
+
+        let _ = std::fs::remove_dir_all(workspace_dir);
+    }
+
+    #[test]
+    fn rst_mode_rejects_non_empty_world_book_binding() {
+        let _guard = test_lock();
+        let workspace_dir = std::env::temp_dir().join(format!("rst-frb-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("RST_WORKSPACE_DIR", &workspace_dir);
+        }
+
+        let error = create_session(CreateSessionRequest {
+            session_name: "Invalid RST Session".to_string(),
+            mode: SessionMode::Rst,
+            main_api_config_id: "api-default".to_string(),
+            preset_id: "preset-default".to_string(),
+            st_world_book_id: Some("wb-main".to_string()),
+        })
+        .expect_err("create_session should reject world book binding in RST");
+        let error_message = format!("{error:#}");
+        assert!(error_message.contains("stWorldBookId must be null when mode is RST"));
 
         let _ = std::fs::remove_dir_all(workspace_dir);
     }
