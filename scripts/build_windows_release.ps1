@@ -87,13 +87,16 @@ try {
 
     # Step 4: Create release package
     Write-Host "Creating release package..." -ForegroundColor Yellow
-    if (Test-Path $releaseDir) {
-        Remove-Item -Path $releaseDir -Recurse -Force
-    }
+
+    # Always create fresh directory
     New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
 
     # Copy all files from Flutter output
     Get-ChildItem -Path $flutterOutputDir | ForEach-Object {
+        $destPath = Join-Path $releaseDir $_.Name
+        if (Test-Path $destPath) {
+            Remove-Item -Path $destPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
         Copy-Item -Path $_.FullName -Destination $releaseDir -Recurse -Force
     }
 
