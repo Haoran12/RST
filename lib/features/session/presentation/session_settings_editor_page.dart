@@ -94,6 +94,7 @@ class SessionSettingsDraft {
 class SessionSettingsEditorPage extends ConsumerStatefulWidget {
   const SessionSettingsEditorPage({
     super.key,
+    this.onStateCreated,
     required this.title,
     required this.actionLabel,
     required this.initialDraft,
@@ -107,6 +108,7 @@ class SessionSettingsEditorPage extends ConsumerStatefulWidget {
     this.autoSave = false,
   });
 
+  final void Function(SessionSettingsEditorPageState state)? onStateCreated;
   final String title;
   final String actionLabel;
   final SessionSettingsDraft initialDraft;
@@ -121,10 +123,10 @@ class SessionSettingsEditorPage extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<SessionSettingsEditorPage> createState() =>
-      _SessionSettingsEditorPageState();
+      SessionSettingsEditorPageState();
 }
 
-class _SessionSettingsEditorPageState
+class SessionSettingsEditorPageState
     extends ConsumerState<SessionSettingsEditorPage>
     with WidgetsBindingObserver, AutoSaveMixin {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -139,6 +141,8 @@ class _SessionSettingsEditorPageState
 
   @override
   bool get hasUnsavedChanges => !_draft.sameAs(_baseline);
+
+  Future<bool> handleAttemptDismiss() => _handleAttemptDismiss();
 
   @override
   Future<void> performAutoSave() async {
@@ -157,6 +161,7 @@ class _SessionSettingsEditorPageState
     WidgetsBinding.instance.addObserver(this);
     _draft = widget.initialDraft;
     _baseline = widget.initialDraft;
+    widget.onStateCreated?.call(this);
   }
 
   @override
@@ -936,25 +941,43 @@ class _SessionSettingsEditorPageState
     if (_draft.sameAs(_baseline)) {
       return true;
     }
-    final confirmed = await showDialog<bool>(
+
+    // 0: 继续编辑, 1: 放弃修改, 2: 保存并离开
+    final result = await showDialog<int>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('放弃未保存的修改？'),
-        content: const Text('你已经修改了会话设置，现在返回会丢失本次填写。'),
+        title: const Text('未保存的修改'),
+        content: const Text('你已经修改了会话设置，是否保存？'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(0),
             child: const Text('继续编辑'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(1),
             child: const Text('放弃修改'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(2),
+            child: const Text('保存并离开'),
           ),
         ],
       ),
     );
-    return confirmed == true;
+
+    if (result == 1) {
+      return true;
+    }
+    if (result == 2) {
+      final saved = await _submit(
+        fromAutoSave: false,
+        showSuccessNotice: true,
+        overridePopAfterSubmit: false,
+      );
+      return saved;
+    }
+    return false;
   }
 }
 

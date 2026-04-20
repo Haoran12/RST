@@ -577,6 +577,7 @@ class _SessionQuickSettingsSheetState
   frb.SessionConfig? _config;
   SessionSettingsDraft? _draft;
   int _editorVersion = 0;
+  SessionSettingsEditorPageState? _editorState;
 
   @override
   void initState() {
@@ -788,9 +789,17 @@ class _SessionQuickSettingsSheetState
     return normalized;
   }
 
-  void _attemptCloseToChat() {
+  Future<void> _attemptCloseToChat() async {
+    if (_editorState != null && _editorState!.hasUnsavedChanges) {
+      final shouldClose = await _editorState!.handleAttemptDismiss();
+      if (!shouldClose || !mounted) {
+        return;
+      }
+    }
     ref.read(appTabProvider.notifier).state = AppTab.chat;
-    Navigator.of(context).pop();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -857,6 +866,7 @@ class _SessionQuickSettingsSheetState
 
       body = SessionSettingsEditorPage(
         key: ValueKey<String>('${config.sessionId}-$_editorVersion'),
+        onStateCreated: (state) => _editorState = state,
         title: '当前会话设置',
         actionLabel: '保存设置',
         initialDraft: draft,
