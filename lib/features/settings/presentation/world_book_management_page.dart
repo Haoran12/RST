@@ -8,6 +8,7 @@ import '../../../core/providers/service_providers.dart';
 import '../../../core/services/world_book_injection.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_notice.dart';
+import '../../../shared/widgets/auto_save_mixin.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
@@ -161,7 +162,7 @@ class WorldBookManagementPage extends ConsumerWidget {
     final saved = await Navigator.of(context).push<ManagedOption>(
       MaterialPageRoute<ManagedOption>(
         fullscreenDialog: true,
-        builder: (_) => _WorldBookEditorPage(title: '新建世界书', initial: init),
+        builder: (_) => WorldBookEditorPage(title: '新建世界书', initial: init),
       ),
     );
     if (saved == null) {
@@ -184,7 +185,7 @@ class WorldBookManagementPage extends ConsumerWidget {
     final saved = await Navigator.of(context).push<ManagedOption>(
       MaterialPageRoute<ManagedOption>(
         fullscreenDialog: true,
-        builder: (_) => _WorldBookEditorPage(title: '编辑世界书', initial: option),
+        builder: (_) => WorldBookEditorPage(title: '编辑世界书', initial: option),
       ),
     );
     if (saved == null) {
@@ -300,18 +301,18 @@ class WorldBookManagementPage extends ConsumerWidget {
   }
 }
 
-class _WorldBookEditorPage extends StatefulWidget {
-  const _WorldBookEditorPage({required this.title, required this.initial});
+class WorldBookEditorPage extends StatefulWidget {
+  const WorldBookEditorPage({super.key, required this.title, required this.initial});
 
   final String title;
   final ManagedOption initial;
 
   @override
-  State<_WorldBookEditorPage> createState() => _WorldBookEditorPageState();
+  State<WorldBookEditorPage> createState() => WorldBookEditorPageState();
 }
 
-class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
-    with SingleTickerProviderStateMixin {
+class WorldBookEditorPageState extends State<WorldBookEditorPage>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver, AutoSaveMixin {
   late final TextEditingController _name = TextEditingController(
     text: widget.initial.name,
   );
@@ -329,7 +330,24 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   );
 
   @override
+  bool get hasUnsavedChanges =>
+      _signature(_name.text, _entries) != _initialSignature;
+
+  @override
+  Future<void> performAutoSave() async {
+    if (!hasUnsavedChanges) return;
+    _saveAndPop(pop: false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _name.dispose();
     _scanDepth.dispose();
     _tabs.dispose();
@@ -610,14 +628,20 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
   }
 
   void _save() {
+    _saveAndPop(pop: true);
+  }
+
+  void _saveAndPop({required bool pop}) {
     final name = _name.text.trim();
     if (name.isEmpty) {
-      AppNotice.show(
-        context,
-        message: '世界书名称不能为空',
-        tone: AppNoticeTone.warning,
-        category: 'worldbook_name_required',
-      );
+      if (mounted && pop) {
+        AppNotice.show(
+          context,
+          message: '世界书名称不能为空',
+          tone: AppNoticeTone.warning,
+          category: 'worldbook_name_required',
+        );
+      }
       return;
     }
 
@@ -639,13 +663,15 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
     sections = _upsertField(sections, _worldBookCategoryFieldKey, categoryJson);
     sections = _upsertField(sections, _worldBookScanDepthFieldKey, '$scanDepthValue');
 
-    Navigator.of(context).pop(
-      widget.initial.copyWith(
-        name: name,
-        sections: sections,
-        updatedAt: DateTime.now(),
-      ),
+    final saved = widget.initial.copyWith(
+      name: name,
+      sections: sections,
+      updatedAt: DateTime.now(),
     );
+
+    if (pop && mounted) {
+      Navigator.of(context).pop(saved);
+    }
   }
 
   Future<bool> _confirmDiscard() async {
@@ -683,7 +709,8 @@ class _EntryEditorPage extends StatefulWidget {
   State<_EntryEditorPage> createState() => _EntryEditorPageState();
 }
 
-class _EntryEditorPageState extends State<_EntryEditorPage> {
+class _EntryEditorPageState extends State<_EntryEditorPage>
+    with WidgetsBindingObserver, AutoSaveMixin {
   late _EntryDraft _draft = widget.initial;
   late final TextEditingController _comment = TextEditingController(
     text: '${_draft.data['comment'] ?? ''}',
@@ -709,7 +736,24 @@ class _EntryEditorPageState extends State<_EntryEditorPage> {
   }
 
   @override
+  bool get hasUnsavedChanges =>
+      _entrySignature(_buildResult()) != _initialSignature;
+
+  @override
+  Future<void> performAutoSave() async {
+    if (!hasUnsavedChanges || !mounted) return;
+    Navigator.of(context).pop(_buildResult());
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _comment.dispose();
     _key.dispose();
     _keysecondary.dispose();

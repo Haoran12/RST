@@ -5,10 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_state.dart';
+import '../../../core/providers/config_catalog_providers.dart';
+import '../../../core/providers/service_providers.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_notice.dart';
+import '../../../shared/widgets/auto_save_mixin.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
+import '../../settings/presentation/api_config_management_page.dart';
+import '../../settings/presentation/preset_management_page.dart';
+import '../../settings/presentation/world_book_management_page.dart';
 
 class SessionSettingsOptionEntry {
   const SessionSettingsOptionEntry({required this.id, required this.label});
@@ -119,7 +125,8 @@ class SessionSettingsEditorPage extends ConsumerStatefulWidget {
 }
 
 class _SessionSettingsEditorPageState
-    extends ConsumerState<SessionSettingsEditorPage> {
+    extends ConsumerState<SessionSettingsEditorPage>
+    with WidgetsBindingObserver, AutoSaveMixin {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   late SessionSettingsDraft _draft;
   late SessionSettingsDraft _baseline;
@@ -131,14 +138,30 @@ class _SessionSettingsEditorPageState
   bool get _autoSaveEnabled => widget.autoSave && widget.onSubmit != null;
 
   @override
+  bool get hasUnsavedChanges => !_draft.sameAs(_baseline);
+
+  @override
+  Future<void> performAutoSave() async {
+    if (!_autoSaveEnabled || !hasUnsavedChanges) return;
+    _autoSaveTimer?.cancel();
+    await _submit(
+      fromAutoSave: true,
+      showSuccessNotice: false,
+      overridePopAfterSubmit: false,
+    );
+  }
+
+  @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _draft = widget.initialDraft;
     _baseline = widget.initialDraft;
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoSaveTimer?.cancel();
     super.dispose();
   }
@@ -222,7 +245,7 @@ class _SessionSettingsEditorPageState
                 detailLabel: _draft.apiConfigId,
                 onTap: () => _openApiConfigPicker(apiOptions),
                 onEdit: widget.enableDetailJump
-                    ? () => _jumpToDetailTab(AppTab.apiConfig)
+                    ? _openApiConfigEditor
                     : null,
               ),
               const SizedBox(height: 10),
@@ -235,7 +258,7 @@ class _SessionSettingsEditorPageState
                 detailLabel: _draft.presetId,
                 onTap: () => _openPresetPicker(presetOptions),
                 onEdit: widget.enableDetailJump
-                    ? () => _jumpToDetailTab(AppTab.preset)
+                    ? _openPresetEditor
                     : null,
               ),
               const SizedBox(height: 10),
@@ -258,7 +281,9 @@ class _SessionSettingsEditorPageState
                 ),
                 detailLabel: _buildWorldBookDetail(),
                 onTap: () => _openWorldBookPicker(worldBookOptions),
-                onEdit: () => _openWorldBook(worldBookOptions),
+                onEdit: widget.enableDetailJump
+                    ? _openWorldBookEditor
+                    : null,
               ),
               const SizedBox(height: 10),
               _TavoPickerCard(
@@ -336,6 +361,73 @@ class _SessionSettingsEditorPageState
     ref.read(appTabProvider.notifier).state = tab;
   }
 
+  Future<void> _openApiConfigEditor() async {
+    final apiConfigs = await ref.read(apiConfigCatalogProvider.future);
+    final target = apiConfigs.where((c) => c.apiId == _draft.apiConfigId).firstOrNull;
+    if (target == null) return;
+    final draft = ref.read(apiServiceProvider).buildApiConfigDraft().copyWith(
+      name: target.name,
+      providerType: target.providerType,
+      baseUrl: target.baseUrl,
+      requestPath: target.requestPath,
+      apiKeyCiphertext: target.apiKeyCiphertext,
+      defaultModel: target.defaultModel,
+      requestTimeoutMs: target.requestTimeoutMs,
+      customHeaders: target.customHeaders,
+      stream: target.stream,
+      temperature: target.temperature,
+      topP: target.topP,
+      topK: target.topK,
+      presencePenalty: target.presencePenalty,
+      frequencyPenalty: target.frequencyPenalty,
+      maxCompletionTokens: target.maxCompletionTokens,
+      stopSequences: target.stopSequences,
+      reasoningEffort: target.reasoningEffort,
+      verbosity: target.verbosity,
+    );
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (context) => ApiConfigEditorPage(
+          title: '编辑 API 配置',
+          initialValue: draft,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPresetEditor() async {
+    final presets = await ref.read(presetCatalogProvider.future);
+    final target = presets.where((p) => p.presetId == _draft.presetId).firstOrNull;
+    if (target == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (context) => PresetEditorPage(
+          title: '编辑预设',
+          initialValue: target,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openWorldBookEditor() async {
+    final worldBookId = _draft.worldBookId;
+    if (worldBookId == null || worldBookId.isEmpty) return;
+    final options = ref.read(worldBookOptionsProvider);
+    final target = options.where((o) => o.id == worldBookId).firstOrNull;
+    if (target == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (context) => WorldBookEditorPage(
+          title: '编辑世界书',
+          initial: target,
+        ),
+      ),
+    );
+  }
+
   String _resolveOptionLabel({
     required String? selectedId,
     required List<SessionSettingsOptionEntry> options,
@@ -363,8 +455,8 @@ class _SessionSettingsEditorPageState
   String _schedulerDetail(SchedulerMode mode) {
     return switch (mode) {
       SchedulerMode.sillyTavern => 'SillyTavern 调度（关键词世界书注入）',
-      SchedulerMode.rst => 'RST 调度，含结构化注入',
-      SchedulerMode.agent => 'Agent 调度，适合复杂流程',
+      SchedulerMode.rst => 'RST 调度（实验性，低优先级）',
+      SchedulerMode.agent => 'Agent 调度（未实现）',
     };
   }
 
@@ -396,7 +488,7 @@ class _SessionSettingsEditorPageState
           )
           .toList(growable: false),
       onEditOption: widget.enableDetailJump
-          ? (option) => _jumpToDetailTab(AppTab.apiConfig)
+          ? (option) => _openApiConfigEditor()
           : null,
     );
     if (!mounted || selected == null) {
@@ -421,7 +513,7 @@ class _SessionSettingsEditorPageState
           )
           .toList(growable: false),
       onEditOption: widget.enableDetailJump
-          ? (option) => _jumpToDetailTab(AppTab.preset)
+          ? (option) => _openPresetEditor()
           : null,
     );
     if (!mounted || selected == null) {
@@ -435,16 +527,16 @@ class _SessionSettingsEditorPageState
       _PickerOption<SchedulerMode>(
         value: SchedulerMode.sillyTavern,
         label: 'SillyTavern',
-        detail: 'SillyTavern 世界书注入',
+        detail: 'SillyTavern 世界书注入（推荐）',
       ),
       _PickerOption<SchedulerMode>(
         value: SchedulerMode.rst,
-        label: 'RST',
-        detail: '结构化调度',
+        label: 'RST（实验性）',
+        detail: '结构化调度，低优先级',
       ),
       _PickerOption<SchedulerMode>(
         value: SchedulerMode.agent,
-        label: 'Agent',
+        label: 'Agent（未实现）',
         detail: '多步骤 Agent 模式',
       ),
     ];
@@ -482,7 +574,9 @@ class _SessionSettingsEditorPageState
           ),
         ),
       ],
-      onEditOption: (option) => _openWorldBook(options),
+      onEditOption: widget.enableDetailJump
+          ? (option) => _openWorldBookEditor()
+          : null,
     );
     if (!mounted || selected == null) {
       return;
@@ -653,33 +747,6 @@ class _SessionSettingsEditorPageState
       _draft.copyWith(
         sessionName: result.sessionName,
         userDescription: result.userDescription,
-      ),
-    );
-  }
-
-  Future<void> _openWorldBook(
-    List<SessionSettingsOptionEntry> worldBookOptions,
-  ) async {
-    final result = await Navigator.of(context).push<_WorldBookEditorResult>(
-      MaterialPageRoute<_WorldBookEditorResult>(
-        fullscreenDialog: true,
-        builder: (context) => _WorldBookEditorPage(
-          options: worldBookOptions,
-          initialWorldBookId: _draft.worldBookId,
-          initialWorldDescription: _draft.worldDescription,
-          initialCharacterDescription: _draft.characterDescription,
-        ),
-      ),
-    );
-    if (result == null || !mounted) {
-      return;
-    }
-    _updateDraft(
-      _draft.copyWith(
-        worldBookId: result.worldBookId,
-        replaceWorldBookId: true,
-        worldDescription: result.worldDescription,
-        characterDescription: result.characterDescription,
       ),
     );
   }

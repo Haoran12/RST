@@ -149,7 +149,7 @@ class PresetManagementPage extends ConsumerWidget {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (context) => _PresetEditorPage(
+        builder: (context) => PresetEditorPage(
           title: source == null ? '新建预设' : '编辑预设',
           initialValue: draft,
         ),
@@ -205,17 +205,17 @@ class PresetManagementPage extends ConsumerWidget {
   }
 }
 
-class _PresetEditorPage extends ConsumerStatefulWidget {
-  const _PresetEditorPage({required this.title, required this.initialValue});
+class PresetEditorPage extends ConsumerStatefulWidget {
+  const PresetEditorPage({super.key, required this.title, required this.initialValue});
 
   final String title;
   final StoredPresetConfig initialValue;
 
   @override
-  ConsumerState<_PresetEditorPage> createState() => _PresetEditorPageState();
+  ConsumerState<PresetEditorPage> createState() => PresetEditorPageState();
 }
 
-class _PresetEditorPageState extends ConsumerState<_PresetEditorPage> {
+class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
   late final TextEditingController _nameController;
   late StoredPresetConfig _draft;
   late StoredPresetConfig _baseline;

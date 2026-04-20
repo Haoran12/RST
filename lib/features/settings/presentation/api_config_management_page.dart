@@ -177,7 +177,7 @@ class ApiConfigManagementPage extends ConsumerWidget {
     final saved = await Navigator.of(context).push<StoredApiConfig>(
       MaterialPageRoute<StoredApiConfig>(
         fullscreenDialog: true,
-        builder: (context) => _ApiConfigEditorDialog(
+        builder: (context) => ApiConfigEditorPage(
           title: source == null ? '新建 API 配置' : '编辑 API 配置',
           initialValue: draft,
         ),
@@ -239,8 +239,9 @@ class ApiConfigManagementPage extends ConsumerWidget {
   }
 }
 
-class _ApiConfigEditorDialog extends ConsumerStatefulWidget {
-  const _ApiConfigEditorDialog({
+class ApiConfigEditorPage extends ConsumerStatefulWidget {
+  const ApiConfigEditorPage({
+    super.key,
     required this.title,
     required this.initialValue,
   });
@@ -249,12 +250,11 @@ class _ApiConfigEditorDialog extends ConsumerStatefulWidget {
   final StoredApiConfig initialValue;
 
   @override
-  ConsumerState<_ApiConfigEditorDialog> createState() =>
-      _ApiConfigEditorDialogState();
+  ConsumerState<ApiConfigEditorPage> createState() =>
+      ApiConfigEditorPageState();
 }
 
-class _ApiConfigEditorDialogState
-    extends ConsumerState<_ApiConfigEditorDialog> {
+class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _baseUrlController;
   late final TextEditingController _requestPathController;
