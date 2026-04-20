@@ -108,6 +108,7 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _worldBookCatalogHydrated = false;
+  bool _isNavigating = false;
 
   @override
   void initState() {
@@ -152,6 +153,28 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
     if (currentTab != AppTab.chat) {
       ref.read(appTabProvider.notifier).state = AppTab.chat;
+    }
+  }
+
+  /// 切换tab前检查是否有打开的Dialog/BottomSheet
+  Future<void> _handleTabSwitch(AppTab targetTab) async {
+    if (_isNavigating) return;
+
+    final currentTab = ref.read(appTabProvider);
+    if (currentTab == targetTab) return;
+
+    // 检查是否有打开的弹窗
+    if (Navigator.of(context).canPop()) {
+      _isNavigating = true;
+      // 弹出当前弹窗，触发其PopScope处理
+      Navigator.of(context).pop();
+      // 等待弹窗关闭动画完成
+      await Future.delayed(const Duration(milliseconds: 100));
+      _isNavigating = false;
+    }
+
+    if (mounted) {
+      ref.read(appTabProvider.notifier).state = targetTab;
     }
   }
 
@@ -203,7 +226,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       selected: index == currentIndex,
                       onTap: () {
                         Navigator.of(context).pop();
-                        ref.read(appTabProvider.notifier).state = item.tab;
+                        _handleTabSwitch(item.tab);
                       },
                     );
                   },
@@ -255,9 +278,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       label: item.label,
                       icon: item.icon,
                       selected: index == currentIndex,
-                      onTap: () {
-                        ref.read(appTabProvider.notifier).state = item.tab;
-                      },
+                      onTap: () => _handleTabSwitch(item.tab),
                     );
                   },
                 ),
@@ -428,6 +449,7 @@ Future<void> _showSessionQuickSettingsBottomSheet(BuildContext context) async {
   if (Responsive.isDesktop(context)) {
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => Dialog(
         backgroundColor: AppColors.backgroundElevated,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
