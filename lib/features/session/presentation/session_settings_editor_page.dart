@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/app_state.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
+import '../../../shared/utils/responsive.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/auto_save_mixin.dart';
@@ -249,9 +250,7 @@ class SessionSettingsEditorPageState
                 ),
                 detailLabel: _draft.apiConfigId,
                 onTap: () => _openApiConfigPicker(apiOptions),
-                onEdit: widget.enableDetailJump
-                    ? _openApiConfigEditor
-                    : null,
+                onEdit: widget.enableDetailJump ? _openApiConfigEditor : null,
               ),
               const SizedBox(height: 10),
               _TavoPickerCard(
@@ -262,9 +261,7 @@ class SessionSettingsEditorPageState
                 ),
                 detailLabel: _draft.presetId,
                 onTap: () => _openPresetPicker(presetOptions),
-                onEdit: widget.enableDetailJump
-                    ? _openPresetEditor
-                    : null,
+                onEdit: widget.enableDetailJump ? _openPresetEditor : null,
               ),
               const SizedBox(height: 10),
               _TavoPickerCard(
@@ -286,9 +283,7 @@ class SessionSettingsEditorPageState
                 ),
                 detailLabel: _buildWorldBookDetail(),
                 onTap: () => _openWorldBookPicker(worldBookOptions),
-                onEdit: widget.enableDetailJump
-                    ? _openWorldBookEditor
-                    : null,
+                onEdit: widget.enableDetailJump ? _openWorldBookEditor : null,
               ),
               const SizedBox(height: 10),
               _TavoPickerCard(
@@ -331,7 +326,7 @@ class SessionSettingsEditorPageState
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
-    ref.read(appTabProvider.notifier).state = tab;
+    _navigateToAppDestination(tab);
   }
 
   List<SessionSettingsOptionEntry> _ensureOption(
@@ -363,55 +358,86 @@ class SessionSettingsEditorPageState
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
+    _navigateToAppDestination(tab);
+  }
+
+  void _navigateToAppDestination(AppTab tab) {
+    if (Responsive.isWindowsDesktop(context) && _opensInDesktopPane(tab)) {
+      ref.read(appTabProvider.notifier).state = AppTab.chat;
+      ref.read(desktopEditorPaneProvider.notifier).state =
+          DesktopEditorPane.tab(tab);
+      return;
+    }
+    ref.read(desktopEditorPaneProvider.notifier).state = null;
     ref.read(appTabProvider.notifier).state = tab;
+  }
+
+  bool _opensInDesktopPane(AppTab tab) {
+    return switch (tab) {
+      AppTab.sessionManagement ||
+      AppTab.worldBook ||
+      AppTab.preset ||
+      AppTab.apiConfig ||
+      AppTab.appearance => true,
+      _ => false,
+    };
   }
 
   Future<void> _openApiConfigEditor() async {
     final apiConfigs = await ref.read(apiConfigCatalogProvider.future);
-    final target = apiConfigs.where((c) => c.apiId == _draft.apiConfigId).firstOrNull;
+    final target = apiConfigs
+        .where((c) => c.apiId == _draft.apiConfigId)
+        .firstOrNull;
     if (target == null) return;
-    final draft = ref.read(apiServiceProvider).buildApiConfigDraft().copyWith(
-      name: target.name,
-      providerType: target.providerType,
-      baseUrl: target.baseUrl,
-      requestPath: target.requestPath,
-      apiKeyCiphertext: target.apiKeyCiphertext,
-      defaultModel: target.defaultModel,
-      requestTimeoutMs: target.requestTimeoutMs,
-      customHeaders: target.customHeaders,
-      stream: target.stream,
-      temperature: target.temperature,
-      topP: target.topP,
-      topK: target.topK,
-      presencePenalty: target.presencePenalty,
-      frequencyPenalty: target.frequencyPenalty,
-      maxCompletionTokens: target.maxCompletionTokens,
-      stopSequences: target.stopSequences,
-      reasoningEffort: target.reasoningEffort,
-      verbosity: target.verbosity,
-    );
+    final draft = ref
+        .read(apiServiceProvider)
+        .buildApiConfigDraft()
+        .copyWith(
+          name: target.name,
+          providerType: target.providerType,
+          baseUrl: target.baseUrl,
+          requestPath: target.requestPath,
+          apiKeyCiphertext: target.apiKeyCiphertext,
+          defaultModel: target.defaultModel,
+          requestTimeoutMs: target.requestTimeoutMs,
+          customHeaders: target.customHeaders,
+          stream: target.stream,
+          temperature: target.temperature,
+          topP: target.topP,
+          topK: target.topK,
+          presencePenalty: target.presencePenalty,
+          frequencyPenalty: target.frequencyPenalty,
+          maxCompletionTokens: target.maxCompletionTokens,
+          stopSequences: target.stopSequences,
+          reasoningEffort: target.reasoningEffort,
+          verbosity: target.verbosity,
+        );
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (context) => ApiConfigEditorPage(
-          title: '编辑 API 配置',
-          initialValue: draft,
-        ),
+        builder: (context) =>
+            ApiConfigEditorPage(title: '编辑 API 配置', initialValue: draft),
       ),
     );
   }
 
   Future<void> _openPresetEditor() async {
     final presets = await ref.read(presetCatalogProvider.future);
-    final target = presets.where((p) => p.presetId == _draft.presetId).firstOrNull;
+    final target = presets
+        .where((p) => p.presetId == _draft.presetId)
+        .firstOrNull;
     if (target == null) return;
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (context) => PresetEditorPage(
-          title: '编辑预设',
-          initialValue: target,
-        ),
+        builder: (context) =>
+            PresetEditorPage(title: '编辑预设', initialValue: target),
       ),
     );
   }
@@ -425,10 +451,8 @@ class SessionSettingsEditorPageState
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         fullscreenDialog: true,
-        builder: (context) => WorldBookEditorPage(
-          title: '编辑世界书',
-          initial: target,
-        ),
+        builder: (context) =>
+            WorldBookEditorPage(title: '编辑世界书', initial: target),
       ),
     );
   }
@@ -945,6 +969,7 @@ class SessionSettingsEditorPageState
     // 0: 继续编辑, 1: 放弃修改, 2: 保存并离开
     final result = await showDialog<int>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('未保存的修改'),
@@ -1413,6 +1438,7 @@ class _BasicConfigPageState extends State<_BasicConfigPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('放弃未保存的修改？'),
@@ -1708,6 +1734,7 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('放弃未保存的修改？'),
@@ -1927,6 +1954,7 @@ class _AppearanceEditorPageState extends State<_AppearanceEditorPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('放弃未保存的修改？'),
@@ -2070,6 +2098,7 @@ class _SettingInputEditorPageState extends State<SettingInputEditorPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('放弃未保存的修改？'),

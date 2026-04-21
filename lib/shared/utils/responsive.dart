@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class Breakpoints {
@@ -21,6 +22,9 @@ class Responsive {
 
   static bool isDesktop(BuildContext context) =>
       MediaQuery.of(context).size.width >= Breakpoints.desktop;
+
+  static bool isWindowsDesktop(BuildContext context) =>
+      defaultTargetPlatform == TargetPlatform.windows && isDesktop(context);
 
   static bool useSidebar(BuildContext context) =>
       MediaQuery.of(context).size.width >= Breakpoints.tablet;
@@ -48,10 +52,7 @@ Future<T?> showAdaptiveSheet<T>({
         if (content is Dialog) {
           return content;
         }
-        return Dialog(
-          backgroundColor: backgroundColor,
-          child: content,
-        );
+        return Dialog(backgroundColor: backgroundColor, child: content);
       },
     );
   }

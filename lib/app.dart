@@ -91,16 +91,7 @@ class _CustomTitleBar extends StatelessWidget {
               child: Container(
                 height: 32,
                 color: AppColors.backgroundElevated,
-                padding: const EdgeInsets.only(left: 12),
-                alignment: Alignment.centerLeft,
-                child: const Text(
-                  'RST',
-                  style: TextStyle(
-                    color: AppColors.textStrong,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: const SizedBox.expand(),
               ),
             ),
           ),

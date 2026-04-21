@@ -8,6 +8,7 @@ import '../../../core/models/workspace_config.dart';
 import '../../../core/providers/app_state.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
+import '../../../shared/utils/responsive.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
@@ -174,6 +175,7 @@ class ApiConfigManagementPage extends ConsumerWidget {
     StoredApiConfig? source,
   }) async {
     final draft = source ?? ref.read(apiServiceProvider).buildApiConfigDraft();
+    final isWindowsDesktop = Responsive.isWindowsDesktop(context);
     final saved = await Navigator.of(context).push<StoredApiConfig>(
       MaterialPageRoute<StoredApiConfig>(
         fullscreenDialog: true,
@@ -183,7 +185,9 @@ class ApiConfigManagementPage extends ConsumerWidget {
         ),
       ),
     );
-    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    if (!isWindowsDesktop) {
+      ref.read(appTabProvider.notifier).state = AppTab.chat;
+    }
     if (saved == null) {
       return;
     }
@@ -197,6 +201,7 @@ class ApiConfigManagementPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => AlertDialog(
         title: const Text('删除 API 配置'),
         content: Text('确定删除“${config.name}”？'),
@@ -553,32 +558,29 @@ class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _timeoutController,
-                                        keyboardType: TextInputType.number,
-                                        decoration: const InputDecoration(
-                                          labelText: '请求超时（毫秒）',
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Align(
-                                        alignment: Alignment.centerRight,
-                                        child: SecondaryOutlineButton(
-                                          label: _fetchingModels
-                                              ? '同步中...'
-                                              : '同步模型',
-                                          onPressed: _fetchingModels
-                                              ? null
-                                              : _fetchModels,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                TextField(
+                                  controller: _timeoutController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '请求超时（毫秒）',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _EditorSection(
+                            title: '模型选择',
+                            child: Column(
+                              children: [
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: SecondaryOutlineButton(
+                                    label: _fetchingModels ? '同步中...' : '同步模型',
+                                    onPressed: _fetchingModels
+                                        ? null
+                                        : _fetchModels,
+                                  ),
                                 ),
                                 if (_modelFetchError != null) ...[
                                   const SizedBox(height: 10),
@@ -620,14 +622,7 @@ class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
                                     ],
                                   ),
                                 ],
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _EditorSection(
-                            title: '模型选择',
-                            child: Column(
-                              children: [
+                                const SizedBox(height: 10),
                                 if (_availableModels.isNotEmpty) ...[
                                   Align(
                                     alignment: Alignment.centerLeft,
@@ -639,9 +634,12 @@ class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
                                       children: [
                                         Text(
                                           '可用模型',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.labelLarge,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelLarge
+                                              ?.copyWith(
+                                                decoration: TextDecoration.none,
+                                              ),
                                         ),
                                         Container(
                                           padding: const EdgeInsets.symmetric(
@@ -921,6 +919,7 @@ class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('放弃未保存的修改？'),

@@ -4,7 +4,25 @@
       "Bash(pwsh:*)",
       "Bash(flutter analyze:*)",
       "Bash(dart run --enable-asserts -e ':*)",
-      "Bash(flutter test *)"
+      "Bash(flutter test *)",
+      "Bash(cmd *)",
+      "Bash(\"D:/Run/Neovim/bin/nvim.exe\" --version)",
+      "Bash(D:/Run/Neovim/bin/nvim.exe *)",
+      "Bash(powershell *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(flutter --version)",
+      "Bash(flutter build *)",
+      "Bash(flutter doctor *)",
+      "Bash(grep -E \"\\\\.dll$\")",
+      "Bash(cargo build *)",
+      "Bash(where link.exe)",
+      "Bash(git push *)",
+      "Bash(flutter pub *)",
+      "WebFetch(domain:pub.dev)",
+      "WebSearch",
+      "Bash(taskkill /F /IM rst.exe)",
+      "Bash(\"D:/Projects/RST/build/Win64/rst.exe\")"
     ]
   }
 }

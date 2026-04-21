@@ -21,8 +21,12 @@
 - Canonical Android APK output directory is **`<repo>/build/android`**.
 - Do not treat `build/app/outputs/flutter-apk/` as final delivery path; it is only Flutter's intermediate output.
 - Standard packaging command: `pwsh ./scripts/build_android_release.ps1`.
+- Canonical Windows x64 output directory is **`<repo>/build/Win64`**.
+- Do not treat `build/windows/x64/runner/Release` or `release/windows-x64` as final delivery paths; they are intermediate or legacy paths.
+- Standard Windows packaging command: `pwsh ./scripts/build_windows_release.ps1`.
 - The project must maintain a persistent released-version record (for example in `docs/version-history.md` or `CHANGELOG.md`) and update it for each release.
 - The build process must include version bump capability: at minimum, increment `+build` on each build/release and write back the updated version metadata.
+- Windows release records must include both full version (`0.1.<patch>+<build>`) and build number (`+build`) in release history.
 
 ## UI Copy And Editor UX
 

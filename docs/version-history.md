@@ -1,5 +1,103 @@
 # Version History
 
+## 0.1.0+50 (2026-04-21)
+
+- Build type: Windows x64 release
+- Build number: 50
+- Artifact: `rst-0.1.0+50-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+49 (2026-04-21)
+
+- Build type: Windows x64 release
+- Build number: 49
+- Artifact: `rst-0.1.0+49-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+48 (2026-04-21)
+
+- Build type: Windows x64 release
+- Build number: 48
+- Artifact: `rst-0.1.0+48-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+47 (2026-04-21)
+
+- Build type: Windows x64 release
+- Build number: 47
+- Artifact: `rst-0.1.0+47-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+46 (2026-04-21)
+
+- Build type: Windows x64 release
+- Build number: 46
+- Artifact: `rst-0.1.0+46-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+45 (2026-04-21)
+
+- Build type: Windows x64 release
+- Build number: 45
+- Artifact: `rst-0.1.0+45-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+44 (2026-04-21)
+
+- Build type: Windows x64 release
+- Build number: 44
+- Artifact: `rst-0.1.0+44-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+43 (2026-04-21)
+
+- Build type: Windows x64 release
+- Build number: 43
+- Artifact: `rst-0.1.0+43-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+41 (2026-04-20)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+41-release.apk`
+- Notes: Release packaging build for current workspace state.
+
+## 0.1.0+39 (2026-04-20)
+
+- Build type: Windows x64 release
+- Artifact: `rst-0.1.0+39-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+38 (2026-04-20)
+
+- Build type: Windows x64 release
+- Artifact: `rst-0.1.0+38-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+37 (2026-04-20)
+
+- Build type: Windows x64 release
+- Artifact: `rst-0.1.0+37-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+36 (2026-04-20)
+
+- Build type: Windows x64 release
+- Artifact: `rst-0.1.0+36-win64.zip`
+- Notes: Windows x64 release test
+
+## 0.1.0+35 (2026-04-20)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+35-release.apk`
+- Notes: Test build
+
+## 0.1.0+34 (2026-04-20)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+34-release.apk`
+- Notes: Release packaging build for current workspace state.
+
 ## 0.1.0+33 (2026-04-19)
 
 - Build type: Android APK release
@@ -191,6 +289,21 @@
 - Build type: Android APK release
 - Artifact: `rst-0.1.0+2-release.apk`
 - Notes: UI navigation refactor and session quick settings update
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

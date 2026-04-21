@@ -800,6 +800,13 @@ class ChatService {
             ),
           );
           break;
+        case PresetBuiltinEntryKeys.interactiveInput:
+          _appendMessage(
+            target: promptMessages,
+            role: entry.role,
+            content: context.interactiveInputContent(entry.content),
+          );
+          break;
         default:
           _appendMessage(
             target: promptMessages,
@@ -809,12 +816,6 @@ class ChatService {
           break;
       }
     }
-    _appendMessage(
-      target: promptMessages,
-      role: 'user',
-      content: context.userInput,
-    );
-    usedEntries.add('User Input');
 
     return _PromptResult(
       messages: promptMessages,
@@ -2301,6 +2302,15 @@ class _PromptContext {
   String userDescriptionContent() => userDescription.trim();
 
   String sceneContent() => scene.trim();
+
+  String interactiveInputContent(String entryContent) {
+    final normalizedInput = userInput.trim();
+    final wrappedInput =
+        '<interactive_input>\n'
+        '$normalizedInput\n'
+        '</interactive_input>';
+    return mergeDynamicContent(entryContent, wrappedInput);
+  }
 
   String mergeDynamicContent(String entryContent, String dynamicContent) {
     final staticPart = entryContent.trim();

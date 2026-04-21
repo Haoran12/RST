@@ -73,6 +73,7 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final useCenteredDesktopLayout = Responsive.isWindowsDesktop(context);
     final roleLabel = switch (role) {
       'user' => 'User',
       'system' => 'System',
@@ -87,10 +88,18 @@ class MessageBubble extends StatelessWidget {
         ? AppColors.backgroundElevated
         : AppColors.surfaceOverlay;
     final parsedMarkup = ReasoningMarkup.parse(content);
-    final maxBubbleWidth = Responsive.isDesktop(context) ? 680.0 : 420.0;
+    final maxBubbleWidth = useCenteredDesktopLayout
+        ? 760.0
+        : Responsive.isDesktop(context)
+        ? 680.0
+        : 420.0;
 
     return Align(
-      alignment: _isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: useCenteredDesktopLayout
+          ? Alignment.center
+          : _isUser
+          ? Alignment.centerRight
+          : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxBubbleWidth),
         child: DecoratedBox(

@@ -201,8 +201,27 @@ class ManagedOption {
   }
 }
 
+class DesktopEditorPane {
+  const DesktopEditorPane._({this.tab});
+
+  const DesktopEditorPane.tab(AppTab tab) : this._(tab: tab);
+  const DesktopEditorPane.sessionQuickSettings() : this._();
+
+  final AppTab? tab;
+
+  bool get isSessionQuickSettings => tab == null;
+
+  String get cacheKey =>
+      isSessionQuickSettings ? 'session-quick-settings' : 'tab-${tab!.name}';
+
+  bool matchesTab(AppTab value) => tab == value;
+}
+
 final appTabProvider = StateProvider<AppTab>((_) => AppTab.chat);
 final currentSessionIdProvider = StateProvider<String?>((_) => null);
+final desktopEditorPaneProvider = StateProvider<DesktopEditorPane?>(
+  (_) => null,
+);
 final workspaceReloadTickProvider = StateProvider<int>((_) => 0);
 final chatTopStatusProvider = StateProvider<ChatTopStatus>(
   (_) => ChatTopStatus.calm,
@@ -454,7 +473,7 @@ List<ManagedOptionSection> _buildPresetSections() {
           label: '条目顺序',
           type: ManagedFieldType.multiline,
           value:
-              'Main_Prompt\nlore_before\nuser_description\nchat_history\nlore_after\nscene\nuser_input',
+              'Main_Prompt\nlore_before\nuser_description\nchat_history\nlore_after\nscene\ninteractive_input',
           readOnly: true,
           helperText: '用于查看当前条目顺序。',
         ),

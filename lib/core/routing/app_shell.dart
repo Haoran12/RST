@@ -1,4 +1,8 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/bridge/frb_api.dart' as frb;
@@ -74,9 +78,21 @@ class AppShell extends ConsumerStatefulWidget {
     ),
   ];
 
+  static const _desktopPaneTabs = <AppTab>{
+    AppTab.sessionManagement,
+    AppTab.worldBook,
+    AppTab.preset,
+    AppTab.apiConfig,
+    AppTab.appearance,
+  };
+
   static final _tabToIndex = <AppTab, int>{
     for (var i = 0; i < _items.length; i++) _items[i].tab: i,
   };
+
+  static _DrawerNavItem _itemForTab(AppTab tab) {
+    return _items[_tabToIndex[tab] ?? 0];
+  }
 
   static final _currentSessionNameProvider = FutureProvider<String>((
     ref,
@@ -106,7 +122,12 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
+  static const _desktopPaneAnimationDuration = Duration(milliseconds: 220);
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  GlobalKey<NavigatorState> _desktopEditorNavigatorKey =
+      GlobalKey<NavigatorState>();
+  GlobalKey<_SessionQuickSettingsSheetState> _sessionQuickSettingsKey =
+      GlobalKey<_SessionQuickSettingsSheetState>();
   bool _worldBookCatalogHydrated = false;
   bool _isNavigating = false;
 
@@ -145,10 +166,56 @@ class _AppShellState extends ConsumerState<AppShell> {
   /// 2. 若抽屉已打开，优先关闭抽屉。
   /// 3. 若当前不在聊天页，切回聊天页。
   /// 4. 聊天页再次返回，交给系统退出到桌面。
-  void _handleRootBack(AppTab currentTab) {
+  bool _useDesktopEditorPane(BuildContext context) =>
+      Responsive.isWindowsDesktop(context);
+
+  bool _shouldOpenInDesktopPane(AppTab tab) =>
+      AppShell._desktopPaneTabs.contains(tab);
+
+  Future<bool> _popDesktopEditorStackToRoot() async {
+    final navigator = _desktopEditorNavigatorKey.currentState;
+    if (navigator == null) {
+      return true;
+    }
+    while (navigator.canPop()) {
+      final popped = await navigator.maybePop();
+      if (!popped) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<bool> _dismissDesktopEditorPaneIfNeeded() async {
+    final pane = ref.read(desktopEditorPaneProvider);
+    if (pane == null) {
+      return true;
+    }
+    final dismissed = await _popDesktopEditorStackToRoot();
+    if (!dismissed || !mounted) {
+      return false;
+    }
+    if (pane.isSessionQuickSettings) {
+      final canClose =
+          await _sessionQuickSettingsKey.currentState?.handlePaneDismiss() ??
+          true;
+      if (!canClose || !mounted) {
+        return false;
+      }
+    }
+    ref.read(desktopEditorPaneProvider.notifier).state = null;
+    return true;
+  }
+
+  Future<void> _handleRootBack(AppTab currentTab) async {
     final scaffoldState = _scaffoldKey.currentState;
     if (scaffoldState?.isDrawerOpen == true) {
       Navigator.of(context).pop();
+      return;
+    }
+    if (_useDesktopEditorPane(context) &&
+        ref.read(desktopEditorPaneProvider) != null) {
+      await _dismissDesktopEditorPaneIfNeeded();
       return;
     }
     if (currentTab != AppTab.chat) {
@@ -156,12 +223,45 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
   }
 
+  Widget _wrapWithWindowsEscBack(Widget child) {
+    if (defaultTargetPlatform != TargetPlatform.windows) {
+      return child;
+    }
+
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.escape): _SystemBackIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _SystemBackIntent: CallbackAction<_SystemBackIntent>(
+            onInvoke: (_) {
+              unawaited(Navigator.maybePop(context));
+              return null;
+            },
+          ),
+        },
+        child: child,
+      ),
+    );
+  }
+
   /// 切换tab前检查是否有打开的Dialog/BottomSheet
   Future<void> _handleTabSwitch(AppTab targetTab) async {
     if (_isNavigating) return;
 
     final currentTab = ref.read(appTabProvider);
-    if (currentTab == targetTab) return;
+    final currentPane = ref.read(desktopEditorPaneProvider);
+    final useDesktopPane = _useDesktopEditorPane(context);
+    final isTargetDesktopPane =
+        useDesktopPane && _shouldOpenInDesktopPane(targetTab);
+    final sameDesktopPane =
+        isTargetDesktopPane &&
+        currentPane != null &&
+        currentPane.matchesTab(targetTab);
+    if (currentTab == targetTab && !sameDesktopPane && currentPane == null) {
+      return;
+    }
 
     // 检查是否有打开的弹窗
     if (Navigator.of(context).canPop()) {
@@ -173,15 +273,68 @@ class _AppShellState extends ConsumerState<AppShell> {
       _isNavigating = false;
     }
 
+    if (isTargetDesktopPane) {
+      if (sameDesktopPane) {
+        await _dismissDesktopEditorPaneIfNeeded();
+        return;
+      }
+      final canCloseCurrent = await _dismissDesktopEditorPaneIfNeeded();
+      if (!canCloseCurrent || !mounted) {
+        return;
+      }
+      _desktopEditorNavigatorKey = GlobalKey<NavigatorState>();
+      _sessionQuickSettingsKey = GlobalKey<_SessionQuickSettingsSheetState>();
+      ref.read(appTabProvider.notifier).state = AppTab.chat;
+      ref.read(desktopEditorPaneProvider.notifier).state =
+          DesktopEditorPane.tab(targetTab);
+      return;
+    }
+
+    final canCloseDesktopPane = await _dismissDesktopEditorPaneIfNeeded();
+    if (!canCloseDesktopPane || !mounted) {
+      return;
+    }
+
     if (mounted) {
       ref.read(appTabProvider.notifier).state = targetTab;
     }
   }
 
+  Future<void> _openSessionQuickSettingsPane() async {
+    if (!_useDesktopEditorPane(context)) {
+      await _showSessionQuickSettingsBottomSheet(context);
+      return;
+    }
+
+    final currentPane = ref.read(desktopEditorPaneProvider);
+    if (currentPane?.isSessionQuickSettings == true) {
+      final canReset = await _popDesktopEditorStackToRoot();
+      if (!canReset) {
+        return;
+      }
+      return;
+    }
+
+    final canCloseCurrent = await _dismissDesktopEditorPaneIfNeeded();
+    if (!canCloseCurrent || !mounted) {
+      return;
+    }
+
+    _desktopEditorNavigatorKey = GlobalKey<NavigatorState>();
+    _sessionQuickSettingsKey = GlobalKey<_SessionQuickSettingsSheetState>();
+    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    ref.read(desktopEditorPaneProvider.notifier).state =
+        const DesktopEditorPane.sessionQuickSettings();
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentTab = ref.watch(appTabProvider);
-    final currentIndex = AppShell._tabToIndex[currentTab] ?? 0;
+    final desktopPane = ref.watch(desktopEditorPaneProvider);
+    final navTab = _useDesktopEditorPane(context) && desktopPane?.tab != null
+        ? desktopPane!.tab!
+        : currentTab;
+    final currentIndex = AppShell._tabToIndex[navTab] ?? 0;
     final currentSessionId = ref.watch(currentSessionIdProvider);
     final sessionBackgroundMap = ref.watch(sessionBackgroundImageProvider);
     final backgroundImagePath =
@@ -189,6 +342,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         ? sessionBackgroundMap[currentSessionId]
         : null;
     final useSidebar = Responsive.useSidebar(context);
+    final useDesktopPane = _useDesktopEditorPane(context);
 
     final drawer = Drawer(
       backgroundColor: AppColors.backgroundElevated,
@@ -198,19 +352,14 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              GlassPanelCard(
+              Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 10,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'RST',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ],
+                child: Text(
+                  'RST',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
               const SizedBox(height: 10),
@@ -238,107 +387,402 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
     );
 
-    final sidebar = Container(
-      width: 240,
-      decoration: const BoxDecoration(
-        color: AppColors.backgroundElevated,
-        border: Border(
-          right: BorderSide(color: AppColors.borderSubtle, width: 1),
-        ),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              GlassPanelCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
+    final sidebar = useDesktopPane
+        ? _DesktopNavRail(
+            currentIndex: currentIndex,
+            onSelect: (tab) => _handleTabSwitch(tab),
+          )
+        : Container(
+            width: 240,
+            decoration: const BoxDecoration(
+              color: AppColors.backgroundElevated,
+              border: Border(
+                right: BorderSide(color: AppColors.borderSubtle, width: 1),
+              ),
+            ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'RST',
-                      style: Theme.of(context).textTheme.titleLarge,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      child: Text(
+                        'RST',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: AppShell._items.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final item = AppShell._items[index];
+                          return _DrawerExpandableSection(
+                            label: item.label,
+                            icon: item.icon,
+                            selected: index == currentIndex,
+                            onTap: () => _handleTabSwitch(item.tab),
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
+            ),
+          );
+
+    final content = KeyedSubtree(
+      key: ValueKey(currentTab),
+      child: AppShell._itemForTab(currentTab).page,
+    );
+
+    final desktopEditorPane = useDesktopPane
+        ? _AnimatedDesktopEditorPaneSlot(
+            duration: _desktopPaneAnimationDuration,
+            child: desktopPane == null
+                ? null
+                : _DesktopEditorPaneHost(
+                    navigatorKey: _desktopEditorNavigatorKey,
+                    sessionQuickSettingsKey: _sessionQuickSettingsKey,
+                    pane: desktopPane,
+                  ),
+          )
+        : null;
+
+    if (useSidebar) {
+      return _wrapWithWindowsEscBack(
+        PopScope<void>(
+          canPop: currentTab == AppTab.chat && desktopPane == null,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) {
+              return;
+            }
+            await _handleRootBack(currentTab);
+          },
+          child: Row(
+            children: [
+              sidebar,
+              if (desktopEditorPane != null) ...[desktopEditorPane],
               Expanded(
-                child: ListView.separated(
-                  itemCount: AppShell._items.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final item = AppShell._items[index];
-                    return _DrawerExpandableSection(
-                      label: item.label,
-                      icon: item.icon,
-                      selected: index == currentIndex,
-                      onTap: () => _handleTabSwitch(item.tab),
-                    );
-                  },
+                child: AppScaffold(
+                  scaffoldKey: _scaffoldKey,
+                  backgroundImagePath: backgroundImagePath,
+                  headerCenter: const _CurrentSessionHeaderTitle(),
+                  headerTrailing: _SessionQuickSettingsTrigger(
+                    onPressed: _openSessionQuickSettingsPane,
+                  ),
+                  showMenuButton: false,
+                  child: content,
                 ),
               ),
             ],
           ),
         ),
-      ),
-    );
-
-    final content = KeyedSubtree(
-      key: ValueKey(AppShell._items[currentIndex].tab),
-      child: AppShell._items[currentIndex].page,
-    );
-
-    if (useSidebar) {
-      return PopScope<void>(
-        canPop: currentTab == AppTab.chat,
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) {
-            return;
-          }
-          _handleRootBack(currentTab);
-        },
-        child: Row(
-          children: [
-            sidebar,
-            Expanded(
-              child: AppScaffold(
-                scaffoldKey: _scaffoldKey,
-                backgroundImagePath: backgroundImagePath,
-                headerCenter: const _CurrentSessionHeaderTitle(),
-                headerTrailing: const _SessionQuickSettingsTrigger(),
-                showMenuButton: false,
-                child: content,
-              ),
-            ),
-          ],
-        ),
       );
     }
 
-    return PopScope<void>(
-      canPop: currentTab == AppTab.chat,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) {
-          return;
-        }
-        _handleRootBack(currentTab);
-      },
-      child: AppScaffold(
-        scaffoldKey: _scaffoldKey,
-        backgroundImagePath: backgroundImagePath,
-        headerCenter: const _CurrentSessionHeaderTitle(),
-        headerTrailing: const _SessionQuickSettingsTrigger(),
-        drawer: drawer,
-        child: content,
+    return _wrapWithWindowsEscBack(
+      PopScope<void>(
+        canPop: currentTab == AppTab.chat,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (didPop) {
+            return;
+          }
+          await _handleRootBack(currentTab);
+        },
+        child: AppScaffold(
+          scaffoldKey: _scaffoldKey,
+          backgroundImagePath: backgroundImagePath,
+          headerCenter: const _CurrentSessionHeaderTitle(),
+          headerTrailing: _SessionQuickSettingsTrigger(
+            onPressed: _openSessionQuickSettingsPane,
+          ),
+          drawer: drawer,
+          child: content,
+        ),
       ),
     );
   }
+}
+
+class _DesktopEditorPaneHost extends StatelessWidget {
+  static const hostWidth = 416.0;
+
+  const _DesktopEditorPaneHost({
+    required this.navigatorKey,
+    required this.sessionQuickSettingsKey,
+    required this.pane,
+  });
+
+  final GlobalKey<NavigatorState> navigatorKey;
+  final GlobalKey<_SessionQuickSettingsSheetState> sessionQuickSettingsKey;
+  final DesktopEditorPane pane;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: hostWidth,
+      color: AppColors.backgroundElevated,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxHeight = constraints.maxHeight
+                  .clamp(560.0, 940.0)
+                  .toDouble();
+              final maxWidth = constraints.maxWidth.toDouble();
+              final phoneMaxWidth = maxWidth.clamp(352.0, 392.0).toDouble();
+              final phoneMinWidth = phoneMaxWidth < 360.0
+                  ? phoneMaxWidth
+                  : 360.0;
+              final phoneWidth = (maxHeight * 390 / 844)
+                  .clamp(phoneMinWidth, phoneMaxWidth)
+                  .toDouble();
+
+              return Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: phoneWidth,
+                  height: maxHeight,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundElevated,
+                      borderRadius: BorderRadius.circular(26),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x18000000),
+                          blurRadius: 22,
+                          offset: Offset(4, 10),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(26),
+                      child: KeyedSubtree(
+                        key: ValueKey<String>(
+                          'desktop-editor-${pane.cacheKey}',
+                        ),
+                        child: Navigator(
+                          key: navigatorKey,
+                          onGenerateRoute: (_) => MaterialPageRoute<void>(
+                            builder: (_) => pane.isSessionQuickSettings
+                                ? _SessionQuickSettingsSheet(
+                                    key: sessionQuickSettingsKey,
+                                    embeddedInDesktopPane: true,
+                                  )
+                                : AppShell._itemForTab(pane.tab!).page,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedDesktopEditorPaneSlot extends StatelessWidget {
+  const _AnimatedDesktopEditorPaneSlot({
+    required this.duration,
+    required this.child,
+  });
+
+  final Duration duration;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    final isVisible = child != null;
+    return AnimatedContainer(
+      duration: duration,
+      curve: Curves.easeOutCubic,
+      width: isVisible ? _DesktopEditorPaneHost.hostWidth : 0,
+      child: ClipRect(
+        child: AnimatedOpacity(
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          opacity: isVisible ? 1 : 0,
+          child: IgnorePointer(ignoring: !isVisible, child: child),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopNavRail extends StatelessWidget {
+  const _DesktopNavRail({required this.currentIndex, required this.onSelect});
+
+  final int currentIndex;
+  final ValueChanged<AppTab> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return TooltipTheme(
+      data: TooltipThemeData(
+        waitDuration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        textStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: AppColors.textStrong,
+          fontWeight: FontWeight.w600,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.backgroundElevated.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borderStrong),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x24000000),
+              blurRadius: 18,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+      ),
+      child: Container(
+        width: 70,
+        color: AppColors.backgroundElevated,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+            child: Column(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceOverlay,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'R',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textStrong,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: AppShell._items.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final item = AppShell._items[index];
+                      return _DesktopNavButton(
+                        label: item.label,
+                        icon: item.icon,
+                        selected: index == currentIndex,
+                        onTap: () => onSelect(item.tab),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DesktopNavButton extends StatelessWidget {
+  const _DesktopNavButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = selected
+        ? AppColors.surfaceOverlay.withValues(alpha: 0.9)
+        : Colors.transparent;
+    final hoverBackground = selected
+        ? AppColors.surfaceOverlay.withValues(alpha: 0.96)
+        : AppColors.surfaceOverlay.withValues(alpha: 0.64);
+
+    return Tooltip(
+      message: label,
+      child: SizedBox(
+        height: 52,
+        width: double.infinity,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            hoverColor: hoverBackground,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    left: 1,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      opacity: selected ? 1 : 0,
+                      child: Container(
+                        width: 3,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          color: AppColors.accentPrimary,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                  ),
+                  TweenAnimationBuilder<Color?>(
+                    duration: const Duration(milliseconds: 180),
+                    tween: ColorTween(
+                      begin: AppColors.textSecondary,
+                      end: selected
+                          ? AppColors.accentPrimary
+                          : AppColors.textSecondary,
+                    ),
+                    builder: (context, color, _) {
+                      return Icon(icon, color: color, size: 22);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SystemBackIntent extends Intent {
+  const _SystemBackIntent();
 }
 
 class _CurrentSessionHeaderTitle extends ConsumerWidget {
@@ -446,6 +890,9 @@ class _TopStatusIndicator extends StatelessWidget {
 }
 
 Future<void> _showSessionQuickSettingsBottomSheet(BuildContext context) async {
+  if (Responsive.isWindowsDesktop(context)) {
+    return;
+  }
   if (Responsive.isDesktop(context)) {
     await showDialog<void>(
       context: context,
@@ -555,14 +1002,16 @@ class _DrawerExpandableSectionState extends State<_DrawerExpandableSection> {
   }
 }
 
-class _SessionQuickSettingsTrigger extends ConsumerWidget {
-  const _SessionQuickSettingsTrigger();
+class _SessionQuickSettingsTrigger extends StatelessWidget {
+  const _SessionQuickSettingsTrigger({required this.onPressed});
+
+  final Future<void> Function() onPressed;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return IconButton(
       tooltip: '当前会话设置',
-      onPressed: () => _showSessionQuickSettingsBottomSheet(context),
+      onPressed: () => onPressed(),
       icon: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -585,7 +1034,12 @@ class _SessionQuickSettingsTrigger extends ConsumerWidget {
 }
 
 class _SessionQuickSettingsSheet extends ConsumerStatefulWidget {
-  const _SessionQuickSettingsSheet();
+  const _SessionQuickSettingsSheet({
+    super.key,
+    this.embeddedInDesktopPane = false,
+  });
+
+  final bool embeddedInDesktopPane;
 
   @override
   ConsumerState<_SessionQuickSettingsSheet> createState() =>
@@ -812,16 +1266,26 @@ class _SessionQuickSettingsSheetState
   }
 
   Future<void> _attemptCloseToChat() async {
+    final shouldClose = await handlePaneDismiss();
+    if (!shouldClose || !mounted) {
+      return;
+    }
+    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    if (widget.embeddedInDesktopPane) {
+      ref.read(desktopEditorPaneProvider.notifier).state = null;
+    } else if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<bool> handlePaneDismiss() async {
     if (_editorState != null && _editorState!.hasUnsavedChanges) {
       final shouldClose = await _editorState!.handleAttemptDismiss();
       if (!shouldClose || !mounted) {
-        return;
+        return false;
       }
     }
-    ref.read(appTabProvider.notifier).state = AppTab.chat;
-    if (mounted) {
-      Navigator.of(context).pop();
-    }
+    return true;
   }
 
   @override

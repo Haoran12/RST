@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_state.dart';
+import '../../../shared/utils/responsive.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
@@ -96,6 +97,7 @@ class ResourceManagementPage extends ConsumerWidget {
       name: '新建${_typeLabel(optionType)}',
       description: '请填写描述信息。',
     );
+    final isWindowsDesktop = Responsive.isWindowsDesktop(context);
     final created = await Navigator.of(context).push<ManagedOption>(
       MaterialPageRoute<ManagedOption>(
         fullscreenDialog: true,
@@ -103,7 +105,9 @@ class ResourceManagementPage extends ConsumerWidget {
             _ManagedOptionEditorPage(title: '新建$title', initialOption: initial),
       ),
     );
-    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    if (!isWindowsDesktop) {
+      ref.read(appTabProvider.notifier).state = AppTab.chat;
+    }
     if (created == null) {
       return;
     }
@@ -117,6 +121,7 @@ class ResourceManagementPage extends ConsumerWidget {
     WidgetRef ref,
     ManagedOption option,
   ) async {
+    final isWindowsDesktop = Responsive.isWindowsDesktop(context);
     final edited = await Navigator.of(context).push<ManagedOption>(
       MaterialPageRoute<ManagedOption>(
         fullscreenDialog: true,
@@ -124,7 +129,9 @@ class ResourceManagementPage extends ConsumerWidget {
             _ManagedOptionEditorPage(title: '编辑$title', initialOption: option),
       ),
     );
-    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    if (!isWindowsDesktop) {
+      ref.read(appTabProvider.notifier).state = AppTab.chat;
+    }
     if (edited == null) {
       return;
     }
@@ -142,6 +149,7 @@ class ResourceManagementPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => AlertDialog(
         title: Text('删除$title'),
         content: Text('确定删除“${option.name}”？'),
@@ -654,6 +662,7 @@ class _ManagedOptionEditorPageState extends State<_ManagedOptionEditorPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('放弃未保存的修改？'),

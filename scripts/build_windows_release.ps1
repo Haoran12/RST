@@ -1,5 +1,6 @@
 param(
     [switch]$SkipFlutterBuild,
+    [switch]$SkipRustBuild,
     [string]$ReleaseNotes = "Windows x64 release build."
 )
 
@@ -51,17 +52,21 @@ try {
     Write-Host "Version bump: $currentVersion -> $version" -ForegroundColor Cyan
 
     # Step 1: Build Rust library
-    Write-Host "Building Rust library for Windows..." -ForegroundColor Yellow
-    Push-Location $rustDir
-    try {
-        cargo build --release
-        if (-not (Test-Path $rustDllPath)) {
-            throw "rst_core.dll not found after Rust build"
+    if (-not $SkipRustBuild) {
+        Write-Host "Building Rust library for Windows..." -ForegroundColor Yellow
+        Push-Location $rustDir
+        try {
+            cargo build --release
+            if (-not (Test-Path $rustDllPath)) {
+                throw "rst_core.dll not found after Rust build"
+            }
+            Write-Host "Rust library built successfully." -ForegroundColor Green
         }
-        Write-Host "Rust library built successfully." -ForegroundColor Green
-    }
-    finally {
-        Pop-Location
+        finally {
+            Pop-Location
+        }
+    } elseif (-not (Test-Path $rustDllPath)) {
+        throw "SkipRustBuild is set, but Rust DLL is missing: $rustDllPath"
     }
 
     # Step 2: Build Flutter Windows app
@@ -69,7 +74,7 @@ try {
         Write-Host "Building Flutter Windows application..." -ForegroundColor Yellow
         Push-Location $projectRoot
         try {
-            flutter build windows --release
+            flutter build windows --release --no-pub
             Write-Host "Flutter application built successfully." -ForegroundColor Green
         }
         finally {
@@ -88,32 +93,32 @@ try {
     # Step 4: Create release package
     Write-Host "Creating release package..." -ForegroundColor Yellow
 
-    # Always create fresh directory
-    New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+    # Always create fresh output directory
+    if (Test-Path -LiteralPath $releaseDir) {
+        Get-ChildItem -LiteralPath $releaseDir -Force | Remove-Item -Recurse -Force
+    } else {
+        New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+    }
 
     # Copy all files from Flutter output
     Get-ChildItem -Path $flutterOutputDir | ForEach-Object {
-        $destPath = Join-Path $releaseDir $_.Name
-        if (Test-Path $destPath) {
-            Remove-Item -Path $destPath -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Copy-Item -Path $_.FullName -Destination $releaseDir -Recurse -Force
+        Copy-Item -LiteralPath $_.FullName -Destination $releaseDir -Recurse -Force
     }
 
     # Create versioned zip archive
     $versionedZipName = "rst-$version-win64.zip"
-    $versionedZipPath = Join-Path $projectRoot "build\$versionedZipName"
-    if (Test-Path $versionedZipPath) {
-        Remove-Item -Path $versionedZipPath -Force
+    $versionedZipPath = Join-Path $releaseDir $versionedZipName
+    if (Test-Path -LiteralPath $versionedZipPath) {
+        Remove-Item -LiteralPath $versionedZipPath -Force
     }
-    Compress-Archive -Path $releaseDir -DestinationPath $versionedZipPath -CompressionLevel Optimal
+    Compress-Archive -Path (Join-Path $releaseDir "*") -DestinationPath $versionedZipPath -CompressionLevel Optimal
 
     # Create latest zip archive
-    $latestZipPath = Join-Path $projectRoot "build\rst-latest-win64.zip"
-    if (Test-Path $latestZipPath) {
-        Remove-Item -Path $latestZipPath -Force
+    $latestZipPath = Join-Path $releaseDir "rst-latest-win64.zip"
+    if (Test-Path -LiteralPath $latestZipPath) {
+        Remove-Item -LiteralPath $latestZipPath -Force
     }
-    Copy-Item -Path $versionedZipPath -Destination $latestZipPath -Force
+    Copy-Item -LiteralPath $versionedZipPath -Destination $latestZipPath -Force
 
     # Step 5: Update version history
     $releaseDate = Get-Date -Format "yyyy-MM-dd"
@@ -121,6 +126,7 @@ try {
         "## $version ($releaseDate)",
         "",
         "- Build type: Windows x64 release",
+        "- Build number: $nextBuild",
         "- Artifact: ``$versionedZipName``",
         "- Notes: $ReleaseNotes"
     )

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_colors.dart';
 import '../utils/responsive.dart';
+
+class _SendComposerIntent extends Intent {
+  const _SendComposerIntent();
+}
 
 class FloatingComposer extends StatefulWidget {
   const FloatingComposer({
@@ -113,7 +118,9 @@ class _FloatingComposerState extends State<FloatingComposer> {
         builder: (context) {
           return Dialog(
             backgroundColor: AppColors.backgroundElevated,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 640, maxHeight: 600),
               child: _FullscreenComposerSheet(
@@ -183,18 +190,44 @@ class _FloatingComposerState extends State<FloatingComposer> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: widget.controller,
-                      focusNode: focusNode,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.newline,
-                      style: const TextStyle(color: AppColors.textStrong),
-                      decoration: const InputDecoration(
-                        isCollapsed: true,
-                        hintText: '随便聊聊...',
-                        hintStyle: TextStyle(color: AppColors.textMuted),
-                        border: InputBorder.none,
+                    child: Shortcuts(
+                      shortcuts: const <ShortcutActivator, Intent>{
+                        SingleActivator(
+                          LogicalKeyboardKey.enter,
+                          control: true,
+                        ): _SendComposerIntent(),
+                        SingleActivator(
+                          LogicalKeyboardKey.numpadEnter,
+                          control: true,
+                        ): _SendComposerIntent(),
+                      },
+                      child: Actions(
+                        actions: <Type, Action<Intent>>{
+                          _SendComposerIntent:
+                              CallbackAction<_SendComposerIntent>(
+                                onInvoke: (_) {
+                                  if (!focusNode.hasFocus) {
+                                    return null;
+                                  }
+                                  widget.onSend();
+                                  return null;
+                                },
+                              ),
+                        },
+                        child: TextField(
+                          controller: widget.controller,
+                          focusNode: focusNode,
+                          minLines: 1,
+                          maxLines: 4,
+                          textInputAction: TextInputAction.newline,
+                          style: const TextStyle(color: AppColors.textStrong),
+                          decoration: const InputDecoration(
+                            isCollapsed: true,
+                            hintText: '随便聊聊...',
+                            hintStyle: TextStyle(color: AppColors.textMuted),
+                            border: InputBorder.none,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -450,21 +483,45 @@ class _FullscreenComposerSheetState extends State<_FullscreenComposerSheet> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  keyboardType: TextInputType.multiline,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: const TextStyle(
-                    color: AppColors.textStrong,
-                    height: 1.45,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: '输入内容...',
-                    hintStyle: TextStyle(color: AppColors.textMuted),
-                    border: InputBorder.none,
+                child: Shortcuts(
+                  shortcuts: const <ShortcutActivator, Intent>{
+                    SingleActivator(LogicalKeyboardKey.enter, control: true):
+                        _SendComposerIntent(),
+                    SingleActivator(
+                      LogicalKeyboardKey.numpadEnter,
+                      control: true,
+                    ): _SendComposerIntent(),
+                  },
+                  child: Actions(
+                    actions: <Type, Action<Intent>>{
+                      _SendComposerIntent: CallbackAction<_SendComposerIntent>(
+                        onInvoke: (_) {
+                          if (!_focusNode.hasFocus) {
+                            return null;
+                          }
+                          _closeWithValue();
+                          widget.onSend();
+                          return null;
+                        },
+                      ),
+                    },
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      keyboardType: TextInputType.multiline,
+                      maxLines: null,
+                      expands: true,
+                      textAlignVertical: TextAlignVertical.top,
+                      style: const TextStyle(
+                        color: AppColors.textStrong,
+                        height: 1.45,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: '输入内容...',
+                        hintStyle: TextStyle(color: AppColors.textMuted),
+                        border: InputBorder.none,
+                      ),
+                    ),
                   ),
                 ),
               ),

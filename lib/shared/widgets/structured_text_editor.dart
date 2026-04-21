@@ -50,8 +50,6 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
   bool _applyingAutoFormat = false;
   bool _syncingHighlights = false;
   bool _isFocused = false;
-  double _keyboardHeight = 0;
-  bool _keyboardVisible = false;
 
   @override
   void initState() {
@@ -183,17 +181,14 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
             ),
           ),
           if (_isFocused)
-            Transform.translate(
-              offset: Offset(0, _keyboardHeight),
-              child: _StructuredEditorAssistBar(
-                onFullscreen: _openFullscreenEditor,
-                onInsertColon: () => _insertLiteral(':'),
-                onInsertDoubleQuote: () => _insertWrapped('"', '"'),
-                onInsertBraces: () => _insertWrapped('{', '}'),
-                onInsertBrackets: () => _insertWrapped('[', ']'),
-                onInsertParentheses: () => _insertWrapped('(', ')'),
-                onInsertHash: () => _insertLiteral('#'),
-              ),
+            _StructuredEditorAssistBar(
+              onFullscreen: _openFullscreenEditor,
+              onInsertColon: () => _insertLiteral(':'),
+              onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+              onInsertBraces: () => _insertWrapped('{', '}'),
+              onInsertBrackets: () => _insertWrapped('[', ']'),
+              onInsertParentheses: () => _insertWrapped('(', ')'),
+              onInsertHash: () => _insertLiteral('#'),
             ),
         ],
       ),
@@ -208,32 +203,6 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
     setState(() {
       _isFocused = focused;
     });
-  }
-
-  @override
-  void didChangeMetrics() {
-    if (!mounted) {
-      return;
-    }
-    final keyboardHeight = _resolveKeyboardInset();
-    final keyboardVisible = keyboardHeight > 0;
-    if (_keyboardHeight == keyboardHeight && _keyboardVisible == keyboardVisible) {
-      return;
-    }
-    setState(() {
-      _keyboardHeight = keyboardHeight;
-      _keyboardVisible = keyboardVisible;
-    });
-  }
-
-  double _resolveKeyboardInset() {
-    final mediaInset = MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0;
-    final view = View.maybeOf(context);
-    if (view == null) {
-      return mediaInset;
-    }
-    final rawInset = view.viewInsets.bottom / view.devicePixelRatio;
-    return rawInset > mediaInset ? rawInset : mediaInset;
   }
 
   void _insertLiteral(String value) {
@@ -637,17 +606,14 @@ class _FullscreenStructuredEditorSheet extends StatefulWidget {
 }
 
 class _FullscreenStructuredEditorSheetState
-    extends State<_FullscreenStructuredEditorSheet>
-    with WidgetsBindingObserver {
+    extends State<_FullscreenStructuredEditorSheet> {
   late final TextEditingController _controller;
   late final _StructuredContentFormatter _formatter;
   late final FocusNode _focusNode;
-  double _keyboardHeight = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _controller = TextEditingController(text: widget.initialText);
     _formatter = _StructuredContentFormatter(
       currentKind: () => widget.initialFormat,
@@ -662,24 +628,9 @@ class _FullscreenStructuredEditorSheetState
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeMetrics() {
-    if (!mounted) {
-      return;
-    }
-    final keyboardHeight = MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0;
-    if (_keyboardHeight == keyboardHeight) {
-      return;
-    }
-    setState(() {
-      _keyboardHeight = keyboardHeight;
-    });
   }
 
   void _applyAndClose() {
@@ -805,17 +756,14 @@ class _FullscreenStructuredEditorSheetState
                 ),
               ),
             ),
-            Padding(
-              padding: EdgeInsets.only(bottom: _keyboardHeight),
-              child: _StructuredEditorAssistBar(
-                onFullscreen: _applyAndClose,
-                onInsertColon: () => _insertLiteral(':'),
-                onInsertDoubleQuote: () => _insertWrapped('"', '"'),
-                onInsertBraces: () => _insertWrapped('{', '}'),
-                onInsertBrackets: () => _insertWrapped('[', ']'),
-                onInsertParentheses: () => _insertWrapped('(', ')'),
-                onInsertHash: () => _insertLiteral('#'),
-              ),
+            _StructuredEditorAssistBar(
+              onFullscreen: _applyAndClose,
+              onInsertColon: () => _insertLiteral(':'),
+              onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+              onInsertBraces: () => _insertWrapped('{', '}'),
+              onInsertBrackets: () => _insertWrapped('[', ']'),
+              onInsertParentheses: () => _insertWrapped('(', ')'),
+              onInsertHash: () => _insertLiteral('#'),
             ),
           ],
         ),
@@ -1167,7 +1115,14 @@ class _StructuredContentFormatter extends TextInputFormatter {
       return currentIndent;
     }
 
-    if (_isYamlListItemWithoutValue(trimmedLine)) {
+    // Check if current line is a list item (starts with '- ')
+    if (trimmedLine.startsWith('- ')) {
+      // For list items, continue with same indent and '- ' prefix
+      return '$currentIndent- ';
+    }
+
+    if (trimmedLine == '-') {
+      // Bare '-' without space, still a list item
       return '$currentIndent- ';
     }
 
@@ -1176,25 +1131,6 @@ class _StructuredContentFormatter extends TextInputFormatter {
     }
 
     return currentIndent;
-  }
-
-  bool _isYamlListItemWithoutValue(String trimmedLine) {
-    if (!trimmedLine.startsWith('-')) {
-      return false;
-    }
-    if (trimmedLine == '-') {
-      return true;
-    }
-    if (!trimmedLine.startsWith('- ')) {
-      return false;
-    }
-
-    final payload = trimmedLine.substring(2).trimRight();
-    if (payload.isEmpty) {
-      return true;
-    }
-
-    return !_isYamlBlockMappingEntry(payload);
   }
 
   bool _isYamlBlockMappingEntry(String trimmedLine) {

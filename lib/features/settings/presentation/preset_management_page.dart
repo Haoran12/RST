@@ -164,6 +164,7 @@ class PresetManagementPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => AlertDialog(
         title: const Text('删除预设'),
         content: Text('确定删除“${preset.name}”？'),
@@ -206,7 +207,11 @@ class PresetManagementPage extends ConsumerWidget {
 }
 
 class PresetEditorPage extends ConsumerStatefulWidget {
-  const PresetEditorPage({super.key, required this.title, required this.initialValue});
+  const PresetEditorPage({
+    super.key,
+    required this.title,
+    required this.initialValue,
+  });
 
   final String title;
   final StoredPresetConfig initialValue;
@@ -329,12 +334,16 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
             child: _PresetEntryCard(
               entry: entry,
               index: index,
-              onEdit: () => _openEntryEditor(index),
+              onEdit: _isLockedInteractiveInput(entry)
+                  ? null
+                  : () => _openEntryEditor(index),
               onCopy: () => _copyEntry(index),
               onDelete: entry.isBuiltin ? null : () => _deleteEntry(index),
-              onEnabledChanged: (value) {
-                _updateEntry(index, entry.copyWith(enabled: value));
-              },
+              onEnabledChanged: _isLockedInteractiveInput(entry)
+                  ? null
+                  : (value) {
+                      _updateEntry(index, entry.copyWith(enabled: value));
+                    },
             ),
           );
         },
@@ -370,6 +379,9 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
 
   Future<void> _openEntryEditor(int index) async {
     final entry = _draft.entries[index];
+    if (_isLockedInteractiveInput(entry)) {
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (context) => _PresetEntryEditorPage(
@@ -388,6 +400,7 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
     }
     final target = await showDialog<_CopyTarget>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => _CopyEntryDialog(
         currentPresetId: _draft.presetId,
         currentPresetName: _draft.name,
@@ -435,6 +448,7 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
     final entry = _draft.entries[index];
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => AlertDialog(
         title: const Text('删除条目'),
         content: Text('确定删除“${entry.title}”？'),
@@ -560,6 +574,7 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => AlertDialog(
         title: const Text('放弃未保存的修改？'),
         content: const Text('当前预设还有未保存的内容，返回后会丢失本次修改。'),
@@ -580,6 +595,10 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
 
   bool _isDirty() =>
       jsonEncode(_draft.toJson()) != jsonEncode(_baseline.toJson());
+
+  bool _isLockedInteractiveInput(StoredPresetEntry entry) {
+    return entry.builtinKey == PresetBuiltinEntryKeys.interactiveInput;
+  }
 
   StoredPresetEntry _cloneEntry(StoredPresetEntry source) {
     return source.copyWith(
@@ -645,10 +664,10 @@ class _PresetEntryCard extends StatelessWidget {
 
   final StoredPresetEntry entry;
   final int index;
-  final VoidCallback onEdit;
+  final VoidCallback? onEdit;
   final VoidCallback onCopy;
   final VoidCallback? onDelete;
-  final ValueChanged<bool> onEnabledChanged;
+  final ValueChanged<bool>? onEnabledChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -702,7 +721,7 @@ class _PresetEntryCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               _CompactIconButton(
-                tooltip: '编辑条目',
+                tooltip: onEdit == null ? '该条目不可编辑' : '编辑条目',
                 icon: Icons.edit_outlined,
                 onPressed: onEdit,
               ),

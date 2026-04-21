@@ -10,7 +10,7 @@ $pubspecPath = Join-Path $projectRoot "pubspec.yaml"
 $mainManifestPath = Join-Path $projectRoot "android\app\src\main\AndroidManifest.xml"
 $versionHistoryPath = Join-Path $projectRoot "docs\version-history.md"
 $flutterOutputApk = Join-Path $projectRoot "build\app\outputs\flutter-apk\app-release.apk"
-$releaseDir = Join-Path $projectRoot "release\android"
+$releaseDir = Join-Path $projectRoot "build\Android"
 
 if (-not (Test-Path $pubspecPath)) {
     throw "pubspec.yaml not found at $pubspecPath"

@@ -209,6 +209,7 @@ class WorldBookManagementPage extends ConsumerWidget {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('删除世界书'),
         content: Text('确定删除“${option.name}”？'),
@@ -302,7 +303,11 @@ class WorldBookManagementPage extends ConsumerWidget {
 }
 
 class WorldBookEditorPage extends StatefulWidget {
-  const WorldBookEditorPage({super.key, required this.title, required this.initial});
+  const WorldBookEditorPage({
+    super.key,
+    required this.title,
+    required this.initial,
+  });
 
   final String title;
   final ManagedOption initial;
@@ -397,7 +402,9 @@ class WorldBookEditorPageState extends State<WorldBookEditorPage>
                         children: [
                           TextField(
                             controller: _name,
-                            decoration: const InputDecoration(labelText: '世界书名称'),
+                            decoration: const InputDecoration(
+                              labelText: '世界书名称',
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Row(
@@ -412,7 +419,10 @@ class WorldBookEditorPageState extends State<WorldBookEditorPage>
                                   keyboardType: TextInputType.number,
                                   decoration: const InputDecoration(
                                     isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 10,
+                                    ),
                                   ),
                                   style: const TextStyle(fontSize: 14),
                                 ),
@@ -661,7 +671,11 @@ class WorldBookEditorPageState extends State<WorldBookEditorPage>
     var sections = widget.initial.sections;
     sections = _upsertField(sections, worldBookJsonFieldKey, worldbookJson);
     sections = _upsertField(sections, _worldBookCategoryFieldKey, categoryJson);
-    sections = _upsertField(sections, _worldBookScanDepthFieldKey, '$scanDepthValue');
+    sections = _upsertField(
+      sections,
+      _worldBookScanDepthFieldKey,
+      '$scanDepthValue',
+    );
 
     final saved = widget.initial.copyWith(
       name: name,
@@ -680,6 +694,7 @@ class WorldBookEditorPageState extends State<WorldBookEditorPage>
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text('放弃未保存的修改？'),
@@ -774,7 +789,7 @@ class _EntryEditorPageState extends State<_EntryEditorPage>
         if (!mounted || !shouldClose) {
           return;
         }
-        Navigator.of(context).pop(_buildResult());
+        Navigator.of(this.context).pop(_buildResult());
       },
       child: Scaffold(
         appBar: AppBar(
@@ -785,7 +800,7 @@ class _EntryEditorPageState extends State<_EntryEditorPage>
               if (!mounted || !shouldClose) {
                 return;
               }
-              Navigator.of(context).pop(_buildResult());
+              Navigator.of(this.context).pop(_buildResult());
             },
             icon: const Icon(Icons.arrow_back_rounded),
           ),
@@ -870,18 +885,22 @@ class _EntryEditorPageState extends State<_EntryEditorPage>
                         ),
                         Row(
                           children: [
-                            const Expanded(
-                              child: Text('概率 (%)'),
-                            ),
+                            const Expanded(child: Text('概率 (%)')),
                             SizedBox(
                               width: 100,
                               height: 36,
                               child: TextField(
                                 controller: _probabilityPercent,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 decoration: const InputDecoration(
                                   isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 10,
+                                  ),
                                   hintText: '0.1-100',
                                 ),
                                 style: const TextStyle(fontSize: 14),
@@ -894,7 +913,10 @@ class _EntryEditorPageState extends State<_EntryEditorPage>
                   ),
                   const SizedBox(height: 10),
                   GlassPanelCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     child: ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('高级选项'),
@@ -951,6 +973,7 @@ class _EntryEditorPageState extends State<_EntryEditorPage>
     }
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         title: const Text('放弃未保存的修改？'),
@@ -1015,11 +1038,14 @@ class _EntryAdvancedOptionsPage extends StatefulWidget {
   final _EntryDraft initial;
 
   @override
-  State<_EntryAdvancedOptionsPage> createState() => _EntryAdvancedOptionsPageState();
+  State<_EntryAdvancedOptionsPage> createState() =>
+      _EntryAdvancedOptionsPageState();
 }
 
 class _EntryAdvancedOptionsPageState extends State<_EntryAdvancedOptionsPage> {
-  late Map<String, dynamic> _data = Map<String, dynamic>.from(widget.initial.data);
+  late Map<String, dynamic> _data = Map<String, dynamic>.from(
+    widget.initial.data,
+  );
   late final TextEditingController _order = TextEditingController(
     text: '${_asInt(_data['order'])}',
   );
@@ -1158,25 +1184,29 @@ class _EntryAdvancedOptionsPageState extends State<_EntryAdvancedOptionsPage> {
                     children: [
                       SwitchListTile(
                         value: _data['matchPersonaDescription'] == true,
-                        onChanged: (v) => _setBool('matchPersonaDescription', v),
+                        onChanged: (v) =>
+                            _setBool('matchPersonaDescription', v),
                         contentPadding: EdgeInsets.zero,
                         title: const Text('matchPersonaDescription'),
                       ),
                       SwitchListTile(
                         value: _data['matchCharacterDescription'] == true,
-                        onChanged: (v) => _setBool('matchCharacterDescription', v),
+                        onChanged: (v) =>
+                            _setBool('matchCharacterDescription', v),
                         contentPadding: EdgeInsets.zero,
                         title: const Text('matchCharacterDescription'),
                       ),
                       SwitchListTile(
                         value: _data['matchCharacterPersonality'] == true,
-                        onChanged: (v) => _setBool('matchCharacterPersonality', v),
+                        onChanged: (v) =>
+                            _setBool('matchCharacterPersonality', v),
                         contentPadding: EdgeInsets.zero,
                         title: const Text('matchCharacterPersonality'),
                       ),
                       SwitchListTile(
                         value: _data['matchCharacterDepthPrompt'] == true,
-                        onChanged: (v) => _setBool('matchCharacterDepthPrompt', v),
+                        onChanged: (v) =>
+                            _setBool('matchCharacterDepthPrompt', v),
                         contentPadding: EdgeInsets.zero,
                         title: const Text('matchCharacterDepthPrompt'),
                       ),
@@ -1208,7 +1238,9 @@ class _EntryAdvancedOptionsPageState extends State<_EntryAdvancedOptionsPage> {
                       TextField(
                         controller: _position,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'position'),
+                        decoration: const InputDecoration(
+                          labelText: 'position',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -1220,7 +1252,9 @@ class _EntryAdvancedOptionsPageState extends State<_EntryAdvancedOptionsPage> {
                       TextField(
                         controller: _probability,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'probability'),
+                        decoration: const InputDecoration(
+                          labelText: 'probability',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -1231,19 +1265,25 @@ class _EntryAdvancedOptionsPageState extends State<_EntryAdvancedOptionsPage> {
                       TextField(
                         controller: _scanDepth,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'scanDepth (留空使用世界书默认值)'),
+                        decoration: const InputDecoration(
+                          labelText: 'scanDepth (留空使用世界书默认值)',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _selectiveLogic,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'selectiveLogic'),
+                        decoration: const InputDecoration(
+                          labelText: 'selectiveLogic',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _groupWeight,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'groupWeight'),
+                        decoration: const InputDecoration(
+                          labelText: 'groupWeight',
+                        ),
                       ),
                     ],
                   ),
@@ -1261,7 +1301,9 @@ class _EntryAdvancedOptionsPageState extends State<_EntryAdvancedOptionsPage> {
                       TextField(
                         controller: _cooldown,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'cooldown'),
+                        decoration: const InputDecoration(
+                          labelText: 'cooldown',
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -1272,7 +1314,9 @@ class _EntryAdvancedOptionsPageState extends State<_EntryAdvancedOptionsPage> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: _automationId,
-                        decoration: const InputDecoration(labelText: 'automationId'),
+                        decoration: const InputDecoration(
+                          labelText: 'automationId',
+                        ),
                       ),
                     ],
                   ),

@@ -211,6 +211,7 @@ class PresetBuiltinEntryKeys {
   static const String userDescription = 'user_description';
   static const String chatHistory = 'chat_history';
   static const String scene = 'scene';
+  static const String interactiveInput = 'interactive_input';
 
   static const List<String> ordered = <String>[
     mainPrompt,
@@ -219,6 +220,7 @@ class PresetBuiltinEntryKeys {
     chatHistory,
     loreAfter,
     scene,
+    interactiveInput,
   ];
 
   static String defaultTitleOf(String builtinKey) {
@@ -229,6 +231,7 @@ class PresetBuiltinEntryKeys {
       userDescription => 'User Description',
       chatHistory => 'Chat History',
       scene => 'Scene',
+      interactiveInput => 'Interactive Input',
       _ => builtinKey,
     };
   }
@@ -353,12 +356,10 @@ List<StoredPresetEntry> normalizeStoredPresetEntries(
       next.add(defaultEntry);
       continue;
     }
-    final existing = next[existingIndex];
-    if (builtinKey == PresetBuiltinEntryKeys.mainPrompt &&
-        existing.content.trim().isEmpty &&
-        legacyMainPrompt.trim().isNotEmpty) {
-      next[existingIndex] = existing.copyWith(content: legacyMainPrompt.trim());
-    }
+    next[existingIndex] = _normalizeBuiltinEntryInvariants(
+      next[existingIndex],
+      legacyMainPrompt: legacyMainPrompt,
+    );
   }
 
   return next;
@@ -381,15 +382,45 @@ StoredPresetEntry _buildBuiltinPresetEntry(
   String builtinKey, {
   String mainPromptContent = '',
 }) {
-  return StoredPresetEntry(
+  final entry = StoredPresetEntry(
     entryId: 'builtin-$builtinKey',
     title: PresetBuiltinEntryKeys.defaultTitleOf(builtinKey),
-    role: StoredPresetEntryRole.system,
+    role: builtinKey == PresetBuiltinEntryKeys.interactiveInput
+        ? StoredPresetEntryRole.user
+        : StoredPresetEntryRole.system,
     content: builtinKey == PresetBuiltinEntryKeys.mainPrompt
         ? mainPromptContent.trim()
         : '',
     builtinKey: builtinKey,
   );
+  return _normalizeBuiltinEntryInvariants(
+    entry,
+    legacyMainPrompt: mainPromptContent,
+  );
+}
+
+StoredPresetEntry _normalizeBuiltinEntryInvariants(
+  StoredPresetEntry entry, {
+  String legacyMainPrompt = '',
+}) {
+  final builtinKey = entry.builtinKey;
+  if (builtinKey == null) {
+    return entry;
+  }
+  if (builtinKey == PresetBuiltinEntryKeys.mainPrompt &&
+      entry.content.trim().isEmpty &&
+      legacyMainPrompt.trim().isNotEmpty) {
+    return entry.copyWith(content: legacyMainPrompt.trim());
+  }
+  if (builtinKey == PresetBuiltinEntryKeys.interactiveInput) {
+    return entry.copyWith(
+      title: PresetBuiltinEntryKeys.defaultTitleOf(builtinKey),
+      role: StoredPresetEntryRole.user,
+      content: '',
+      enabled: true,
+    );
+  }
+  return entry;
 }
 
 class StoredPresetConfig {
@@ -699,6 +730,7 @@ String _sillyTavernIdentifierForEntry(StoredPresetEntry entry) {
       PresetBuiltinEntryKeys.userDescription => 'personaDescription',
       PresetBuiltinEntryKeys.chatHistory => 'chatHistory',
       PresetBuiltinEntryKeys.scene => 'scenario',
+      PresetBuiltinEntryKeys.interactiveInput => 'interactiveInput',
       _ => entry.entryId,
     };
   }
@@ -713,6 +745,7 @@ String? _builtinKeyFromSillyTavernIdentifier(String identifier) {
     'personaDescription' => PresetBuiltinEntryKeys.userDescription,
     'chatHistory' => PresetBuiltinEntryKeys.chatHistory,
     'scenario' => PresetBuiltinEntryKeys.scene,
+    'interactiveInput' => PresetBuiltinEntryKeys.interactiveInput,
     _ => null,
   };
 }

@@ -64,42 +64,32 @@ void main() {
     expect(controllerOf(tester, fullscreenEditor).text, 'profile:\n  ');
   });
 
-  testWidgets(
-    'assist bar uses keyboard inset even when MediaQuery inset is zero',
-    (WidgetTester tester) async {
-      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
-      addTearDown(tester.view.resetViewInsets);
+  testWidgets('yaml list item continues with same indent and dash on newline', (
+    WidgetTester tester,
+  ) async {
+    await pumpEditor(tester);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(viewInsets: EdgeInsets.zero),
-                child: StructuredTextEditor(
-                  initialText: '',
-                  initialFormat: StructuredTextFormat.yaml,
-                  height: 320,
-                  onChanged: (_) {},
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
+    final editor = find.byType(TextField).first;
 
-      await tester.tap(find.byType(TextField).first);
-      await tester.pump();
+    // Simple list item
+    await tester.enterText(editor, '- item1');
+    await tester.pump();
+    await tester.enterText(editor, '- item1\n');
+    await tester.pump();
+    expect(controllerOf(tester, editor).text, '- item1\n- ');
 
-      final paddingWidget = tester.widget<Padding>(
-        find.byKey(const ValueKey('assist-bar-visible')),
-      );
-      final bottomPadding = (paddingWidget.padding as EdgeInsets).bottom;
-      final expected = 280 / tester.view.devicePixelRatio;
-      expect(bottomPadding, closeTo(expected, 0.001));
-    },
-  );
+    // List item with value after newline should continue list
+    await tester.enterText(editor, '- item1\n- item2');
+    await tester.pump();
+    await tester.enterText(editor, '- item1\n- item2\n');
+    await tester.pump();
+    expect(controllerOf(tester, editor).text, '- item1\n- item2\n- ');
+
+    // Indented list item
+    await tester.enterText(editor, 'list:\n  - item1');
+    await tester.pump();
+    await tester.enterText(editor, 'list:\n  - item1\n');
+    await tester.pump();
+    expect(controllerOf(tester, editor).text, 'list:\n  - item1\n  - ');
+  });
 }

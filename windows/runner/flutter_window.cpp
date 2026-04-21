@@ -65,12 +65,6 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
-    case WM_NCCALCSIZE:
-      // Remove system title bar for bitsdojo_window
-      if (wparam == TRUE) {
-        return 0;
-      }
-      break;
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

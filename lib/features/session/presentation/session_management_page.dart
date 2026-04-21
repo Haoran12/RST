@@ -7,6 +7,7 @@ import '../../../core/providers/app_state.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../core/services/world_book_injection.dart';
+import '../../../shared/utils/responsive.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
@@ -169,13 +170,14 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     final worldBookOptions = ref.read(worldBookOptionsProvider);
     final appearanceOptions = ref.read(appearanceOptionsProvider);
     final sessionService = ref.read(sessionServiceProvider);
+    final isWindowsDesktop = Responsive.isWindowsDesktop(context);
 
     final initialDraft = SessionSettingsDraft(
       sessionName: '新会话',
       userDescription: startupRuntime.defaultUserDescription,
       worldDescription: startupRuntime.defaultScene,
       characterDescription: startupRuntime.defaultLores,
-      schedulerMode: SchedulerMode.rst,
+      schedulerMode: SchedulerMode.sillyTavern,
       apiConfigId: apiOptions.isNotEmpty
           ? apiOptions.first.apiId
           : startupRuntime.apiConfig.apiId,
@@ -237,7 +239,9 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     _applySessionScopedSettings(sessionId: created.sessionId, draft: saved);
     ref.read(currentSessionIdProvider.notifier).state = created.sessionId;
     ref.read(workspaceReloadTickProvider.notifier).state++;
-    ref.read(appTabProvider.notifier).state = AppTab.chat;
+    if (!isWindowsDesktop) {
+      ref.read(appTabProvider.notifier).state = AppTab.chat;
+    }
     _reload();
   }
 
@@ -491,6 +495,7 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => AlertDialog(
         title: const Text('删除会话'),
         content: Text('确定删除“$sessionName”？相关聊天记录会一起移除。'),
