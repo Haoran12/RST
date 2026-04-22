@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import '../utils/reasoning_markup.dart';
 import '../utils/responsive.dart';
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 import 'tag_chip.dart';
 
 class MessageBubbleAppearance {
@@ -32,6 +33,18 @@ class MessageBubbleAppearance {
   final Color quotedColor;
   final double fontScale;
   final double bubbleOpacity;
+
+  factory MessageBubbleAppearance.fromTheme(BuildContext context) {
+    return MessageBubbleAppearance(
+      paragraphColor: AppThemeTokens.markdownParagraphColor(context),
+      headingColor: AppThemeTokens.markdownHeadingColor(context),
+      italicColor: AppThemeTokens.markdownItalicColor(context),
+      boldColor: AppThemeTokens.markdownBoldColor(context),
+      quotedColor: AppThemeTokens.markdownQuotedColor(context),
+      fontScale: AppThemeTokens.fontScale(context),
+      bubbleOpacity: AppThemeTokens.messageBubbleOpacity(context),
+    );
+  }
 }
 
 class MessageBubble extends StatelessWidget {
@@ -83,10 +96,10 @@ class MessageBubble extends StatelessWidget {
         ? roleLabel
         : '$roleLabel ${headerMeta!.trim()}';
     final background = _isUser
-        ? AppColors.surfaceActive
+        ? AppThemeTokens.userBubble(context)
         : _isSystem
-        ? AppColors.backgroundElevated
-        : AppColors.surfaceOverlay;
+        ? AppThemeTokens.systemBubble(context)
+        : AppThemeTokens.assistantBubble(context);
     final parsedMarkup = ReasoningMarkup.parse(content);
     final maxBubbleWidth = useCenteredDesktopLayout
         ? 760.0
@@ -105,9 +118,13 @@ class MessageBubble extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: background.withValues(alpha: appearance.bubbleOpacity),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(
+              AppThemeTokens.radiusBubble(context),
+            ),
             border: Border.all(
-              color: hidden ? AppColors.warning : AppColors.borderSubtle,
+              color: hidden
+                  ? AppThemeTokens.warning(context)
+                  : AppThemeTokens.border(context),
             ),
           ),
           child: Padding(
@@ -119,15 +136,17 @@ class MessageBubble extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(
-                        fontSize: 11,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textMuted,
+                        color: AppThemeTokens.textMuted(context),
                       ),
                     ),
                     const SizedBox(width: 8),
                     if (hidden)
-                      const TagChip(label: '已隐藏', color: AppColors.warning),
+                      TagChip(
+                        label: '已隐藏',
+                        color: AppThemeTokens.warning(context),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -147,7 +166,7 @@ class MessageBubble extends StatelessWidget {
                 ],
                 if (_hasActions) ...[
                   const SizedBox(height: 8),
-                  const Divider(height: 1, color: AppColors.borderSubtle),
+                  Divider(height: 1, color: AppThemeTokens.border(context)),
                   const SizedBox(height: 4),
                   Align(
                     alignment: Alignment.centerRight,
@@ -167,7 +186,7 @@ class MessageBubble extends StatelessWidget {
                             icon: Icons.delete_outline_rounded,
                             tooltip: '删除',
                             onPressed: onDelete!,
-                            foregroundColor: AppColors.error,
+                            foregroundColor: AppThemeTokens.error(context),
                           ),
                         if (onCopy != null)
                           _QuickActionButton(
@@ -213,31 +232,16 @@ class _ReasoningPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLightTheme = Theme.of(context).brightness == Brightness.light;
-    final panelBorderColor = isLightTheme
-        ? const Color(0xFFD7E0EC)
-        : const Color(0xFF3D5168);
-    final panelBackgroundColor = isLightTheme
-        ? const Color(0xFFF2F5FA)
-        : const Color(0xFF131C27);
-    final panelTitleColor = isLightTheme
-        ? const Color(0xFF4C5D72)
-        : const Color(0xFFAABBD0);
-    final panelParagraphColor = isLightTheme
-        ? const Color(0xFF2A3A4D)
-        : const Color(0xFFE3EAF3);
-    final panelHeadingColor = isLightTheme
-        ? const Color(0xFF172433)
-        : const Color(0xFFF6FAFF);
-    final panelItalicColor = isLightTheme
-        ? const Color(0xFF596D83)
-        : const Color(0xFFC7D4E3);
-    final panelQuotedColor = isLightTheme
-        ? const Color(0xFF9A6A1A)
-        : const Color(0xFFF3C472);
-    final contentContainerColor = isLightTheme
-        ? Colors.white.withValues(alpha: 0.92)
-        : const Color(0xFF1B2735);
+    final panelBorderColor = AppThemeTokens.reasoningBorder(context);
+    final panelBackgroundColor = AppThemeTokens.reasoningBackground(context);
+    final panelTitleColor = AppThemeTokens.reasoningTitle(context);
+    final panelParagraphColor = AppThemeTokens.reasoningParagraph(context);
+    final panelHeadingColor = AppThemeTokens.reasoningHeading(context);
+    final panelItalicColor = AppThemeTokens.reasoningItalic(context);
+    final panelQuotedColor = AppThemeTokens.reasoningQuoted(context);
+    final contentContainerColor = AppThemeTokens.reasoningContentBackground(
+      context,
+    );
 
     final reasoningAppearance = MessageBubbleAppearance(
       paragraphColor: panelParagraphColor,
@@ -251,7 +255,9 @@ class _ReasoningPanel extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.radiusLarge(context),
+        ),
         border: Border.all(color: panelBorderColor),
         color: panelBackgroundColor,
       ),
@@ -270,8 +276,7 @@ class _ReasoningPanel extends StatelessWidget {
           collapsedTextColor: panelTitleColor,
           title: Text(
             '思考',
-            style: TextStyle(
-              fontSize: 12,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
               fontWeight: FontWeight.w600,
               color: panelTitleColor,
             ),
@@ -279,7 +284,9 @@ class _ReasoningPanel extends StatelessWidget {
           children: [
             DecoratedBox(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(
+                  AppThemeTokens.radiusMedium(context),
+                ),
                 border: Border.all(
                   color: panelBorderColor.withValues(alpha: 0.7),
                 ),
@@ -513,7 +520,8 @@ class _QuickActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedForeground = foregroundColor ?? AppColors.textMuted;
+    final resolvedForeground =
+        foregroundColor ?? AppThemeTokens.textMuted(context);
     return Tooltip(
       message: tooltip,
       child: IconButton(

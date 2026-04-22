@@ -268,11 +268,17 @@ final apiConfigOptionsProvider = StateProvider<List<ManagedOption>>(
 
 final appearanceOptionsProvider = StateProvider<List<ManagedOption>>(
   (_) => <ManagedOption>[
-    buildManagedOptionTemplate(
-      ManagedOptionType.appearance,
+    buildAppearanceOptionTemplate(
       id: 'appearance-default',
       name: '默认深色',
       description: 'RST MVP 深色主题与 Markdown 着色方案。',
+      themeMode: 'dark',
+    ),
+    buildAppearanceOptionTemplate(
+      id: 'appearance-default-light',
+      name: '默认浅色',
+      description: 'RST 默认浅色主题与更明亮的阅读背景。',
+      themeMode: 'light',
     ),
   ],
 );
@@ -303,6 +309,16 @@ final sessionRstDataProvider = StateProvider<Map<String, SessionRstData>>(
 
 enum SchedulerMode { sillyTavern, rst, agent }
 
+SchedulerMode schedulerModeFromWire(Object? raw) {
+  final normalized = '$raw'.trim();
+  for (final value in SchedulerMode.values) {
+    if (value.name == normalized) {
+      return value;
+    }
+  }
+  return SchedulerMode.sillyTavern;
+}
+
 final sessionSchedulerModeProvider = StateProvider<Map<String, SchedulerMode>>(
   (_) => <String, SchedulerMode>{},
 );
@@ -326,6 +342,64 @@ ManagedOption buildManagedOptionTemplate(
       ManagedOptionType.appearance => _buildAppearanceSections(),
     },
   );
+}
+
+ManagedOption buildAppearanceOptionTemplate({
+  required String id,
+  required String name,
+  required String description,
+  required String themeMode,
+}) {
+  var option = buildManagedOptionTemplate(
+    ManagedOptionType.appearance,
+    id: id,
+    name: name,
+    description: description,
+  ).updateField('theme_mode', themeMode);
+
+  if (themeMode == 'light') {
+    option = option
+        .updateField('font_preset', 'system')
+        .updateField('font_family', '"Segoe UI", "Microsoft YaHei", sans-serif')
+        .updateField('primary_color', '#2563D8')
+        .updateField('secondary_color', '#0F8F89')
+        .updateField('background_color', '#F3F7FB')
+        .updateField('card_color', '#FFFFFF')
+        .updateField('panel_color', '#FFFFFF')
+        .updateField('panel_muted_color', '#EAF1F8')
+        .updateField('field_fill_color', '#F8FBFE')
+        .updateField('border_color', '#D8E2EC')
+        .updateField('border_strong_color', '#3B82F6')
+        .updateField('text_strong_color', '#101826')
+        .updateField('text_secondary_color', '#334155')
+        .updateField('text_muted_color', '#64748B')
+        .updateField('user_bubble_color', '#E7F0FF')
+        .updateField('assistant_bubble_color', '#FFFFFF')
+        .updateField('system_bubble_color', '#EEF4FA')
+        .updateField('window_border_color', '#D8E2EC')
+        .updateField('title_bar_background_color', '#F6FAFD')
+        .updateField('window_button_color', '#64748B')
+        .updateField('window_button_hover_color', '#334155')
+        .updateField('window_close_hover_background_color', '#26EC6A5E')
+        .updateField('success_color', '#43C488')
+        .updateField('warning_color', '#F3B24F')
+        .updateField('error_color', '#EC6A5E')
+        .updateField('markdown_paragraph_color', '#334155')
+        .updateField('markdown_heading_color', '#0F172A')
+        .updateField('markdown_italic_color', '#64748B')
+        .updateField('markdown_bold_color', '#0F172A')
+        .updateField('markdown_quoted_color', '#A56B17')
+        .updateField('reasoning_border_color', '#D6E1EC')
+        .updateField('reasoning_background_color', '#EEF4FA')
+        .updateField('reasoning_title_color', '#51657B')
+        .updateField('reasoning_paragraph_color', '#2C4257')
+        .updateField('reasoning_heading_color', '#14283C')
+        .updateField('reasoning_italic_color', '#5E7388')
+        .updateField('reasoning_quoted_color', '#9E6A19')
+        .updateField('reasoning_content_background_color', '#F7FFFFFF');
+  }
+
+  return option;
 }
 
 List<ManagedOptionSection> _buildWorldBookSections() {
@@ -653,6 +727,20 @@ List<ManagedOptionSection> _buildAppearanceSections() {
     ManagedFieldChoice(label: '琥珀', value: '#FBBF24'),
     ManagedFieldChoice(label: '青蓝', value: '#67E8F9'),
   ];
+  const surfaceColors = <ManagedFieldChoice>[
+    ManagedFieldChoice(label: '夜幕', value: '#151C24'),
+    ManagedFieldChoice(label: '深卡片', value: '#1B2430'),
+    ManagedFieldChoice(label: '白', value: '#FFFFFF'),
+    ManagedFieldChoice(label: '浅雾', value: '#F2F5FA'),
+    ManagedFieldChoice(label: '冷灰', value: '#D7E2EE'),
+  ];
+  const accentColors = <ManagedFieldChoice>[
+    ManagedFieldChoice(label: '主蓝', value: '#2F7CFF'),
+    ManagedFieldChoice(label: '海蓝', value: '#2B66D4'),
+    ManagedFieldChoice(label: '青绿', value: '#32C7C1'),
+    ManagedFieldChoice(label: '深青', value: '#0F8F89'),
+    ManagedFieldChoice(label: '珊瑚', value: '#EC6A5E'),
+  ];
 
   return const <ManagedOptionSection>[
     ManagedOptionSection(
@@ -703,6 +791,178 @@ List<ManagedOptionSection> _buildAppearanceSections() {
       ],
     ),
     ManagedOptionSection(
+      title: 'Color Tokens',
+      description: '统一配置主色、表面色、边框和文本色，后续可直接映射为 CSS 变量。',
+      fields: <ManagedOptionField>[
+        ManagedOptionField(
+          key: 'primary_color',
+          label: 'Primary',
+          type: ManagedFieldType.color,
+          value: '#2F7CFF',
+          choices: accentColors,
+        ),
+        ManagedOptionField(
+          key: 'secondary_color',
+          label: 'Secondary',
+          type: ManagedFieldType.color,
+          value: '#32C7C1',
+          choices: accentColors,
+        ),
+        ManagedOptionField(
+          key: 'background_color',
+          label: 'Background',
+          type: ManagedFieldType.color,
+          value: '#151C24',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'card_color',
+          label: 'Card',
+          type: ManagedFieldType.color,
+          value: '#1B2430',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'panel_color',
+          label: 'Panel',
+          type: ManagedFieldType.color,
+          value: '#243140',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'panel_muted_color',
+          label: 'Muted Panel',
+          type: ManagedFieldType.color,
+          value: '#151C24',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'field_fill_color',
+          label: 'Field Fill',
+          type: ManagedFieldType.color,
+          value: '#243140',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'border_color',
+          label: 'Border',
+          type: ManagedFieldType.color,
+          value: '#314154',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'border_strong_color',
+          label: 'Strong Border',
+          type: ManagedFieldType.color,
+          value: '#4C8DFF',
+          choices: accentColors,
+        ),
+        ManagedOptionField(
+          key: 'text_strong_color',
+          label: 'Text Strong',
+          type: ManagedFieldType.color,
+          value: '#F4F7FB',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'text_secondary_color',
+          label: 'Text Secondary',
+          type: ManagedFieldType.color,
+          value: '#C3CDD9',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'text_muted_color',
+          label: 'Text Muted',
+          type: ManagedFieldType.color,
+          value: '#8C99A8',
+          choices: markdownColors,
+        ),
+      ],
+    ),
+    ManagedOptionSection(
+      title: 'Window And Chat Surfaces',
+      description: '集中管理窗口按钮、消息气泡和状态色。',
+      fields: <ManagedOptionField>[
+        ManagedOptionField(
+          key: 'user_bubble_color',
+          label: 'User Bubble',
+          type: ManagedFieldType.color,
+          value: '#2D3D52',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'assistant_bubble_color',
+          label: 'Assistant Bubble',
+          type: ManagedFieldType.color,
+          value: '#243140',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'system_bubble_color',
+          label: 'System Bubble',
+          type: ManagedFieldType.color,
+          value: '#151C24',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'window_border_color',
+          label: 'Window Border',
+          type: ManagedFieldType.color,
+          value: '#314154',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'title_bar_background_color',
+          label: 'Title Bar',
+          type: ManagedFieldType.color,
+          value: '#151C24',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'window_button_color',
+          label: 'Window Button',
+          type: ManagedFieldType.color,
+          value: '#8C99A8',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'window_button_hover_color',
+          label: 'Window Button Hover',
+          type: ManagedFieldType.color,
+          value: '#C3CDD9',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'window_close_hover_background_color',
+          label: 'Close Hover Bg',
+          type: ManagedFieldType.color,
+          value: '#26EC6A5E',
+        ),
+        ManagedOptionField(
+          key: 'success_color',
+          label: 'Success',
+          type: ManagedFieldType.color,
+          value: '#43C488',
+          choices: accentColors,
+        ),
+        ManagedOptionField(
+          key: 'warning_color',
+          label: 'Warning',
+          type: ManagedFieldType.color,
+          value: '#F3B24F',
+          choices: accentColors,
+        ),
+        ManagedOptionField(
+          key: 'error_color',
+          label: 'Error',
+          type: ManagedFieldType.color,
+          value: '#EC6A5E',
+          choices: accentColors,
+        ),
+      ],
+    ),
+    ManagedOptionSection(
       title: 'Markdown Styles',
       description: '配置段落、标题、斜体、粗体、引号文字颜色与气泡透明度。',
       fields: <ManagedOptionField>[
@@ -749,6 +1009,164 @@ List<ManagedOptionSection> _buildAppearanceSections() {
           min: 0.0,
           max: 1.0,
           step: 0.05,
+        ),
+      ],
+    ),
+    ManagedOptionSection(
+      title: 'Reasoning Panel',
+      description: '把思考面板也收敛成语义 token，避免再次在组件里写死颜色。',
+      fields: <ManagedOptionField>[
+        ManagedOptionField(
+          key: 'reasoning_border_color',
+          label: 'Reasoning Border',
+          type: ManagedFieldType.color,
+          value: '#3D5168',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'reasoning_background_color',
+          label: 'Reasoning Background',
+          type: ManagedFieldType.color,
+          value: '#131C27',
+          choices: surfaceColors,
+        ),
+        ManagedOptionField(
+          key: 'reasoning_title_color',
+          label: 'Reasoning Title',
+          type: ManagedFieldType.color,
+          value: '#AABBD0',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'reasoning_paragraph_color',
+          label: 'Reasoning Paragraph',
+          type: ManagedFieldType.color,
+          value: '#E3EAF3',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'reasoning_heading_color',
+          label: 'Reasoning Heading',
+          type: ManagedFieldType.color,
+          value: '#F6FAFF',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'reasoning_italic_color',
+          label: 'Reasoning Italic',
+          type: ManagedFieldType.color,
+          value: '#C7D4E3',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'reasoning_quoted_color',
+          label: 'Reasoning Quoted',
+          type: ManagedFieldType.color,
+          value: '#F3C472',
+          choices: markdownColors,
+        ),
+        ManagedOptionField(
+          key: 'reasoning_content_background_color',
+          label: 'Reasoning Content Bg',
+          type: ManagedFieldType.color,
+          value: '#1B2735',
+          choices: surfaceColors,
+        ),
+      ],
+    ),
+    ManagedOptionSection(
+      title: 'Shape Tokens',
+      description: '把常用圆角收敛成 token，便于统一换肤或做 CSS 风格映射。',
+      fields: <ManagedOptionField>[
+        ManagedOptionField(
+          key: 'radius_small',
+          label: 'Radius Small',
+          type: ManagedFieldType.decimal,
+          value: 8,
+          min: 0,
+          max: 64,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_medium',
+          label: 'Radius Medium',
+          type: ManagedFieldType.decimal,
+          value: 10,
+          min: 0,
+          max: 64,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_large',
+          label: 'Radius Large',
+          type: ManagedFieldType.decimal,
+          value: 12,
+          min: 0,
+          max: 80,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_field',
+          label: 'Radius Field',
+          type: ManagedFieldType.decimal,
+          value: 16,
+          min: 0,
+          max: 80,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_panel',
+          label: 'Radius Panel',
+          type: ManagedFieldType.decimal,
+          value: 18,
+          min: 0,
+          max: 80,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_bubble',
+          label: 'Radius Bubble',
+          type: ManagedFieldType.decimal,
+          value: 18,
+          min: 0,
+          max: 80,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_card',
+          label: 'Radius Card',
+          type: ManagedFieldType.decimal,
+          value: 20,
+          min: 0,
+          max: 80,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_pill',
+          label: 'Radius Pill',
+          type: ManagedFieldType.decimal,
+          value: 999,
+          min: 0,
+          max: 999,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_sheet',
+          label: 'Radius Sheet',
+          type: ManagedFieldType.decimal,
+          value: 28,
+          min: 0,
+          max: 120,
+          step: 1,
+        ),
+        ManagedOptionField(
+          key: 'radius_window_frame',
+          label: 'Radius Window Frame',
+          type: ManagedFieldType.decimal,
+          value: 26,
+          min: 0,
+          max: 120,
+          step: 1,
         ),
       ],
     ),

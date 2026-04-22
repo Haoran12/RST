@@ -312,6 +312,36 @@ class ChatService {
     return true;
   }
 
+  Future<String> generateUtilityText({
+    required RuntimeApiConfig apiConfig,
+    required List<Map<String, String>> messages,
+  }) async {
+    final providerSpec = await _providerSpecService.getSpec(
+      apiConfig.providerType,
+    );
+    final providerRequest = _buildProviderRequest(
+      apiConfig: _copyApiConfigWithStream(apiConfig, false),
+      providerSpec: providerSpec,
+      promptMessages: messages,
+    );
+    final response = await _dio.post<dynamic>(
+      providerRequest.url,
+      data: providerRequest.payload,
+      options: Options(
+        responseType: ResponseType.json,
+        headers: providerRequest.headers,
+        connectTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+        receiveTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+        sendTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+      ),
+    );
+    final parsed = _parseJsonResponse(
+      providerType: providerRequest.providerType,
+      body: response.data,
+    );
+    return ReasoningMarkup.stripReasoning(parsed.text).trim();
+  }
+
   Future<frb.MessageRecord> _streamAssistantResponse({
     required String sessionId,
     required String assistantMessageId,
@@ -973,6 +1003,33 @@ class ChatService {
         promptMessages: promptMessages,
       ),
     };
+  }
+
+  RuntimeApiConfig _copyApiConfigWithStream(
+    RuntimeApiConfig config,
+    bool? stream,
+  ) {
+    return RuntimeApiConfig(
+      apiId: config.apiId,
+      name: config.name,
+      providerType: config.providerType,
+      baseUrl: config.baseUrl,
+      requestPath: config.requestPath,
+      apiKey: config.apiKey,
+      defaultModel: config.defaultModel,
+      customHeaders: config.customHeaders,
+      requestTimeoutMs: config.requestTimeoutMs,
+      stream: stream,
+      temperature: config.temperature,
+      topP: config.topP,
+      topK: config.topK,
+      presencePenalty: config.presencePenalty,
+      frequencyPenalty: config.frequencyPenalty,
+      maxCompletionTokens: config.maxCompletionTokens,
+      stopSequences: config.stopSequences,
+      reasoningEffort: config.reasoningEffort,
+      verbosity: config.verbosity,
+    );
   }
 
   void _applyConfiguredParameters({

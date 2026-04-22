@@ -5,6 +5,7 @@ import '../providers/app_state.dart';
 
 const String worldBookJsonFieldKey = 'worldbook_json';
 const String worldBookLegacyEntriesFieldKey = 'entries_json';
+const String worldBookCategoryFieldKey = 'worldbook_ui_categories';
 const String worldBookScanDepthFieldKey = 'worldbook_scan_depth';
 
 int loadWorldBookScanDepth(ManagedOption worldBook) {
@@ -290,7 +291,7 @@ Map<String, dynamic> _normalizeEntry(
   int? fallbackUid,
 }) {
   final uid = _intOrDefault(source['uid'], fallbackUid ?? 0);
-  return <String, dynamic>{
+  final normalized = <String, dynamic>{
     'uid': uid,
     'key': _asStringList(source['key']),
     'keysecondary': _asStringList(source['keysecondary']),
@@ -339,6 +340,12 @@ Map<String, dynamic> _normalizeEntry(
             'tags': <String>[],
           },
   };
+  for (final entry in source.entries) {
+    if (!normalized.containsKey(entry.key)) {
+      normalized[entry.key] = entry.value;
+    }
+  }
+  return normalized;
 }
 
 int _fallbackUidFromMapKey({

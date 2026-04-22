@@ -14,8 +14,9 @@ import '../../features/settings/presentation/api_config_management_page.dart';
 import '../../features/settings/presentation/preset_management_page.dart';
 import '../../features/settings/presentation/resource_management_page.dart';
 import '../../features/settings/presentation/world_book_management_page.dart';
+import '../models/import_export_models.dart';
 import '../models/workspace_config.dart';
-import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/theme_tokens.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/glass_panel_card.dart';
 import '../../shared/utils/responsive.dart';
@@ -23,6 +24,24 @@ import '../providers/app_state.dart';
 import '../providers/config_catalog_providers.dart';
 import '../providers/service_providers.dart';
 import '../services/world_book_injection.dart';
+
+bool _isLightShell(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.light;
+
+Color _shellBackgroundColor(BuildContext context) =>
+    AppThemeTokens.background(context);
+
+Color _shellPanelColor(BuildContext context) => AppThemeTokens.panel(context);
+
+Color _shellCardColor(BuildContext context) => AppThemeTokens.card(context);
+
+Color _shellBorderColor(BuildContext context) => AppThemeTokens.border(context);
+
+Color _shellMutedTextColor(BuildContext context) =>
+    AppThemeTokens.textSecondary(context);
+
+Color _shellStrongTextColor(BuildContext context) =>
+    AppThemeTokens.textStrong(context);
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -129,12 +148,16 @@ class _AppShellState extends ConsumerState<AppShell> {
   GlobalKey<_SessionQuickSettingsSheetState> _sessionQuickSettingsKey =
       GlobalKey<_SessionQuickSettingsSheetState>();
   bool _worldBookCatalogHydrated = false;
+  bool _appearanceCatalogHydrated = false;
+  bool _sessionMetadataHydrated = false;
   bool _isNavigating = false;
 
   @override
   void initState() {
     super.initState();
     _hydrateWorldBookCatalog();
+    _hydrateAppearanceCatalog();
+    _hydrateSessionMetadata();
   }
 
   Future<void> _hydrateWorldBookCatalog() async {
@@ -157,6 +180,81 @@ class _AppShellState extends ConsumerState<AppShell> {
       ref.read(worldBookOptionsProvider.notifier).state = loaded;
     } catch (_) {
       // Keep default in-memory world books when hydration fails.
+    }
+  }
+
+  Future<void> _hydrateAppearanceCatalog() async {
+    if (_appearanceCatalogHydrated) {
+      return;
+    }
+    _appearanceCatalogHydrated = true;
+
+    final apiService = ref.read(apiServiceProvider);
+    try {
+      final loaded = await apiService.loadAppearanceCatalog();
+      if (!mounted) {
+        return;
+      }
+      if (loaded == null) {
+        final defaults = ref.read(appearanceOptionsProvider);
+        await apiService.saveAppearanceCatalog(defaults);
+        return;
+      }
+      ref.read(appearanceOptionsProvider.notifier).state = loaded;
+    } catch (_) {
+      // Keep default in-memory appearance options when hydration fails.
+    }
+  }
+
+  Future<void> _hydrateSessionMetadata() async {
+    if (_sessionMetadataHydrated) {
+      return;
+    }
+    _sessionMetadataHydrated = true;
+
+    final apiService = ref.read(apiServiceProvider);
+    try {
+      final loaded = await apiService.loadAllSessionMetadata();
+      if (!mounted || loaded.isEmpty) {
+        return;
+      }
+
+      final schedulerMap = <String, SchedulerMode>{
+        ...ref.read(sessionSchedulerModeProvider),
+      };
+      final appearanceMap = <String, String>{
+        ...ref.read(sessionAppearanceProvider),
+      };
+      final backgroundMap = <String, String>{
+        ...ref.read(sessionBackgroundImageProvider),
+      };
+      final rstDataMap = <String, SessionRstData>{
+        ...ref.read(sessionRstDataProvider),
+      };
+
+      for (final entry in loaded.entries) {
+        final sessionId = entry.key;
+        final metadata = entry.value;
+        schedulerMap[sessionId] = schedulerModeFromWire(metadata.schedulerMode);
+        appearanceMap[sessionId] = metadata.appearanceId;
+        if (metadata.backgroundImagePath.trim().isEmpty) {
+          backgroundMap.remove(sessionId);
+        } else {
+          backgroundMap[sessionId] = metadata.backgroundImagePath;
+        }
+        rstDataMap[sessionId] = SessionRstData(
+          userDescription: metadata.userDescription,
+          scene: metadata.scene,
+          lores: metadata.lores,
+        );
+      }
+
+      ref.read(sessionSchedulerModeProvider.notifier).state = schedulerMap;
+      ref.read(sessionAppearanceProvider.notifier).state = appearanceMap;
+      ref.read(sessionBackgroundImageProvider.notifier).state = backgroundMap;
+      ref.read(sessionRstDataProvider.notifier).state = rstDataMap;
+    } catch (_) {
+      // Keep in-memory defaults when hydration fails.
     }
   }
 
@@ -345,7 +443,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final useDesktopPane = _useDesktopEditorPane(context);
 
     final drawer = Drawer(
-      backgroundColor: AppColors.backgroundElevated,
+      backgroundColor: _shellBackgroundColor(context),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -394,10 +492,10 @@ class _AppShellState extends ConsumerState<AppShell> {
           )
         : Container(
             width: 240,
-            decoration: const BoxDecoration(
-              color: AppColors.backgroundElevated,
+            decoration: BoxDecoration(
+              color: _shellBackgroundColor(context),
               border: Border(
-                right: BorderSide(color: AppColors.borderSubtle, width: 1),
+                right: BorderSide(color: _shellBorderColor(context), width: 1),
               ),
             ),
             child: SafeArea(
@@ -448,10 +546,15 @@ class _AppShellState extends ConsumerState<AppShell> {
             duration: _desktopPaneAnimationDuration,
             child: desktopPane == null
                 ? null
-                : _DesktopEditorPaneHost(
-                    navigatorKey: _desktopEditorNavigatorKey,
-                    sessionQuickSettingsKey: _sessionQuickSettingsKey,
-                    pane: desktopPane,
+                : KeyedSubtree(
+                    key: ValueKey<String>(
+                      'desktop-pane-slot-${desktopPane.cacheKey}',
+                    ),
+                    child: _DesktopEditorPaneHost(
+                      navigatorKey: _desktopEditorNavigatorKey,
+                      sessionQuickSettingsKey: _sessionQuickSettingsKey,
+                      pane: desktopPane,
+                    ),
                   ),
           )
         : null;
@@ -529,7 +632,7 @@ class _DesktopEditorPaneHost extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: hostWidth,
-      color: AppColors.backgroundElevated,
+      color: _shellBackgroundColor(context),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
@@ -554,18 +657,24 @@ class _DesktopEditorPaneHost extends StatelessWidget {
                   height: maxHeight,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: AppColors.backgroundElevated,
-                      borderRadius: BorderRadius.circular(26),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x18000000),
-                          blurRadius: 22,
-                          offset: Offset(4, 10),
-                        ),
-                      ],
+                      color: _shellBackgroundColor(context),
+                      borderRadius: BorderRadius.circular(
+                        AppThemeTokens.radiusWindowFrame(context),
+                      ),
+                      boxShadow: AppThemeTokens.surfaceGlowEnabled(context)
+                          ? const [
+                              BoxShadow(
+                                color: Color(0x18000000),
+                                blurRadius: 22,
+                                offset: Offset(4, 10),
+                              ),
+                            ]
+                          : const [],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(26),
+                      borderRadius: BorderRadius.circular(
+                        AppThemeTokens.radiusWindowFrame(context),
+                      ),
                       child: KeyedSubtree(
                         key: ValueKey<String>(
                           'desktop-editor-${pane.cacheKey}',
@@ -595,6 +704,8 @@ class _DesktopEditorPaneHost extends StatelessWidget {
 }
 
 class _AnimatedDesktopEditorPaneSlot extends StatelessWidget {
+  static const _emptyPaneKey = ValueKey<String>('desktop-pane-slot-empty');
+
   const _AnimatedDesktopEditorPaneSlot({
     required this.duration,
     required this.child,
@@ -606,16 +717,52 @@ class _AnimatedDesktopEditorPaneSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isVisible = child != null;
+    final activeChild = child ?? const SizedBox.shrink(key: _emptyPaneKey);
+    final activeChildKey = activeChild.key;
+
     return AnimatedContainer(
       duration: duration,
       curve: Curves.easeOutCubic,
       width: isVisible ? _DesktopEditorPaneHost.hostWidth : 0,
       child: ClipRect(
-        child: AnimatedOpacity(
-          duration: duration,
-          curve: Curves.easeOutCubic,
-          opacity: isVisible ? 1 : 0,
-          child: IgnorePointer(ignoring: !isVisible, child: child),
+        child: IgnorePointer(
+          ignoring: !isVisible,
+          child: AnimatedSwitcher(
+            duration: duration,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            layoutBuilder: (currentChild, previousChildren) {
+              return Stack(
+                alignment: Alignment.topLeft,
+                children: <Widget?>[
+                  ...previousChildren,
+                  currentChild,
+                ].whereType<Widget>().toList(growable: false),
+              );
+            },
+            transitionBuilder: (transitionChild, animation) {
+              final isIncoming = transitionChild.key == activeChildKey;
+              final curvedAnimation = CurvedAnimation(
+                parent: animation,
+                curve: isIncoming ? Curves.easeOutCubic : Curves.easeInCubic,
+              );
+              final offsetAnimation = Tween<Offset>(
+                begin: isIncoming
+                    ? const Offset(-0.05, 0)
+                    : const Offset(0.04, 0),
+                end: Offset.zero,
+              ).animate(curvedAnimation);
+
+              return FadeTransition(
+                opacity: curvedAnimation,
+                child: SlideTransition(
+                  position: offsetAnimation,
+                  child: transitionChild,
+                ),
+              );
+            },
+            child: activeChild,
+          ),
         ),
       ),
     );
@@ -635,25 +782,29 @@ class _DesktopNavRail extends StatelessWidget {
         waitDuration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         textStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: AppColors.textStrong,
+          color: _shellStrongTextColor(context),
           fontWeight: FontWeight.w600,
         ),
         decoration: BoxDecoration(
-          color: AppColors.backgroundElevated.withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderStrong),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x24000000),
-              blurRadius: 18,
-              offset: Offset(0, 6),
-            ),
-          ],
+          color: _shellBackgroundColor(context).withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusLarge(context),
+          ),
+          border: Border.all(color: Theme.of(context).colorScheme.primary),
+          boxShadow: AppThemeTokens.surfaceGlowEnabled(context)
+              ? const [
+                  BoxShadow(
+                    color: Color(0x24000000),
+                    blurRadius: 18,
+                    offset: Offset(0, 6),
+                  ),
+                ]
+              : const [],
         ),
       ),
       child: Container(
         width: 70,
-        color: AppColors.backgroundElevated,
+        color: _shellBackgroundColor(context),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
@@ -664,14 +815,16 @@ class _DesktopNavRail extends StatelessWidget {
                   height: 40,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceOverlay,
-                    borderRadius: BorderRadius.circular(12),
+                    color: _shellPanelColor(context),
+                    borderRadius: BorderRadius.circular(
+                      AppThemeTokens.radiusLarge(context),
+                    ),
                   ),
                   child: Text(
                     'R',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textStrong,
+                      color: _shellStrongTextColor(context),
                     ),
                   ),
                 ),
@@ -715,12 +868,20 @@ class _DesktopNavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    final mutedText = _shellMutedTextColor(context);
     final background = selected
-        ? AppColors.surfaceOverlay.withValues(alpha: 0.9)
+        ? _shellPanelColor(
+            context,
+          ).withValues(alpha: _isLightShell(context) ? 0.92 : 0.9)
         : Colors.transparent;
     final hoverBackground = selected
-        ? AppColors.surfaceOverlay.withValues(alpha: 0.96)
-        : AppColors.surfaceOverlay.withValues(alpha: 0.64);
+        ? _shellPanelColor(
+            context,
+          ).withValues(alpha: _isLightShell(context) ? 0.98 : 0.96)
+        : _shellPanelColor(
+            context,
+          ).withValues(alpha: _isLightShell(context) ? 0.72 : 0.64);
 
     return Tooltip(
       message: label,
@@ -730,7 +891,9 @@ class _DesktopNavButton extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(
+              AppThemeTokens.radiusField(context),
+            ),
             onTap: onTap,
             hoverColor: hoverBackground,
             child: AnimatedContainer(
@@ -738,7 +901,9 @@ class _DesktopNavButton extends StatelessWidget {
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
                 color: background,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(
+                  AppThemeTokens.radiusField(context),
+                ),
               ),
               child: Stack(
                 alignment: Alignment.center,
@@ -753,8 +918,10 @@ class _DesktopNavButton extends StatelessWidget {
                         width: 3,
                         height: 20,
                         decoration: BoxDecoration(
-                          color: AppColors.accentPrimary,
-                          borderRadius: BorderRadius.circular(999),
+                          color: primary,
+                          borderRadius: BorderRadius.circular(
+                            AppThemeTokens.radiusPill(context),
+                          ),
                         ),
                       ),
                     ),
@@ -762,10 +929,8 @@ class _DesktopNavButton extends StatelessWidget {
                   TweenAnimationBuilder<Color?>(
                     duration: const Duration(milliseconds: 180),
                     tween: ColorTween(
-                      begin: AppColors.textSecondary,
-                      end: selected
-                          ? AppColors.accentPrimary
-                          : AppColors.textSecondary,
+                      begin: mutedText,
+                      end: selected ? primary : mutedText,
                     ),
                     builder: (context, color, _) {
                       return Icon(icon, color: color, size: 22);
@@ -812,7 +977,7 @@ class _CurrentSessionHeaderTitle extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.textStrong,
+                color: _shellStrongTextColor(context),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -832,17 +997,22 @@ class _TopStatusIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final statusBackground = _shellPanelColor(context);
     final (tooltip, borderColor, backgroundColor) = switch (status) {
-      ChatTopStatus.calm => ('平静', AppColors.success, AppColors.surfaceOverlay),
+      ChatTopStatus.calm => (
+        '平静',
+        AppThemeTokens.success(context),
+        statusBackground,
+      ),
       ChatTopStatus.waiting => (
         '等待响应',
-        AppColors.accentSecondary,
-        AppColors.surfaceOverlay,
+        AppThemeTokens.secondary(context),
+        statusBackground,
       ),
       ChatTopStatus.error => (
         '程序异常',
-        AppColors.error,
-        AppColors.surfaceOverlay,
+        AppThemeTokens.error(context),
+        statusBackground,
       ),
     };
 
@@ -855,32 +1025,34 @@ class _TopStatusIndicator extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusLarge(context),
+          ),
           border: Border.all(color: borderColor, width: 1.1),
         ),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 180),
           child: switch (status) {
-            ChatTopStatus.calm => const Icon(
+            ChatTopStatus.calm => Icon(
               Icons.check_rounded,
               key: ValueKey<String>('top-calm'),
               size: 14,
-              color: AppColors.success,
+              color: AppThemeTokens.success(context),
             ),
-            ChatTopStatus.waiting => const SizedBox(
+            ChatTopStatus.waiting => SizedBox(
               key: ValueKey<String>('top-waiting'),
               width: 11,
               height: 11,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: AppColors.accentSecondary,
+                color: AppThemeTokens.secondary(context),
               ),
             ),
-            ChatTopStatus.error => const Icon(
+            ChatTopStatus.error => Icon(
               Icons.error_outline_rounded,
               key: ValueKey<String>('top-error'),
               size: 14,
-              color: AppColors.error,
+              color: AppThemeTokens.error(context),
             ),
           },
         ),
@@ -898,8 +1070,12 @@ Future<void> _showSessionQuickSettingsBottomSheet(BuildContext context) async {
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        backgroundColor: AppColors.backgroundElevated,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _shellBackgroundColor(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusCard(context),
+          ),
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 640, maxHeight: 720),
           child: const _SessionQuickSettingsSheet(),
@@ -915,9 +1091,11 @@ Future<void> _showSessionQuickSettingsBottomSheet(BuildContext context) async {
     isScrollControlled: true,
     isDismissible: false,
     enableDrag: false,
-    backgroundColor: AppColors.backgroundElevated,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    backgroundColor: _shellBackgroundColor(context),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppThemeTokens.radiusSheet(context)),
+      ),
     ),
     builder: (context) => const FractionallySizedBox(
       heightFactor: 1,
@@ -947,28 +1125,33 @@ class _DrawerExpandableSection extends StatefulWidget {
 class _DrawerExpandableSectionState extends State<_DrawerExpandableSection> {
   @override
   Widget build(BuildContext context) {
-    final borderColor = widget.selected
-        ? AppColors.borderStrong
-        : AppColors.borderSubtle;
+    final primary = Theme.of(context).colorScheme.primary;
+    final borderColor = widget.selected ? primary : _shellBorderColor(context);
     final background = widget.selected
-        ? AppColors.surfaceOverlay.withValues(alpha: 0.72)
-        : AppColors.surfaceCard.withValues(alpha: 0.84);
-    final iconColor = widget.selected
-        ? AppColors.accentPrimary
-        : AppColors.textSecondary;
+        ? _shellPanelColor(
+            context,
+          ).withValues(alpha: _isLightShell(context) ? 0.92 : 0.72)
+        : _shellCardColor(
+            context,
+          ).withValues(alpha: _isLightShell(context) ? 0.96 : 0.84);
+    final iconColor = widget.selected ? primary : _shellMutedTextColor(context);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.radiusPanel(context),
+        ),
         border: Border.all(color: borderColor),
       ),
       child: Column(
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(
+              AppThemeTokens.radiusPanel(context),
+            ),
             onTap: widget.onTap,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -978,9 +1161,11 @@ class _DrawerExpandableSectionState extends State<_DrawerExpandableSection> {
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(
+                        AppThemeTokens.radiusMedium(context),
+                      ),
                       border: Border.all(color: borderColor),
-                      color: AppColors.surfaceOverlay,
+                      color: _shellPanelColor(context),
                     ),
                     child: Icon(widget.icon, size: 19, color: iconColor),
                   ),
@@ -1016,16 +1201,20 @@ class _SessionQuickSettingsTrigger extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: AppColors.surfaceOverlay,
-          border: Border.all(color: AppColors.borderSubtle),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x332F7CFF),
-              blurRadius: 18,
-              spreadRadius: 1,
-              offset: Offset(0, 2),
-            ),
-          ],
+          color: _shellPanelColor(context),
+          border: Border.all(color: _shellBorderColor(context)),
+          boxShadow: AppThemeTokens.surfaceGlowEnabled(context)
+              ? [
+                  BoxShadow(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.18),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : const [],
         ),
         child: const Icon(Icons.chat_bubble_rounded, size: 18),
       ),
@@ -1198,6 +1387,19 @@ class _SessionQuickSettingsSheetState
         lores: draft.characterDescription.trim(),
       ),
     };
+    await ref
+        .read(apiServiceProvider)
+        .saveSessionMetadata(
+          sessionId: saved.sessionId,
+          metadata: SessionStoredMetadata(
+            schedulerMode: draft.schedulerMode.name,
+            appearanceId: draft.appearanceId,
+            backgroundImagePath: normalizedBackgroundPath,
+            userDescription: draft.userDescription.trim(),
+            scene: draft.worldDescription.trim(),
+            lores: draft.characterDescription.trim(),
+          ),
+        );
     ref.read(workspaceReloadTickProvider.notifier).state++;
 
     if (!mounted) {
@@ -1318,7 +1520,9 @@ class _SessionQuickSettingsSheetState
             if (_error != null) ...[
               Text(
                 _error!,
-                style: const TextStyle(color: AppColors.error, fontSize: 12),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: AppThemeTokens.error(context),
+                ),
               ),
               const SizedBox(height: 8),
             ],

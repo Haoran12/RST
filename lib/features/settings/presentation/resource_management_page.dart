@@ -1,8 +1,10 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/app_state.dart';
+import '../../../core/providers/service_providers.dart';
 import '../../../shared/utils/responsive.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_notice.dart';
@@ -36,13 +38,32 @@ class ResourceManagementPage extends ConsumerWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            child: Row(
               children: [
-                PrimaryPillButton(
-                  label: '新建',
-                  onPressed: () => _createOption(context, ref),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    PrimaryPillButton(
+                      label: '新建',
+                      onPressed: () => _createOption(context, ref),
+                    ),
+                    SecondaryOutlineButton(
+                      label: '刷新',
+                      onPressed: () => _refreshOptions(context, ref),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: '导入',
+                  onPressed: () => _importOption(context, ref),
+                  icon: const Icon(Icons.file_download_outlined),
+                ),
+                IconButton(
+                  tooltip: '导出',
+                  onPressed: () => _exportOption(context, ref),
+                  icon: const Icon(Icons.file_upload_outlined),
                 ),
               ],
             ),
@@ -112,8 +133,12 @@ class ResourceManagementPage extends ConsumerWidget {
       return;
     }
 
+    if (!context.mounted) {
+      return;
+    }
     final notifier = ref.read(optionsProvider.notifier);
     notifier.state = <ManagedOption>[created, ...notifier.state];
+    await _persistOptions(context, ref, notifier.state);
   }
 
   Future<void> _editOption(
@@ -136,10 +161,14 @@ class ResourceManagementPage extends ConsumerWidget {
       return;
     }
 
+    if (!context.mounted) {
+      return;
+    }
     final notifier = ref.read(optionsProvider.notifier);
     notifier.state = notifier.state
         .map((item) => item.id == edited.id ? edited : item)
         .toList(growable: false);
+    await _persistOptions(context, ref, notifier.state);
   }
 
   Future<void> _deleteOption(
@@ -170,10 +199,209 @@ class ResourceManagementPage extends ConsumerWidget {
       return;
     }
 
+    if (!context.mounted) {
+      return;
+    }
     final notifier = ref.read(optionsProvider.notifier);
     notifier.state = notifier.state
         .where((item) => item.id != option.id)
         .toList(growable: false);
+    await _persistOptions(context, ref, notifier.state);
+  }
+
+  Future<void> _refreshOptions(BuildContext context, WidgetRef ref) async {
+    try {
+      switch (optionType) {
+        case ManagedOptionType.appearance:
+          final loaded = await ref
+              .read(apiServiceProvider)
+              .loadAppearanceCatalog();
+          if (!context.mounted || loaded == null) {
+            return;
+          }
+          ref.read(optionsProvider.notifier).state = loaded;
+          return;
+        default:
+          return;
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '刷新失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'resource_refresh_failed',
+      );
+    }
+  }
+
+  Future<void> _importOption(BuildContext context, WidgetRef ref) async {
+    try {
+      const jsonType = XTypeGroup(label: 'json', extensions: <String>['json']);
+      final selected = await openFile(
+        acceptedTypeGroups: const <XTypeGroup>[jsonType],
+        confirmButtonText: '导入',
+      );
+      if (selected == null || !context.mounted) {
+        return;
+      }
+
+      switch (optionType) {
+        case ManagedOptionType.appearance:
+          final result = await ref
+              .read(importExportServiceProvider)
+              .importAppearanceFromFile(
+                filePath: selected.path,
+                existingOptions: ref.read(optionsProvider),
+              );
+          if (!context.mounted) {
+            return;
+          }
+          final notifier = ref.read(optionsProvider.notifier);
+          notifier.state = <ManagedOption>[result.value, ...notifier.state];
+          await _persistOptions(context, ref, notifier.state);
+          if (!context.mounted) {
+            return;
+          }
+          AppNotice.show(
+            context,
+            message: result.hasWarnings
+                ? '导入完成，含 ${result.warnings.length} 条警告'
+                : '导入成功',
+            tone: result.hasWarnings
+                ? AppNoticeTone.warning
+                : AppNoticeTone.success,
+            category: 'appearance_import_result',
+          );
+          return;
+        default:
+          return;
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导入失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'resource_import_failed',
+      );
+    }
+  }
+
+  Future<void> _exportOption(BuildContext context, WidgetRef ref) async {
+    final options = ref.read(optionsProvider);
+    if (options.isEmpty) {
+      AppNotice.show(
+        context,
+        message: '没有可导出的内容',
+        tone: AppNoticeTone.warning,
+        category: 'resource_export_empty',
+      );
+      return;
+    }
+
+    final target = await _pickExportTarget(context, options);
+    if (target == null || !context.mounted) {
+      return;
+    }
+
+    try {
+      const jsonType = XTypeGroup(label: 'json', extensions: <String>['json']);
+      final location = await getSaveLocation(
+        acceptedTypeGroups: const <XTypeGroup>[jsonType],
+        suggestedName: '${target.name}.rst-appearance.json',
+        confirmButtonText: '导出',
+      );
+      if (location == null || !context.mounted) {
+        return;
+      }
+
+      switch (optionType) {
+        case ManagedOptionType.appearance:
+          await ref
+              .read(importExportServiceProvider)
+              .exportAppearanceToFile(
+                appearance: target,
+                outputPath: location.path,
+              );
+          if (!context.mounted) {
+            return;
+          }
+          AppNotice.show(
+            context,
+            message: '导出成功',
+            tone: AppNoticeTone.success,
+            category: 'appearance_export_success',
+          );
+          return;
+        default:
+          return;
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导出失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'resource_export_failed',
+      );
+    }
+  }
+
+  Future<void> _persistOptions(
+    BuildContext context,
+    WidgetRef ref,
+    List<ManagedOption> options,
+  ) async {
+    try {
+      switch (optionType) {
+        case ManagedOptionType.appearance:
+          await ref.read(apiServiceProvider).saveAppearanceCatalog(options);
+          return;
+        default:
+          return;
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '保存失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'resource_save_failed',
+      );
+    }
+  }
+
+  Future<ManagedOption?> _pickExportTarget(
+    BuildContext context,
+    List<ManagedOption> options,
+  ) async {
+    if (options.length == 1) {
+      return options.first;
+    }
+    return showDialog<ManagedOption>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => SimpleDialog(
+        title: Text('选择$title'),
+        children: options
+            .map(
+              (option) => SimpleDialogOption(
+                onPressed: () => Navigator.of(context).pop(option),
+                child: Text(option.name),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
   }
 
   String _typeLabel(ManagedOptionType type) {

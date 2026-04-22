@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 import 'app_notice.dart';
 import 'buttons.dart';
 import 'glass_panel_card.dart';
@@ -24,12 +24,14 @@ class ErrorStateView extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.error_outline, color: AppColors.error),
+              Icon(Icons.error_outline, color: AppThemeTokens.error(context)),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
                   '请求失败',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               IconButton(
@@ -53,7 +55,9 @@ class ErrorStateView extends StatelessWidget {
           const SizedBox(height: 8),
           SelectableText(
             message,
-            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: AppThemeTokens.textMuted(context),
+            ),
           ),
           const SizedBox(height: 10),
           Align(

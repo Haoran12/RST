@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/theme_tokens.dart';
+
 class StatusBadge extends StatelessWidget {
   const StatusBadge({super.key, required this.label, required this.color});
 
@@ -12,14 +14,13 @@ class StatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppThemeTokens.radiusPill(context)),
         border: Border.all(color: color.withValues(alpha: 0.6)),
       ),
       child: Text(
         label,
-        style: TextStyle(
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
           color: color,
-          fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
       ),

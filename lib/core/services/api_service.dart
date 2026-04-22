@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../bridge/frb_api.dart' as frb;
 import '../models/common.dart';
+import '../models/import_export_models.dart';
 import '../models/workspace_config.dart';
 import '../providers/app_state.dart';
 
@@ -385,8 +386,7 @@ class ApiService {
       return null;
     }
 
-    final raw = await file.readAsString();
-    final decoded = jsonDecode(raw);
+    final decoded = await _readJson(file);
     if (decoded is! Map<String, dynamic>) {
       throw StateError('invalid_session_world_book_snapshot: ${file.path}');
     }
@@ -411,14 +411,33 @@ class ApiService {
     }
   }
 
+  Future<SessionWorldBookSnapshotData?> loadSessionWorldBookSnapshot({
+    required String sessionId,
+  }) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      return null;
+    }
+
+    final file = await _sessionWorldBookSnapshotFile(normalizedSessionId);
+    if (!await file.exists()) {
+      return null;
+    }
+
+    final decoded = await _readJson(file);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('invalid_session_world_book_snapshot: ${file.path}');
+    }
+    return SessionWorldBookSnapshotData.fromJson(decoded);
+  }
+
   Future<List<ManagedOption>?> loadWorldBookCatalog() async {
     final file = await _worldBookCatalogFile();
     if (!await file.exists()) {
       return null;
     }
 
-    final raw = await file.readAsString();
-    final decoded = jsonDecode(raw);
+    final decoded = await _readJson(file);
     if (decoded is! Map<String, dynamic>) {
       throw StateError('invalid_world_book_catalog: ${file.path}');
     }
@@ -451,6 +470,177 @@ class ApiService {
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
       'items': worldBooks.map(_managedOptionToJson).toList(growable: false),
     });
+  }
+
+  Future<List<ManagedOption>?> loadAppearanceCatalog() async {
+    final file = await _appearanceCatalogFile();
+    if (!await file.exists()) {
+      return null;
+    }
+
+    final decoded = await _readJson(file);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('invalid_appearance_catalog: ${file.path}');
+    }
+
+    final rawItems = decoded['items'];
+    if (rawItems is! List) {
+      return const <ManagedOption>[];
+    }
+
+    final items = <ManagedOption>[];
+    for (final item in rawItems) {
+      if (item is! Map<String, dynamic>) {
+        continue;
+      }
+      final parsed = _managedOptionFromJson(item);
+      if (parsed.type == ManagedOptionType.appearance) {
+        items.add(parsed);
+      }
+    }
+    return items;
+  }
+
+  Future<void> saveAppearanceCatalog(List<ManagedOption> options) async {
+    final file = await _appearanceCatalogFile();
+    final appearances = options
+        .where((item) => item.type == ManagedOptionType.appearance)
+        .toList(growable: false);
+    await _writeJson(file, <String, dynamic>{
+      'version': 1,
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'items': appearances.map(_managedOptionToJson).toList(growable: false),
+    });
+  }
+
+  Future<SessionStoredMetadata?> loadSessionMetadata(String sessionId) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      return null;
+    }
+
+    final file = await _sessionMetadataFile(normalizedSessionId);
+    if (!await file.exists()) {
+      return null;
+    }
+
+    final decoded = await _readJson(file);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('invalid_session_metadata: ${file.path}');
+    }
+    return SessionStoredMetadata.fromJson(decoded);
+  }
+
+  Future<Map<String, SessionStoredMetadata>> loadAllSessionMetadata() async {
+    final files = await _jsonFiles(await _sessionMetadataDirectory());
+    final items = <String, SessionStoredMetadata>{};
+    for (final file in files) {
+      final decoded = await _readJson(file);
+      if (decoded is! Map<String, dynamic>) {
+        continue;
+      }
+      final sessionId =
+          '${decoded['sessionId'] ?? file.uri.pathSegments.last.replaceFirst('.json', '')}'
+              .trim();
+      if (sessionId.isEmpty) {
+        continue;
+      }
+      items[sessionId] = SessionStoredMetadata.fromJson(decoded);
+    }
+    return items;
+  }
+
+  Future<void> saveSessionMetadata({
+    required String sessionId,
+    required SessionStoredMetadata metadata,
+  }) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      return;
+    }
+
+    final file = await _sessionMetadataFile(normalizedSessionId);
+    await _writeJson(file, <String, dynamic>{
+      'sessionId': normalizedSessionId,
+      ...metadata.toJson(),
+    });
+  }
+
+  Future<void> deleteSessionMetadata(String sessionId) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      return;
+    }
+
+    final file = await _sessionMetadataFile(normalizedSessionId);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
+  Future<Map<String, dynamic>?> readSessionDocument(String sessionId) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      return null;
+    }
+
+    final file = await _sessionDocumentFile(normalizedSessionId);
+    if (!await file.exists()) {
+      return null;
+    }
+
+    final decoded = await _readJson(file);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('invalid_session_document: ${file.path}');
+    }
+    return decoded;
+  }
+
+  Future<void> writeSessionDocument({
+    required String sessionId,
+    required Map<String, dynamic> document,
+  }) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      throw StateError('session_document_requires_session_id');
+    }
+
+    final file = await _sessionDocumentFile(normalizedSessionId);
+    await _writeJson(file, document);
+  }
+
+  Future<void> deleteSessionDocument(String sessionId) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      return;
+    }
+
+    final file = await _sessionDocumentFile(normalizedSessionId);
+    if (await file.exists()) {
+      await file.delete();
+    }
+  }
+
+  Future<Directory> workspaceDirectory() => _workspaceDir();
+
+  Future<Directory> worldBookAssetsDirectory() async {
+    final dir = Directory('${(await _worldBooksDirectory()).path}/assets');
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return dir;
+  }
+
+  RuntimeApiConfig toRuntimeApiConfig(StoredApiConfig config) {
+    return _toRuntimeApiConfig(config);
+  }
+
+  ManagedOption managedOptionFromJson(Map<String, dynamic> json) {
+    return _managedOptionFromJson(json);
+  }
+
+  Map<String, dynamic> managedOptionToJson(ManagedOption option) {
+    return _managedOptionToJson(option);
   }
 
   Future<void> ensureDefaults() async {
@@ -702,14 +892,44 @@ class ApiService {
     return dir;
   }
 
+  Future<Directory> _appearanceDirectory() async {
+    final dir = Directory('${(await _workspaceDir()).path}/config/appearances');
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return dir;
+  }
+
+  Future<Directory> _sessionMetadataDirectory() async {
+    final dir = Directory(
+      '${(await _workspaceDir()).path}/config/session_metadata',
+    );
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return dir;
+  }
+
   Future<File> _sessionWorldBookSnapshotFile(String sessionId) async {
     return File(
       '${(await _sessionsDirectory()).path}/$sessionId.st_worldbook.json',
     );
   }
 
+  Future<File> _sessionDocumentFile(String sessionId) async {
+    return File('${(await _sessionsDirectory()).path}/$sessionId.json');
+  }
+
   Future<File> _worldBookCatalogFile() async {
     return File('${(await _worldBooksDirectory()).path}/catalog.json');
+  }
+
+  Future<File> _appearanceCatalogFile() async {
+    return File('${(await _appearanceDirectory()).path}/catalog.json');
+  }
+
+  Future<File> _sessionMetadataFile(String sessionId) async {
+    return File('${(await _sessionMetadataDirectory()).path}/$sessionId.json');
   }
 
   Future<List<File>> _jsonFiles(Directory directory) async {
@@ -750,6 +970,11 @@ class ApiService {
 
   Future<void> _writeJson(File file, Map<String, dynamic> json) async {
     await file.writeAsString(const JsonEncoder.withIndent('  ').convert(json));
+  }
+
+  Future<Object?> _readJson(File file) async {
+    final raw = await file.readAsString();
+    return jsonDecode(raw);
   }
 
   ManagedOption _managedOptionFromJson(Map<String, dynamic> json) {

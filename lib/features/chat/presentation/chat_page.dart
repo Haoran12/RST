@@ -11,7 +11,7 @@ import '../../../core/providers/service_providers.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../core/services/world_book_injection.dart';
-import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/theme_tokens.dart';
 import '../../../shared/utils/reasoning_markup.dart';
 import '../../../shared/utils/responsive.dart';
 import '../../../shared/widgets/empty_state_view.dart';
@@ -620,7 +620,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       );
     }
 
-    final bubbleAppearance = _resolveBubbleAppearance(session.sessionId);
+    final bubbleAppearance = MessageBubbleAppearance.fromTheme(context);
     final floorByMessageId = _buildFloorByMessageId(_messages);
 
     return Column(
@@ -642,10 +642,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 const SizedBox(height: 12),
                 Expanded(
                   child: _messages.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             '还没有消息，输入后发送开始对话。',
-                            style: TextStyle(color: AppColors.textMuted),
+                            style: TextStyle(
+                              color: AppThemeTokens.textMuted(context),
+                            ),
                           ),
                         )
                       : ListView.separated(
@@ -693,64 +695,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
   }
 
-  MessageBubbleAppearance _resolveBubbleAppearance(String sessionId) {
-    final appearanceBySession = ref.watch(sessionAppearanceProvider);
-    final appearanceOptions = ref.watch(appearanceOptionsProvider);
-    final selectedAppearanceId = appearanceBySession[sessionId];
-
-    ManagedOption? selected;
-    if (selectedAppearanceId != null && selectedAppearanceId.isNotEmpty) {
-      for (final option in appearanceOptions) {
-        if (option.id == selectedAppearanceId) {
-          selected = option;
-          break;
-        }
-      }
-    }
-    selected ??= appearanceOptions.isNotEmpty ? appearanceOptions.first : null;
-
-    final fontScale = _readDoubleField(
-      selected,
-      'font_scale',
-      1.0,
-    ).clamp(0.8, 1.6);
-    final bubbleOpacity = _readDoubleField(
-      selected,
-      'message_bubble_opacity',
-      1.0,
-    ).clamp(0.0, 1.0);
-
-    return MessageBubbleAppearance(
-      paragraphColor: _readColorField(
-        selected,
-        'markdown_paragraph_color',
-        AppColors.textStrong,
-      ),
-      headingColor: _readColorField(
-        selected,
-        'markdown_heading_color',
-        AppColors.textStrong,
-      ),
-      italicColor: _readColorField(
-        selected,
-        'markdown_italic_color',
-        AppColors.textSecondary,
-      ),
-      boldColor: _readColorField(
-        selected,
-        'markdown_bold_color',
-        AppColors.textStrong,
-      ),
-      quotedColor: _readColorField(
-        selected,
-        'markdown_quoted_color',
-        AppColors.warning,
-      ),
-      fontScale: fontScale,
-      bubbleOpacity: bubbleOpacity,
-    );
-  }
-
   Map<String, int> _buildFloorByMessageId(List<frb.MessageRecord> messages) {
     final floors = <String, int>{};
     var fallbackFloor = 0;
@@ -769,48 +713,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       }
     }
     return floors;
-  }
-
-  double _readDoubleField(ManagedOption? option, String key, double fallback) {
-    if (option == null) {
-      return fallback;
-    }
-    final value = option.fieldValue(key);
-    if (value is num) {
-      return value.toDouble();
-    }
-    if (value is String) {
-      final normalized = value.trim().replaceAll(',', '.');
-      return double.tryParse(normalized) ?? fallback;
-    }
-    return fallback;
-  }
-
-  Color _readColorField(ManagedOption? option, String key, Color fallback) {
-    if (option == null) {
-      return fallback;
-    }
-    final value = option.fieldValue(key);
-    if (value is! String) {
-      return fallback;
-    }
-    return _parseHexColor(value, fallback);
-  }
-
-  Color _parseHexColor(String raw, Color fallback) {
-    final normalized = raw.trim();
-    if (normalized.isEmpty) {
-      return fallback;
-    }
-    var hex = normalized.startsWith('#') ? normalized.substring(1) : normalized;
-    if (hex.length == 6) {
-      hex = 'FF$hex';
-    }
-    final parsed = int.tryParse(hex, radix: 16);
-    if (parsed == null) {
-      return fallback;
-    }
-    return Color(parsed);
   }
 }
 
@@ -869,7 +771,9 @@ class _MessageWithMetadata extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2, left: 6, right: 6),
             child: SelectableText(
               message.errorMessage!,
-              style: const TextStyle(fontSize: 11, color: AppColors.error),
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: AppThemeTokens.error(context),
+              ),
             ),
           ),
       ],

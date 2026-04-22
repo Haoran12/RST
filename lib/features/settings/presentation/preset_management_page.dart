@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +8,7 @@ import '../../../core/models/workspace_config.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/theme_tokens.dart';
 import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
@@ -114,7 +116,9 @@ class PresetManagementPage extends ConsumerWidget {
                         Text(
                           '${preset.entries.length} 个条目',
                           style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: AppColors.textSecondary),
+                              ?.copyWith(
+                                color: AppThemeTokens.textSecondary(context),
+                              ),
                         ),
                       ],
                     ),
@@ -186,22 +190,129 @@ class PresetManagementPage extends ConsumerWidget {
   }
 
   Future<void> _import(BuildContext context, WidgetRef ref) async {
-    // TODO: 实现导入功能
-    AppNotice.show(
-      context,
-      message: '导入功能即将上线',
-      tone: AppNoticeTone.info,
-      category: 'preset_import_placeholder',
-    );
+    try {
+      const jsonType = XTypeGroup(label: 'json', extensions: <String>['json']);
+      final selected = await openFile(
+        acceptedTypeGroups: const <XTypeGroup>[jsonType],
+        confirmButtonText: '导入预设',
+      );
+      if (selected == null || !context.mounted) {
+        return;
+      }
+
+      final existing = await ref.read(presetCatalogProvider.future);
+      final result = await ref
+          .read(importExportServiceProvider)
+          .importPresetFromFile(
+            filePath: selected.path,
+            existingPresets: existing,
+          );
+      await ref.read(presetCatalogProvider.notifier).save(result.value);
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: result.hasWarnings
+            ? '导入完成，含 ${result.warnings.length} 条警告'
+            : '导入成功',
+        tone: result.hasWarnings
+            ? AppNoticeTone.warning
+            : AppNoticeTone.success,
+        category: 'preset_import_result',
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导入失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'preset_import_failed',
+      );
+    }
   }
 
   Future<void> _export(BuildContext context, WidgetRef ref) async {
-    // TODO: 实现导出功能
-    AppNotice.show(
-      context,
-      message: '导出功能即将上线',
-      tone: AppNoticeTone.info,
-      category: 'preset_export_placeholder',
+    final presets = await ref.read(presetCatalogProvider.future);
+    if (!context.mounted) {
+      return;
+    }
+    if (presets.isEmpty) {
+      AppNotice.show(
+        context,
+        message: '没有可导出的预设',
+        tone: AppNoticeTone.warning,
+        category: 'preset_export_empty',
+      );
+      return;
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+    final target = await _pickPreset(context, presets);
+    if (target == null || !context.mounted) {
+      return;
+    }
+
+    try {
+      const jsonType = XTypeGroup(label: 'json', extensions: <String>['json']);
+      final location = await getSaveLocation(
+        acceptedTypeGroups: const <XTypeGroup>[jsonType],
+        suggestedName: '${target.name}.rst-preset.json',
+        confirmButtonText: '导出预设',
+      );
+      if (location == null || !context.mounted) {
+        return;
+      }
+      await ref
+          .read(importExportServiceProvider)
+          .exportPresetToFile(preset: target, outputPath: location.path);
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导出成功',
+        tone: AppNoticeTone.success,
+        category: 'preset_export_success',
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导出失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'preset_export_failed',
+      );
+    }
+  }
+
+  Future<StoredPresetConfig?> _pickPreset(
+    BuildContext context,
+    List<StoredPresetConfig> presets,
+  ) async {
+    if (presets.length == 1) {
+      return presets.first;
+    }
+    return showDialog<StoredPresetConfig>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => SimpleDialog(
+        title: const Text('选择预设'),
+        children: presets
+            .map(
+              (preset) => SimpleDialogOption(
+                onPressed: () => Navigator.of(context).pop(preset),
+                child: Text(preset.name),
+              ),
+            )
+            .toList(growable: false),
+      ),
     );
   }
 }
@@ -300,9 +411,9 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
         children: [
           Text(
             '预设名称',
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(color: AppColors.textSecondary),
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: AppThemeTokens.textSecondary(context),
+            ),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -353,8 +464,10 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
 
   Widget _buildSaveBar(BuildContext context) {
     return GlassPanelCard(
-      backgroundColor: AppColors.surfaceOverlay.withValues(alpha: 0.88),
-      borderColor: AppColors.borderStrong.withValues(alpha: 0.45),
+      backgroundColor: AppThemeTokens.panel(
+        context,
+      ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.96 : 0.88),
+      borderColor: AppThemeTokens.borderStrong(context).withValues(alpha: 0.45),
       child: Row(
         children: [
           Expanded(
@@ -363,7 +476,7 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: _isDirty()
                     ? AppColors.accentSecondary
-                    : AppColors.textSecondary,
+                    : AppThemeTokens.textSecondary(context),
               ),
             ),
           ),
@@ -633,20 +746,22 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: AppColors.textMuted),
+      hintStyle: TextStyle(color: AppThemeTokens.textMuted(context)),
       filled: true,
-      fillColor: AppColors.surfaceOverlay.withValues(alpha: 0.52),
+      fillColor: AppThemeTokens.fieldFill(
+        context,
+      ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.9 : 0.52),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.borderSubtle),
+        borderSide: BorderSide(color: AppThemeTokens.border(context)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.borderSubtle),
+        borderSide: BorderSide(color: AppThemeTokens.border(context)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.borderStrong),
+        borderSide: BorderSide(color: AppThemeTokens.borderStrong(context)),
       ),
     );
   }
@@ -674,8 +789,12 @@ class _PresetEntryCard extends StatelessWidget {
     return GlassPanelCard(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       backgroundColor: entry.enabled
-          ? AppColors.surfaceCard.withValues(alpha: 0.92)
-          : AppColors.surfaceOverlay.withValues(alpha: 0.55),
+          ? AppThemeTokens.card(
+              context,
+            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.98 : 0.92)
+          : AppThemeTokens.panel(
+              context,
+            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.76 : 0.55),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -686,8 +805,10 @@ class _PresetEntryCard extends StatelessWidget {
               height: 34,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
-                color: AppColors.surfaceOverlay.withValues(alpha: 0.6),
-                border: Border.all(color: AppColors.borderSubtle),
+                color: AppThemeTokens.panel(context).withValues(
+                  alpha: AppThemeTokens.isLight(context) ? 0.9 : 0.6,
+                ),
+                border: Border.all(color: AppThemeTokens.border(context)),
               ),
               child: const Icon(Icons.drag_indicator_rounded, size: 16),
             ),
@@ -710,8 +831,8 @@ class _PresetEntryCard extends StatelessWidget {
                 _EntryMetaPill(
                   label: entry.role.displayLabel,
                   accentColor: entry.enabled
-                      ? AppColors.textSecondary
-                      : AppColors.textMuted,
+                      ? AppThemeTokens.textSecondary(context)
+                      : AppThemeTokens.textMuted(context),
                 ),
               ],
             ),
@@ -762,7 +883,7 @@ class _EntryMetaPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = accentColor ?? AppColors.textSecondary;
+    final tint = accentColor ?? AppThemeTokens.textSecondary(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -884,10 +1005,14 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
                           ),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(16),
-                            color: AppColors.surfaceOverlay.withValues(
-                              alpha: 0.52,
+                            color: AppThemeTokens.fieldFill(context).withValues(
+                              alpha: AppThemeTokens.isLight(context)
+                                  ? 0.9
+                                  : 0.52,
                             ),
-                            border: Border.all(color: AppColors.borderSubtle),
+                            border: Border.all(
+                              color: AppThemeTokens.border(context),
+                            ),
                           ),
                           child: Row(
                             children: [
@@ -927,7 +1052,7 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
     final selected = await showModalBottomSheet<StoredPresetEntryRole>(
       context: context,
       useSafeArea: true,
-      backgroundColor: AppColors.backgroundElevated,
+      backgroundColor: AppThemeTokens.background(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -942,8 +1067,8 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
                   child: GlassPanelCard(
                     padding: EdgeInsets.zero,
                     borderColor: role == _draft.role
-                        ? AppColors.borderStrong
-                        : AppColors.borderSubtle,
+                        ? AppThemeTokens.borderStrong(context)
+                        : AppThemeTokens.border(context),
                     child: ListTile(
                       title: Text(role.displayLabel),
                       trailing: role == _draft.role
@@ -993,20 +1118,22 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
   InputDecoration _entryDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: AppColors.textMuted),
+      hintStyle: TextStyle(color: AppThemeTokens.textMuted(context)),
       filled: true,
-      fillColor: AppColors.surfaceOverlay.withValues(alpha: 0.52),
+      fillColor: AppThemeTokens.fieldFill(
+        context,
+      ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.9 : 0.52),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.borderSubtle),
+        borderSide: BorderSide(color: AppThemeTokens.border(context)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.borderSubtle),
+        borderSide: BorderSide(color: AppThemeTokens.border(context)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.borderStrong),
+        borderSide: BorderSide(color: AppThemeTokens.borderStrong(context)),
       ),
     );
   }
@@ -1106,7 +1233,9 @@ class _CopyEntryDialogState extends State<_CopyEntryDialog> {
       },
       leading: Icon(
         selected ? Icons.radio_button_checked : Icons.radio_button_off,
-        color: selected ? AppColors.accentSecondary : AppColors.textMuted,
+        color: selected
+            ? AppColors.accentSecondary
+            : AppThemeTokens.textMuted(context),
       ),
       title: title,
       subtitle: subtitle,

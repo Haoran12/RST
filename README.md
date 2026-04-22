@@ -106,4 +106,15 @@ storeFile=../keystore/rst-release.jks
 storePassword=***
 keyAlias=***
 keyPassword=***
+# Optional but strongly recommended:
+# signerSha256=<release certificate SHA-256 without colons>
+# Optional only for intentionally preserving a historical debug-signed APK line:
+# allowDebugCertificate=true
 ```
+
+Important:
+
+- `release` builds must never fall back to debug signing.
+- If `android/key.properties` or the referenced keystore is missing, `flutter build apk --release` must fail.
+- `scripts/build_android_release.ps1` now verifies the built APK certificate and rejects Android Debug signing unless the exact historical signer is explicitly pinned.
+- Keep the real `android/key.properties` and release keystore outside version control; use `android/key.properties.example` as the template.

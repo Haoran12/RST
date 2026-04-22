@@ -7,6 +7,7 @@ import 'package:json2yaml/json2yaml.dart';
 import 'package:yaml/yaml.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 
 enum StructuredTextFormat { plain, markdown, yaml, json }
 
@@ -112,16 +113,19 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
   @override
   Widget build(BuildContext context) {
     final status = _status;
+    final borderColor = status.hasIssue
+        ? AppThemeTokens.warning(context).withValues(alpha: 0.72)
+        : AppThemeTokens.border(context);
     return Container(
       height: widget.height,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: status.hasIssue
-              ? AppColors.warning.withValues(alpha: 0.72)
-              : AppColors.borderSubtle,
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.radiusPanel(context),
         ),
-        color: AppColors.surfaceOverlay.withValues(alpha: 0.42),
+        border: Border.all(color: borderColor),
+        color: AppThemeTokens.fieldFill(
+          context,
+        ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.68 : 0.42),
       ),
       child: Column(
         children: [
@@ -145,8 +149,8 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
                       status.message!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: status.hasIssue
-                            ? AppColors.warning
-                            : AppColors.textSecondary,
+                            ? AppThemeTokens.warning(context)
+                            : AppThemeTokens.textSecondary(context),
                       ),
                     ),
                   ),
@@ -156,7 +160,7 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
           Divider(
             height: 1,
             thickness: 1,
-            color: AppColors.borderSubtle.withValues(alpha: 0.8),
+            color: AppThemeTokens.border(context).withValues(alpha: 0.8),
           ),
           Expanded(
             child: TextField(
@@ -168,9 +172,9 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
               maxLines: null,
               keyboardType: TextInputType.multiline,
               textAlignVertical: TextAlignVertical.top,
-              style: const TextStyle(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppThemeTokens.textStrong(context),
                 fontFamily: 'monospace',
-                fontSize: 13,
                 height: 1.5,
               ),
               decoration: InputDecoration(
@@ -267,7 +271,7 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: AppColors.backgroundElevated,
+      backgroundColor: AppThemeTokens.background(context),
       builder: (context) {
         return FractionallySizedBox(
           heightFactor: 1,
@@ -421,15 +425,19 @@ class _FormatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = selected ? AppColors.accentSecondary : AppColors.textMuted;
+    final tint = selected
+        ? Theme.of(context).colorScheme.primary
+        : AppThemeTokens.textMuted(context);
     return InkWell(
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(AppThemeTokens.radiusPill(context)),
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusPill(context),
+          ),
           color: tint.withValues(alpha: selected ? 0.18 : 0.08),
           border: Border.all(
             color: tint.withValues(alpha: selected ? 0.52 : 0.22),
@@ -437,9 +445,7 @@ class _FormatChip extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: Theme.of(
-            context,
-          ).textTheme.labelLarge?.copyWith(color: tint, fontSize: 12),
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: tint),
         ),
       ),
     );
@@ -473,7 +479,7 @@ class _StructuredEditorAssistBar extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: AppColors.borderSubtle.withValues(alpha: 0.8),
+            color: AppThemeTokens.border(context).withValues(alpha: 0.8),
             width: 1,
           ),
         ),
@@ -538,11 +544,15 @@ class _AssistIconButton extends StatelessWidget {
           onPressed: onPressed,
           padding: EdgeInsets.zero,
           style: IconButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
-            backgroundColor: AppColors.surfaceOverlay.withValues(alpha: 0.74),
-            side: const BorderSide(color: AppColors.borderSubtle),
+            foregroundColor: AppThemeTokens.textSecondary(context),
+            backgroundColor: AppThemeTokens.panel(
+              context,
+            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.9 : 0.74),
+            side: BorderSide(color: AppThemeTokens.border(context)),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(
+                AppThemeTokens.radiusSmall(context),
+              ),
             ),
           ),
           icon: Icon(icon, size: 16),
@@ -563,22 +573,29 @@ class _AssistShortcutChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(left: 6),
       child: Material(
-        color: AppColors.surfaceOverlay.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(8),
+        color: AppThemeTokens.panel(
+          context,
+        ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.9 : 0.72),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.radiusSmall(context),
+        ),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusSmall(context),
+          ),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.borderSubtle),
+              borderRadius: BorderRadius.circular(
+                AppThemeTokens.radiusSmall(context),
+              ),
+              border: Border.all(color: AppThemeTokens.border(context)),
             ),
             child: Text(
               label,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: AppThemeTokens.textSecondary(context),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -697,7 +714,7 @@ class _FullscreenStructuredEditorSheetState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.backgroundElevated,
+      backgroundColor: AppThemeTokens.background(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -707,18 +724,18 @@ class _FullscreenStructuredEditorSheetState
                 children: [
                   IconButton(
                     tooltip: '关闭',
-                    onPressed: () => Navigator.of(context).pop(_controller.text),
+                    onPressed: () =>
+                        Navigator.of(context).pop(_controller.text),
                     icon: const Icon(Icons.close_rounded),
                   ),
                   const SizedBox(width: 4),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '全屏编辑',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.textStrong,
-                        fontSize: 16,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppThemeTokens.textStrong(context),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -730,7 +747,7 @@ class _FullscreenStructuredEditorSheetState
                 ],
               ),
             ),
-            const Divider(height: 1, color: AppColors.borderSubtle),
+            Divider(height: 1, color: AppThemeTokens.border(context)),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -742,15 +759,16 @@ class _FullscreenStructuredEditorSheetState
                   maxLines: null,
                   expands: true,
                   textAlignVertical: TextAlignVertical.top,
-                  style: const TextStyle(
-                    color: AppColors.textStrong,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppThemeTokens.textStrong(context),
                     fontFamily: 'monospace',
-                    fontSize: 13,
                     height: 1.5,
                   ),
                   decoration: InputDecoration(
                     hintText: widget.hintText,
-                    hintStyle: const TextStyle(color: AppColors.textMuted),
+                    hintStyle: TextStyle(
+                      color: AppThemeTokens.textMuted(context),
+                    ),
                     border: InputBorder.none,
                   ),
                 ),

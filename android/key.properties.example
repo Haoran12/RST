@@ -1,0 +1,13 @@
+storeFile=../keystore/rst-release.jks
+storePassword=REPLACE_ME
+keyAlias=REPLACE_ME
+keyPassword=REPLACE_ME
+
+# Optional: pin the expected signer certificate SHA-256 to prevent drift.
+# signerSha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+# Optional: only for intentionally preserving a historical debug-signed lineage.
+# When enabled, signerSha256 must be set to the exact legacy certificate fingerprint.
+# allowDebugCertificate=true
+# Optional: lock the build to the expected release signer certificate SHA-256.
+# signerSha256=REPLACE_WITH_EXPECTED_SHA256_NO_COLONS

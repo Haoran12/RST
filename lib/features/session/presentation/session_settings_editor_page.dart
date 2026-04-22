@@ -9,6 +9,7 @@ import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../shared/utils/responsive.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/theme_tokens.dart';
 import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/auto_save_mixin.dart';
 import '../../../shared/widgets/buttons.dart';
@@ -648,7 +649,7 @@ class SessionSettingsEditorPageState
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      backgroundColor: AppColors.backgroundElevated,
+      backgroundColor: AppThemeTokens.background(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -664,7 +665,7 @@ class SessionSettingsEditorPageState
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.borderStrong,
+                    color: AppThemeTokens.borderStrong(context),
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -683,10 +684,12 @@ class SessionSettingsEditorPageState
                     return GlassPanelCard(
                       padding: EdgeInsets.zero,
                       borderColor: selected
-                          ? AppColors.borderStrong
-                          : AppColors.borderSubtle,
+                          ? AppThemeTokens.borderStrong(context)
+                          : AppThemeTokens.border(context),
                       backgroundColor: selected
-                          ? AppColors.surfaceActive.withValues(alpha: 0.88)
+                          ? AppThemeTokens.userBubble(
+                              context,
+                            ).withValues(alpha: 0.88)
                           : null,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(20),
@@ -717,7 +720,10 @@ class SessionSettingsEditorPageState
                                             .textTheme
                                             .bodySmall
                                             ?.copyWith(
-                                              color: AppColors.textSecondary,
+                                              color:
+                                                  AppThemeTokens.textSecondary(
+                                                    context,
+                                                  ),
                                             ),
                                       ),
                                     ],
@@ -1036,7 +1042,7 @@ class _ActionCard extends StatelessWidget {
                     Text(
                       subtitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: AppThemeTokens.textSecondary(context),
                         height: 1.35,
                       ),
                     ),
@@ -1100,7 +1106,7 @@ class _TavoPickerCard extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: AppThemeTokens.textSecondary(context),
                         height: 1.2,
                       ),
                     ),
@@ -1108,7 +1114,7 @@ class _TavoPickerCard extends StatelessWidget {
                     Text(
                       valueLabel,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppColors.textStrong,
+                        color: AppThemeTokens.textStrong(context),
                       ),
                     ),
                     if (detailLabel != null && detailLabel!.trim().isNotEmpty)
@@ -1118,7 +1124,7 @@ class _TavoPickerCard extends StatelessWidget {
                           detailLabel!,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
-                                color: AppColors.textSecondary,
+                                color: AppThemeTokens.textSecondary(context),
                                 height: 1.2,
                               ),
                         ),
@@ -1167,7 +1173,7 @@ class _SessionSettingsNavDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      backgroundColor: AppColors.backgroundElevated,
+      backgroundColor: AppThemeTokens.background(context),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -1223,15 +1229,18 @@ class _SessionDrawerItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = selected
-        ? AppColors.borderStrong
-        : AppColors.borderSubtle;
+    final primary = Theme.of(context).colorScheme.primary;
+    final borderColor = selected ? primary : AppThemeTokens.border(context);
     final background = selected
-        ? AppColors.surfaceOverlay.withValues(alpha: 0.72)
-        : AppColors.surfaceCard.withValues(alpha: 0.84);
+        ? AppThemeTokens.panel(
+            context,
+          ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.92 : 0.72)
+        : AppThemeTokens.card(
+            context,
+          ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.96 : 0.84);
     final iconColor = selected
-        ? AppColors.accentPrimary
-        : AppColors.textSecondary;
+        ? primary
+        : AppThemeTokens.textSecondary(context);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
@@ -1254,7 +1263,7 @@ class _SessionDrawerItemCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: borderColor),
-                  color: AppColors.surfaceOverlay,
+                  color: AppThemeTokens.panel(context),
                 ),
                 child: Icon(icon, size: 19, color: iconColor),
               ),
@@ -1674,8 +1683,8 @@ class _WorldBookEditorPageState extends State<_WorldBookEditorPage>
                 value.trim().isEmpty ? '点击“编辑内容”填写此条目。' : value,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: value.trim().isEmpty
-                      ? AppColors.textSecondary
-                      : AppColors.textStrong,
+                      ? AppThemeTokens.textSecondary(context)
+                      : AppThemeTokens.textStrong(context),
                   height: 1.45,
                 ),
               ),
@@ -2066,7 +2075,7 @@ class _SettingInputEditorPageState extends State<SettingInputEditorPage> {
                   Text(
                     widget.hintText,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: AppThemeTokens.textSecondary(context),
                     ),
                   ),
                   const SizedBox(height: 10),

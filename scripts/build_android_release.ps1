@@ -7,6 +7,8 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $pubspecPath = Join-Path $projectRoot "pubspec.yaml"
+$androidDir = Join-Path $projectRoot "android"
+$androidKeyPropertiesPath = Join-Path $androidDir "key.properties"
 $mainManifestPath = Join-Path $projectRoot "android\app\src\main\AndroidManifest.xml"
 $versionHistoryPath = Join-Path $projectRoot "docs\version-history.md"
 $flutterOutputApk = Join-Path $projectRoot "build\app\outputs\flutter-apk\app-release.apk"
@@ -18,6 +20,145 @@ if (-not (Test-Path $pubspecPath)) {
 if (-not (Test-Path $mainManifestPath)) {
     throw "AndroidManifest.xml not found at $mainManifestPath"
 }
+
+function Read-PropertiesFile {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        throw "Properties file not found: $Path"
+    }
+
+    $map = @{}
+    foreach ($line in Get-Content $Path) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith('#')) {
+            continue
+        }
+        $parts = $trimmed -split '=', 2
+        if ($parts.Count -ne 2) {
+            continue
+        }
+        $map[$parts[0].Trim()] = $parts[1].Trim()
+    }
+
+    return $map
+}
+
+function Get-KeyProperties {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        throw "Release signing config missing: $Path. Refusing to build a debug-signed release APK."
+    }
+
+    $map = Read-PropertiesFile -Path $Path
+
+    foreach ($requiredKey in @('storeFile', 'storePassword', 'keyAlias', 'keyPassword')) {
+        if (-not $map.ContainsKey($requiredKey) -or [string]::IsNullOrWhiteSpace($map[$requiredKey])) {
+            throw "Release signing config '$requiredKey' is missing in $Path."
+        }
+    }
+
+    return $map
+}
+
+function Resolve-StoreFilePath {
+    param(
+        [string]$BaseDir,
+        [string]$RelativeOrAbsolutePath
+    )
+
+    if ([System.IO.Path]::IsPathRooted($RelativeOrAbsolutePath)) {
+        return $RelativeOrAbsolutePath
+    }
+    return [System.IO.Path]::GetFullPath((Join-Path $BaseDir $RelativeOrAbsolutePath))
+}
+
+function Get-ApkSignerPath {
+    param([string]$AndroidSdkDir)
+
+    $buildToolsDir = Join-Path $AndroidSdkDir "build-tools"
+    if (-not (Test-Path $buildToolsDir)) {
+        throw "Android build-tools directory not found: $buildToolsDir"
+    }
+
+    $candidate = Get-ChildItem -Path $buildToolsDir -Directory |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName "apksigner.bat" } |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        throw "apksigner.bat not found under $buildToolsDir"
+    }
+
+    return $candidate
+}
+
+function Assert-ReleaseApkSignature {
+    param(
+        [string]$ApkPath,
+        [string]$ApkSignerPath,
+        [hashtable]$KeyProperties
+    )
+
+    $output = & $ApkSignerPath verify --print-certs $ApkPath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "apksigner verification failed for $ApkPath`n$output"
+    }
+
+    $joined = ($output | Out-String)
+    $actualSha256 = $null
+    $certificateDn = $null
+    foreach ($line in $output) {
+        if ($line -match 'certificate SHA-256 digest:\s*([0-9a-fA-F:]+)') {
+            $actualSha256 = $Matches[1].Trim().ToLower().Replace(':', '')
+        }
+        elseif ($line -match 'certificate DN:\s*(.+)$') {
+            $certificateDn = $Matches[1].Trim()
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($actualSha256)) {
+        throw "Unable to read APK signer SHA-256 digest from apksigner output.`n$joined"
+    }
+
+    $expectedSha256 = $null
+    if ($KeyProperties.ContainsKey('signerSha256')) {
+        $expectedSha256 = $KeyProperties['signerSha256'].ToString().Trim().ToLower().Replace(':', '')
+    }
+    $allowDebugCertificate = $false
+    if ($KeyProperties.ContainsKey('allowDebugCertificate')) {
+        $allowDebugCertificate = $KeyProperties['allowDebugCertificate'].ToString().Trim().ToLower() -eq 'true'
+    }
+    if ($allowDebugCertificate -and [string]::IsNullOrWhiteSpace($expectedSha256)) {
+        throw "allowDebugCertificate=true requires signerSha256 to be set in android/key.properties."
+    }
+
+    $usesAndroidDebugCertificate = -not [string]::IsNullOrWhiteSpace($certificateDn) -and $certificateDn -match 'CN=Android Debug'
+    if ($usesAndroidDebugCertificate -and -not $allowDebugCertificate) {
+        throw "APK is signed with Android Debug certificate. Only an explicitly pinned legacy signer may bypass this check.`n$joined"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($expectedSha256) -and $actualSha256 -ne $expectedSha256) {
+        throw "APK signer SHA-256 mismatch. Expected $expectedSha256 but got $actualSha256."
+    }
+}
+
+$keyProperties = Get-KeyProperties -Path $androidKeyPropertiesPath
+$storeFilePath = Resolve-StoreFilePath -BaseDir $androidDir -RelativeOrAbsolutePath $keyProperties['storeFile']
+if (-not (Test-Path $storeFilePath)) {
+    throw "Release keystore not found: $storeFilePath"
+}
+
+$localPropertiesPath = Join-Path $androidDir "local.properties"
+if (-not (Test-Path $localPropertiesPath)) {
+    throw "android/local.properties not found at $localPropertiesPath"
+}
+$localProperties = Read-PropertiesFile -Path $localPropertiesPath
+if (-not $localProperties.ContainsKey('sdk.dir') -or [string]::IsNullOrWhiteSpace($localProperties['sdk.dir'])) {
+    throw "sdk.dir is missing in $localPropertiesPath"
+}
+$androidSdkDir = $localProperties['sdk.dir']
+$apkSignerPath = Get-ApkSignerPath -AndroidSdkDir $androidSdkDir
 
 $pubspecLines = Get-Content $pubspecPath
 $versionLineIndex = -1
@@ -70,6 +211,8 @@ try {
     $versionedApkName = "rst-$version-release.apk"
     $versionedApkPath = Join-Path $releaseDir $versionedApkName
     $latestApkPath = Join-Path $releaseDir "rst-latest-release.apk"
+
+    Assert-ReleaseApkSignature -ApkPath $flutterOutputApk -ApkSignerPath $apkSignerPath -KeyProperties $keyProperties
 
     Copy-Item -LiteralPath $flutterOutputApk -Destination $versionedApkPath -Force
     Copy-Item -LiteralPath $flutterOutputApk -Destination $latestApkPath -Force

@@ -5,7 +5,7 @@ import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'core/routing/app_shell.dart';
 import 'core/providers/app_state.dart';
 import 'shared/theme/app_theme.dart';
-import 'shared/theme/app_colors.dart';
+import 'shared/theme/theme_tokens.dart';
 
 class RstApp extends ConsumerWidget {
   const RstApp({super.key});
@@ -19,8 +19,8 @@ class RstApp extends ConsumerWidget {
       title: 'RST',
       debugShowCheckedModeBanner: false,
       themeMode: themeMode,
-      theme: AppTheme.lightTheme(),
-      darkTheme: AppTheme.darkTheme(),
+      theme: AppTheme.lightTheme(appearance: activeAppearance),
+      darkTheme: AppTheme.darkTheme(appearance: activeAppearance),
       home: _WindowShell(child: const AppShell()),
     );
   }
@@ -68,7 +68,7 @@ class _WindowShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return WindowBorder(
-      color: AppColors.borderSubtle,
+      color: AppThemeTokens.windowBorder(context),
       width: 1,
       child: Column(
         children: [
@@ -90,7 +90,7 @@ class _CustomTitleBar extends StatelessWidget {
             child: MoveWindow(
               child: Container(
                 height: 32,
-                color: AppColors.backgroundElevated,
+                color: AppThemeTokens.titleBarBackground(context),
                 child: const SizedBox.expand(),
               ),
             ),
@@ -105,8 +105,8 @@ class _CustomTitleBar extends StatelessWidget {
 class _WindowButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final buttonColor = AppColors.textMuted;
-    final hoverColor = AppColors.textSecondary;
+    final buttonColor = AppThemeTokens.windowButton(context);
+    final hoverColor = AppThemeTokens.windowButtonHover(context);
 
     return Row(
       children: [
@@ -129,7 +129,7 @@ class _WindowButtons extends StatelessWidget {
             normal: Colors.transparent,
             iconNormal: buttonColor,
             iconMouseOver: hoverColor,
-            mouseOver: AppColors.error.withValues(alpha: 0.15),
+            mouseOver: AppThemeTokens.closeHoverBackground(context),
           ),
         ),
       ],

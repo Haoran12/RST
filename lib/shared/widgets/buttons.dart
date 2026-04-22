@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 
 class PrimaryPillButton extends StatelessWidget {
   const PrimaryPillButton({
@@ -14,12 +14,17 @@ class PrimaryPillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return FilledButton(
       onPressed: onPressed,
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.accentPrimary,
-        foregroundColor: AppColors.textStrong,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusPill(context),
+          ),
+        ),
       ),
       child: Text(label),
     );
@@ -41,9 +46,13 @@ class SecondaryOutlineButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.textStrong,
-        side: const BorderSide(color: AppColors.borderSubtle),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        foregroundColor: AppThemeTokens.textStrong(context),
+        side: BorderSide(color: AppThemeTokens.border(context)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusPill(context),
+          ),
+        ),
       ),
       child: Text(label),
     );

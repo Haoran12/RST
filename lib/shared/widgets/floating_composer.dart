@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 import '../utils/responsive.dart';
 
 class _SendComposerIntent extends Intent {
@@ -117,9 +117,11 @@ class _FloatingComposerState extends State<FloatingComposer> {
         context: context,
         builder: (context) {
           return Dialog(
-            backgroundColor: AppColors.backgroundElevated,
+            backgroundColor: AppThemeTokens.background(context),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(
+                AppThemeTokens.radiusCard(context),
+              ),
             ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 640, maxHeight: 600),
@@ -147,7 +149,7 @@ class _FloatingComposerState extends State<FloatingComposer> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: AppColors.backgroundElevated,
+      backgroundColor: AppThemeTokens.background(context),
       builder: (context) {
         return FractionallySizedBox(
           heightFactor: 1,
@@ -172,14 +174,21 @@ class _FloatingComposerState extends State<FloatingComposer> {
   @override
   Widget build(BuildContext context) {
     final focusNode = _effectiveFocusNode;
+    final isLightTheme = AppThemeTokens.isLight(context);
+    final sendBackground = AppThemeTokens.primary(context);
+    final sendForeground = Theme.of(context).colorScheme.onPrimary;
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(10, 6, 10, 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.backgroundElevated.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.borderSubtle),
+          color: AppThemeTokens.background(
+            context,
+          ).withValues(alpha: isLightTheme ? 0.98 : 0.94),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusField(context),
+          ),
+          border: Border.all(color: AppThemeTokens.border(context)),
         ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
@@ -220,11 +229,15 @@ class _FloatingComposerState extends State<FloatingComposer> {
                           minLines: 1,
                           maxLines: 4,
                           textInputAction: TextInputAction.newline,
-                          style: const TextStyle(color: AppColors.textStrong),
-                          decoration: const InputDecoration(
+                          style: TextStyle(
+                            color: AppThemeTokens.textStrong(context),
+                          ),
+                          decoration: InputDecoration(
                             isCollapsed: true,
                             hintText: '随便聊聊...',
-                            hintStyle: TextStyle(color: AppColors.textMuted),
+                            hintStyle: TextStyle(
+                              color: AppThemeTokens.textMuted(context),
+                            ),
                             border: InputBorder.none,
                           ),
                         ),
@@ -239,12 +252,12 @@ class _FloatingComposerState extends State<FloatingComposer> {
                       onPressed: widget.onSend,
                       padding: EdgeInsets.zero,
                       style: IconButton.styleFrom(
-                        backgroundColor: AppColors.textStrong.withValues(
-                          alpha: 0.9,
-                        ),
-                        foregroundColor: AppColors.backgroundBase,
+                        backgroundColor: sendBackground,
+                        foregroundColor: sendForeground,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(999),
+                          borderRadius: BorderRadius.circular(
+                            AppThemeTokens.radiusPill(context),
+                          ),
                         ),
                       ),
                       icon: Icon(
@@ -262,9 +275,13 @@ class _FloatingComposerState extends State<FloatingComposer> {
                 Container(
                   padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
                   decoration: BoxDecoration(
-                    color: AppColors.backgroundBase.withValues(alpha: 0.24),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderSubtle),
+                    color: AppThemeTokens.panelMuted(
+                      context,
+                    ).withValues(alpha: isLightTheme ? 0.72 : 0.24),
+                    borderRadius: BorderRadius.circular(
+                      AppThemeTokens.radiusMedium(context),
+                    ),
+                    border: Border.all(color: AppThemeTokens.border(context)),
                   ),
                   child: Row(
                     children: [
@@ -336,11 +353,15 @@ class _QuickActionIconButton extends StatelessWidget {
           onPressed: onPressed,
           padding: EdgeInsets.zero,
           style: IconButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
-            backgroundColor: AppColors.surfaceOverlay.withValues(alpha: 0.7),
-            side: const BorderSide(color: AppColors.borderSubtle),
+            foregroundColor: AppThemeTokens.textSecondary(context),
+            backgroundColor: AppThemeTokens.panel(
+              context,
+            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.9 : 0.7),
+            side: BorderSide(color: AppThemeTokens.border(context)),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(
+                AppThemeTokens.radiusSmall(context),
+              ),
             ),
           ),
           icon: Icon(icon, size: 16),
@@ -361,22 +382,29 @@ class _ComposerShortcutChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(left: 6),
       child: Material(
-        color: AppColors.surfaceOverlay.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(8),
+        color: AppThemeTokens.panel(
+          context,
+        ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.9 : 0.7),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.radiusSmall(context),
+        ),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusSmall(context),
+          ),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.borderSubtle),
+              borderRadius: BorderRadius.circular(
+                AppThemeTokens.radiusSmall(context),
+              ),
+              border: Border.all(color: AppThemeTokens.border(context)),
             ),
             child: Text(
               label,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: AppThemeTokens.textSecondary(context),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -433,7 +461,7 @@ class _FullscreenComposerSheetState extends State<_FullscreenComposerSheet> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.backgroundElevated,
+      backgroundColor: AppThemeTokens.background(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -447,14 +475,13 @@ class _FullscreenComposerSheetState extends State<_FullscreenComposerSheet> {
                     icon: const Icon(Icons.close_rounded),
                   ),
                   const SizedBox(width: 4),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '全屏输入',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.textStrong,
-                        fontSize: 16,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppThemeTokens.textStrong(context),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -479,7 +506,7 @@ class _FullscreenComposerSheetState extends State<_FullscreenComposerSheet> {
                 ],
               ),
             ),
-            const Divider(height: 1, color: AppColors.borderSubtle),
+            Divider(height: 1, color: AppThemeTokens.border(context)),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -512,13 +539,15 @@ class _FullscreenComposerSheetState extends State<_FullscreenComposerSheet> {
                       maxLines: null,
                       expands: true,
                       textAlignVertical: TextAlignVertical.top,
-                      style: const TextStyle(
-                        color: AppColors.textStrong,
+                      style: TextStyle(
+                        color: AppThemeTokens.textStrong(context),
                         height: 1.45,
                       ),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: '输入内容...',
-                        hintStyle: TextStyle(color: AppColors.textMuted),
+                        hintStyle: TextStyle(
+                          color: AppThemeTokens.textMuted(context),
+                        ),
                         border: InputBorder.none,
                       ),
                     ),

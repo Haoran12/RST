@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 
 class AppTextField extends StatelessWidget {
   const AppTextField({
@@ -18,26 +18,35 @@ class AppTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = AppThemeTokens.border(context);
+    final strongBorderColor = AppThemeTokens.borderStrong(context);
+
     return TextField(
       controller: controller,
       maxLines: maxLines,
       readOnly: readOnly,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: const TextStyle(color: AppColors.textMuted),
+        hintStyle: TextStyle(color: AppThemeTokens.textMuted(context)),
         filled: true,
-        fillColor: AppColors.surfaceOverlay,
+        fillColor: AppThemeTokens.fieldFill(context),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: AppColors.borderSubtle),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusField(context),
+          ),
+          borderSide: BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: AppColors.borderSubtle),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusField(context),
+          ),
+          borderSide: BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: AppColors.borderStrong),
+          borderRadius: BorderRadius.circular(
+            AppThemeTokens.radiusField(context),
+          ),
+          borderSide: BorderSide(color: strongBorderColor),
         ),
       ),
     );

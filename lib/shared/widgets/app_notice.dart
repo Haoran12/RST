@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 
 enum AppNoticeTone { info, success, warning, error }
 
@@ -112,7 +112,7 @@ class _TopNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = _TopNoticeStyle.fromTone(tone);
+    final style = _TopNoticeStyle.fromTone(context, tone);
     return IgnorePointer(
       ignoring: true,
       child: SafeArea(
@@ -139,15 +139,20 @@ class _TopNotice extends StatelessWidget {
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: style.backgroundColor,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(
+                              AppThemeTokens.radiusLarge(context),
+                            ),
                             border: Border.all(color: style.borderColor),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x33000000),
-                                blurRadius: 12,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
+                            boxShadow:
+                                AppThemeTokens.surfaceGlowEnabled(context)
+                                ? const [
+                                    BoxShadow(
+                                      color: Color(0x22000000),
+                                      blurRadius: 14,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ]
+                                : const [],
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -167,11 +172,15 @@ class _TopNotice extends StatelessWidget {
                                     message,
                                     maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: AppColors.textStrong,
-                                      fontSize: 13,
-                                      height: 1.3,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: AppThemeTokens.textStrong(
+                                            context,
+                                          ),
+                                          height: 1.3,
+                                        ),
                                   ),
                                 ),
                               ],
@@ -204,31 +213,46 @@ class _TopNoticeStyle {
   final Color borderColor;
   final Color backgroundColor;
 
-  factory _TopNoticeStyle.fromTone(AppNoticeTone tone) {
+  factory _TopNoticeStyle.fromTone(BuildContext context, AppNoticeTone tone) {
+    final isLightTheme = AppThemeTokens.isLight(context);
+    final panel = AppThemeTokens.panel(context);
+    final textStrong = AppThemeTokens.textStrong(context);
+    final success = AppThemeTokens.success(context);
+    final warning = AppThemeTokens.warning(context);
+    final error = AppThemeTokens.error(context);
+    final secondary = AppThemeTokens.secondary(context);
     return switch (tone) {
-      AppNoticeTone.success => const _TopNoticeStyle(
+      AppNoticeTone.success => _TopNoticeStyle(
         icon: Icons.check_circle_outline_rounded,
-        iconColor: AppColors.success,
-        borderColor: Color(0xFF2D7E59),
-        backgroundColor: Color(0xEE173326),
+        iconColor: success,
+        borderColor: success.withValues(alpha: isLightTheme ? 0.42 : 0.6),
+        backgroundColor: isLightTheme
+            ? Color.lerp(panel, success, 0.1) ?? panel
+            : success.withValues(alpha: 0.14),
       ),
-      AppNoticeTone.warning => const _TopNoticeStyle(
+      AppNoticeTone.warning => _TopNoticeStyle(
         icon: Icons.warning_amber_rounded,
-        iconColor: AppColors.warning,
-        borderColor: Color(0xFF8B6831),
-        backgroundColor: Color(0xEE362A19),
+        iconColor: warning,
+        borderColor: warning.withValues(alpha: isLightTheme ? 0.48 : 0.6),
+        backgroundColor: isLightTheme
+            ? Color.lerp(panel, warning, 0.12) ?? panel
+            : warning.withValues(alpha: 0.14),
       ),
-      AppNoticeTone.error => const _TopNoticeStyle(
+      AppNoticeTone.error => _TopNoticeStyle(
         icon: Icons.error_outline_rounded,
-        iconColor: AppColors.error,
-        borderColor: Color(0xFF8A433B),
-        backgroundColor: Color(0xEE381E1B),
+        iconColor: error,
+        borderColor: error.withValues(alpha: isLightTheme ? 0.42 : 0.58),
+        backgroundColor: isLightTheme
+            ? Color.lerp(panel, error, 0.1) ?? panel
+            : error.withValues(alpha: 0.14),
       ),
-      AppNoticeTone.info => const _TopNoticeStyle(
+      AppNoticeTone.info => _TopNoticeStyle(
         icon: Icons.info_outline_rounded,
-        iconColor: AppColors.accentTertiary,
-        borderColor: AppColors.borderSubtle,
-        backgroundColor: Color(0xEE18202A),
+        iconColor: secondary,
+        borderColor: secondary.withValues(alpha: isLightTheme ? 0.28 : 0.48),
+        backgroundColor: isLightTheme
+            ? Color.lerp(panel, secondary, 0.08) ?? panel
+            : textStrong.withValues(alpha: 0.08),
       ),
     };
   }

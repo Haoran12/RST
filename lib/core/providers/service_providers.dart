@@ -4,6 +4,7 @@ import '../models/provider_specs.dart';
 import '../bridge/rust_bridge.dart';
 import '../services/api_service.dart';
 import '../services/chat_service.dart';
+import '../services/import_export_service.dart';
 import '../services/log_service.dart';
 import '../services/provider_spec_service.dart';
 import '../services/session_service.dart';
@@ -23,6 +24,12 @@ final chatServiceProvider = Provider<ChatService>(
   (ref) => ChatService(
     ref.watch(rustBridgeProvider),
     ref.watch(providerSpecServiceProvider),
+  ),
+);
+final importExportServiceProvider = Provider<ImportExportService>(
+  (ref) => ImportExportService(
+    apiService: ref.watch(apiServiceProvider),
+    chatService: ref.watch(chatServiceProvider),
   ),
 );
 final logServiceProvider = Provider<LogService>(

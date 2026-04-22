@@ -10,6 +10,7 @@ import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../shared/utils/responsive.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/theme_tokens.dart';
 import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
@@ -132,7 +133,9 @@ class ApiConfigManagementPage extends ConsumerWidget {
                         Text(
                           config.baseUrl,
                           style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: AppColors.textSecondary),
+                              ?.copyWith(
+                                color: AppThemeTokens.textSecondary(context),
+                              ),
                         ),
                       ],
                     ),
@@ -412,7 +415,7 @@ class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
       child: FractionallySizedBox(
         heightFactor: 1,
         child: Container(
-          decoration: const BoxDecoration(color: AppColors.backgroundElevated),
+          decoration: BoxDecoration(color: AppThemeTokens.background(context)),
           child: Column(
             children: [
               Padding(
@@ -449,7 +452,7 @@ class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
                   ],
                 ),
               ),
-              const Divider(height: 1, color: AppColors.borderSubtle),
+              Divider(height: 1, color: AppThemeTokens.border(context)),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
@@ -650,9 +653,13 @@ class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
                                             borderRadius: BorderRadius.circular(
                                               999,
                                             ),
-                                            color: AppColors.surfaceOverlay,
+                                            color: AppThemeTokens.panel(
+                                              context,
+                                            ),
                                             border: Border.all(
-                                              color: AppColors.borderSubtle,
+                                              color: AppThemeTokens.border(
+                                                context,
+                                              ),
                                             ),
                                           ),
                                           child: Text(
@@ -748,10 +755,10 @@ class ApiConfigEditorPageState extends ConsumerState<ApiConfigEditorPage> {
               ),
               Container(
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-                decoration: const BoxDecoration(
-                  color: AppColors.backgroundElevated,
+                decoration: BoxDecoration(
+                  color: AppThemeTokens.background(context),
                   border: Border(
-                    top: BorderSide(color: AppColors.borderSubtle),
+                    top: BorderSide(color: AppThemeTokens.border(context)),
                   ),
                 ),
                 child: Row(
@@ -1257,7 +1264,9 @@ class _ProviderInfoBanner extends StatelessWidget {
         gradient: LinearGradient(
           colors: [
             tone.withValues(alpha: 0.18),
-            AppColors.surfaceOverlay.withValues(alpha: 0.32),
+            AppThemeTokens.panel(
+              context,
+            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.5 : 0.32),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1277,7 +1286,7 @@ class _ProviderInfoBanner extends StatelessWidget {
                 ? providerSpec!.notes.first
                 : _providerInfoText(providerType),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppColors.textSecondary,
+              color: AppThemeTokens.textSecondary(context),
               height: 1.45,
             ),
           ),
@@ -1295,7 +1304,7 @@ class _ProviderBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = tone ?? AppColors.textMuted;
+    final color = tone ?? AppThemeTokens.textMuted(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(

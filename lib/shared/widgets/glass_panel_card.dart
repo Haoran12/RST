@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 
 class GlassPanelCard extends StatelessWidget {
   const GlassPanelCard({
@@ -20,9 +20,15 @@ class GlassPanelCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.surfaceCard.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor ?? AppColors.borderSubtle),
+        color:
+            backgroundColor ??
+            AppThemeTokens.card(
+              context,
+            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.96 : 0.9),
+        borderRadius: BorderRadius.circular(AppThemeTokens.radiusCard(context)),
+        border: Border.all(
+          color: borderColor ?? AppThemeTokens.border(context),
+        ),
       ),
       child: Padding(padding: padding, child: child),
     );

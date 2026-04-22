@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 
 class StreamingIndicator extends StatelessWidget {
   const StreamingIndicator({super.key, this.label = '生成中...'});
@@ -12,20 +12,22 @@ class StreamingIndicator extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const SizedBox(
+        SizedBox(
           width: 14,
           height: 14,
           child: CircularProgressIndicator(
             strokeWidth: 2,
             valueColor: AlwaysStoppedAnimation<Color>(
-              AppColors.accentSecondary,
+              AppThemeTokens.secondary(context),
             ),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           label,
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            color: AppThemeTokens.textMuted(context),
+          ),
         ),
       ],
     );

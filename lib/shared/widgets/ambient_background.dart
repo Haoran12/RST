@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/theme_tokens.dart';
 
 class AmbientBackground extends StatelessWidget {
   const AmbientBackground({
@@ -18,13 +18,28 @@ class AmbientBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final imagePath = backgroundImagePath?.trim() ?? '';
     final hasBackgroundImage = imagePath.isNotEmpty;
+    final isLightTheme = AppThemeTokens.isLight(context);
+    final background = AppThemeTokens.background(context);
+    final panelMuted = AppThemeTokens.panelMuted(context);
+    final card = AppThemeTokens.card(context);
+    final gradientColors = <Color>[
+      Color.lerp(card, background, isLightTheme ? 0.18 : 0.08) ?? background,
+      Color.lerp(background, panelMuted, 0.72) ?? panelMuted,
+      Color.lerp(panelMuted, background, isLightTheme ? 0.58 : 0.32) ??
+          background,
+    ];
+    final imageOverlayColor = isLightTheme
+        ? Colors.white.withValues(alpha: 0.68)
+        : Colors.black.withValues(alpha: 0.52);
+    final secondaryGlowAlpha = isLightTheme ? 0.12 : 0.08;
+    final primaryGlowAlpha = isLightTheme ? 0.14 : 0.10;
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0F141B), Color(0xFF121A24), Color(0xFF101823)],
+          colors: gradientColors,
         ),
       ),
       child: Stack(
@@ -41,9 +56,7 @@ class AmbientBackground extends StatelessWidget {
           if (hasBackgroundImage)
             Positioned.fill(
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.52),
-                ),
+                decoration: BoxDecoration(color: imageOverlayColor),
               ),
             ),
           Positioned(
@@ -54,7 +67,9 @@ class AmbientBackground extends StatelessWidget {
               height: 220,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.accentSecondary.withValues(alpha: 0.08),
+                color: AppThemeTokens.secondary(
+                  context,
+                ).withValues(alpha: secondaryGlowAlpha),
               ),
             ),
           ),
@@ -66,7 +81,9 @@ class AmbientBackground extends StatelessWidget {
               height: 200,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.accentPrimary.withValues(alpha: 0.10),
+                color: AppThemeTokens.primary(
+                  context,
+                ).withValues(alpha: primaryGlowAlpha),
               ),
             ),
           ),

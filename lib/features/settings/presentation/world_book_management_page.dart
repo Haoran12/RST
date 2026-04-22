@@ -1,9 +1,13 @@
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/import_export_models.dart';
+import '../../../core/models/workspace_config.dart';
 import '../../../core/providers/app_state.dart';
+import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../core/services/world_book_injection.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -282,22 +286,189 @@ class WorldBookManagementPage extends ConsumerWidget {
   }
 
   Future<void> _import(BuildContext context, WidgetRef ref) async {
-    // TODO: 实现导入功能
-    AppNotice.show(
-      context,
-      message: '导入功能即将上线',
-      tone: AppNoticeTone.info,
-      category: 'worldbook_import_placeholder',
-    );
+    try {
+      const worldBookTypes = <XTypeGroup>[
+        XTypeGroup(label: 'worldbook', extensions: <String>['json', 'png']),
+      ];
+      final selected = await openFile(
+        acceptedTypeGroups: worldBookTypes,
+        confirmButtonText: '导入世界书',
+      );
+      if (selected == null || !context.mounted) {
+        return;
+      }
+
+      final importExportService = ref.read(importExportServiceProvider);
+      final probe = await importExportService.probeWorldBookImportFile(
+        selected.path,
+      );
+      if (!context.mounted) {
+        return;
+      }
+      if (probe.kind == WorldBookImportSourceKind.unsupported) {
+        AppNotice.show(
+          context,
+          message: '文件格式不支持',
+          tone: AppNoticeTone.warning,
+          category: 'worldbook_import_unsupported',
+        );
+        return;
+      }
+
+      StoredApiConfig? classificationApiConfig;
+      if (probe.requiresClassification) {
+        final apiConfigs = await ref.read(apiConfigCatalogProvider.future);
+        if (!context.mounted) {
+          return;
+        }
+        if (apiConfigs.isNotEmpty) {
+          classificationApiConfig = await _pickClassificationApiConfig(
+            context,
+            apiConfigs,
+          );
+          if (!context.mounted) {
+            return;
+          }
+        }
+      }
+
+      final result = await importExportService.importWorldBookFromFile(
+        filePath: selected.path,
+        existingOptions: ref.read(worldBookOptionsProvider),
+        classificationApiConfig: classificationApiConfig,
+      );
+      final notifier = ref.read(worldBookOptionsProvider.notifier);
+      final next = <ManagedOption>[result.value, ...notifier.state];
+      notifier.state = next;
+      if (!context.mounted) {
+        return;
+      }
+      await _persistWorldBookCatalog(context, ref, next);
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: result.hasWarnings
+            ? '导入完成，含 ${result.warnings.length} 条警告'
+            : '导入成功',
+        tone: result.hasWarnings
+            ? AppNoticeTone.warning
+            : AppNoticeTone.success,
+        category: 'worldbook_import_result',
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导入失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'worldbook_import_failed',
+      );
+    }
   }
 
   Future<void> _export(BuildContext context, WidgetRef ref) async {
-    // TODO: 实现导出功能
-    AppNotice.show(
-      context,
-      message: '导出功能即将上线',
-      tone: AppNoticeTone.info,
-      category: 'worldbook_export_placeholder',
+    final options = ref.read(worldBookOptionsProvider);
+    if (options.isEmpty) {
+      AppNotice.show(
+        context,
+        message: '没有可导出的世界书',
+        tone: AppNoticeTone.warning,
+        category: 'worldbook_export_empty',
+      );
+      return;
+    }
+
+    final target = await _pickWorldBook(context, options);
+    if (target == null || !context.mounted) {
+      return;
+    }
+
+    try {
+      const jsonType = XTypeGroup(label: 'json', extensions: <String>['json']);
+      final location = await getSaveLocation(
+        acceptedTypeGroups: const <XTypeGroup>[jsonType],
+        suggestedName: '${target.name}.rst-worldbook.json',
+        confirmButtonText: '导出世界书',
+      );
+      if (location == null || !context.mounted) {
+        return;
+      }
+
+      await ref
+          .read(importExportServiceProvider)
+          .exportWorldBookToFile(worldBook: target, outputPath: location.path);
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导出成功',
+        tone: AppNoticeTone.success,
+        category: 'worldbook_export_success',
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导出失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'worldbook_export_failed',
+      );
+    }
+  }
+
+  Future<ManagedOption?> _pickWorldBook(
+    BuildContext context,
+    List<ManagedOption> options,
+  ) async {
+    if (options.length == 1) {
+      return options.first;
+    }
+    return showDialog<ManagedOption>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => SimpleDialog(
+        title: const Text('选择世界书'),
+        children: options
+            .map(
+              (option) => SimpleDialogOption(
+                onPressed: () => Navigator.of(context).pop(option),
+                child: Text(option.name),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  Future<StoredApiConfig?> _pickClassificationApiConfig(
+    BuildContext context,
+    List<StoredApiConfig> apiConfigs,
+  ) async {
+    return showDialog<StoredApiConfig?>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => SimpleDialog(
+        title: const Text('角色卡条目分类'),
+        children: <Widget>[
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('跳过，使用规则分类'),
+          ),
+          ...apiConfigs.map(
+            (config) => SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop(config),
+              child: Text(config.name),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

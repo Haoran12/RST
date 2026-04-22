@@ -1,14 +1,18 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/bridge/frb_api.dart' as frb;
 import '../../../core/models/common.dart';
+import '../../../core/models/import_export_models.dart';
 import '../../../core/providers/app_state.dart';
 import '../../../core/providers/config_catalog_providers.dart';
 import '../../../core/providers/service_providers.dart';
 import '../../../core/services/world_book_injection.dart';
 import '../../../shared/utils/responsive.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/theme_tokens.dart';
+import '../../../shared/widgets/app_notice.dart';
 import '../../../shared/widgets/buttons.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/glass_panel_card.dart';
@@ -77,15 +81,30 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
           final cards = <Widget>[
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              child: Row(
                 children: [
-                  PrimaryPillButton(
-                    label: '新建会话',
-                    onPressed: () => _openCreateDialog(context),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      PrimaryPillButton(
+                        label: '新建会话',
+                        onPressed: () => _openCreateDialog(context),
+                      ),
+                      SecondaryOutlineButton(label: '刷新', onPressed: _reload),
+                    ],
                   ),
-                  SecondaryOutlineButton(label: '刷新', onPressed: _reload),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '导入',
+                    onPressed: () => _importSession(context),
+                    icon: const Icon(Icons.file_download_outlined),
+                  ),
+                  IconButton(
+                    tooltip: '导出',
+                    onPressed: () => _exportSession(context, sessions),
+                    icon: const Icon(Icons.file_upload_outlined),
+                  ),
                 ],
               ),
             ),
@@ -114,11 +133,13 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
                     },
                     child: GlassPanelCard(
                       backgroundColor: selected
-                          ? AppColors.surfaceActive.withValues(alpha: 0.92)
+                          ? AppThemeTokens.userBubble(
+                              context,
+                            ).withValues(alpha: 0.92)
                           : null,
                       borderColor: selected
                           ? AppColors.accentSecondary
-                          : AppColors.borderSubtle,
+                          : AppThemeTokens.border(context),
                       child: Row(
                         children: [
                           Expanded(
@@ -236,7 +257,10 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
       mode: created.mode,
       worldBookId: created.stWorldBookId,
     );
-    _applySessionScopedSettings(sessionId: created.sessionId, draft: saved);
+    await _applySessionScopedSettings(
+      sessionId: created.sessionId,
+      draft: saved,
+    );
     ref.read(currentSessionIdProvider.notifier).state = created.sessionId;
     ref.read(workspaceReloadTickProvider.notifier).state++;
     if (!isWindowsDesktop) {
@@ -338,7 +362,10 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
           mode: updated.mode,
           worldBookId: updated.stWorldBookId,
         );
-        _applySessionScopedSettings(sessionId: updated.sessionId, draft: draft);
+        await _applySessionScopedSettings(
+          sessionId: updated.sessionId,
+          draft: draft,
+        );
         ref.read(workspaceReloadTickProvider.notifier).state++;
         editingConfig = updated;
         hasAutoSavedChanges = true;
@@ -382,10 +409,10 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     );
   }
 
-  void _applySessionScopedSettings({
+  Future<void> _applySessionScopedSettings({
     required String sessionId,
     required SessionSettingsDraft draft,
-  }) {
+  }) async {
     ref
         .read(sessionSchedulerModeProvider.notifier)
         .state = <String, SchedulerMode>{
@@ -416,6 +443,20 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
         lores: draft.characterDescription.trim(),
       ),
     };
+
+    await ref
+        .read(apiServiceProvider)
+        .saveSessionMetadata(
+          sessionId: sessionId,
+          metadata: SessionStoredMetadata(
+            schedulerMode: draft.schedulerMode.name,
+            appearanceId: draft.appearanceId,
+            backgroundImagePath: background,
+            userDescription: draft.userDescription.trim(),
+            scene: draft.worldDescription.trim(),
+            lores: draft.characterDescription.trim(),
+          ),
+        );
   }
 
   SchedulerMode _deriveScheduler(frb.SessionConfig config) {
@@ -488,6 +529,193 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     return normalized;
   }
 
+  Future<void> _importSession(BuildContext context) async {
+    try {
+      const jsonType = XTypeGroup(label: 'json', extensions: <String>['json']);
+      final selected = await openFile(
+        acceptedTypeGroups: const <XTypeGroup>[jsonType],
+        confirmButtonText: '导入会话',
+      );
+      if (selected == null || !context.mounted) {
+        return;
+      }
+
+      final sessions = await ref.read(sessionServiceProvider).listSessions();
+      final result = await ref
+          .read(importExportServiceProvider)
+          .importSessionFromFile(
+            filePath: selected.path,
+            existingSessions: sessions,
+          );
+      final metadata = await ref
+          .read(apiServiceProvider)
+          .loadSessionMetadata(result.value.sessionId);
+      _applyStoredSessionMetadata(
+        sessionId: result.value.sessionId,
+        mode: result.value.mode,
+        metadata: metadata,
+      );
+      ref.read(currentSessionIdProvider.notifier).state =
+          result.value.sessionId;
+      ref.read(workspaceReloadTickProvider.notifier).state++;
+      _reload();
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: result.hasWarnings
+            ? '导入完成，含 ${result.warnings.length} 条警告'
+            : '导入成功',
+        tone: result.hasWarnings
+            ? AppNoticeTone.warning
+            : AppNoticeTone.success,
+        category: 'session_import_result',
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导入失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'session_import_failed',
+      );
+    }
+  }
+
+  Future<void> _exportSession(
+    BuildContext context,
+    List<frb.SessionSummary> sessions,
+  ) async {
+    if (sessions.isEmpty) {
+      AppNotice.show(
+        context,
+        message: '没有可导出的会话',
+        tone: AppNoticeTone.warning,
+        category: 'session_export_empty',
+      );
+      return;
+    }
+
+    final target = await _pickSessionForExport(context, sessions);
+    if (target == null || !context.mounted) {
+      return;
+    }
+
+    try {
+      const jsonType = XTypeGroup(label: 'json', extensions: <String>['json']);
+      final location = await getSaveLocation(
+        acceptedTypeGroups: const <XTypeGroup>[jsonType],
+        suggestedName: '${target.sessionName}.rst-session.json',
+        confirmButtonText: '导出会话',
+      );
+      if (location == null || !context.mounted) {
+        return;
+      }
+
+      await ref
+          .read(importExportServiceProvider)
+          .exportSessionToFile(
+            sessionId: target.sessionId,
+            outputPath: location.path,
+          );
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导出成功',
+        tone: AppNoticeTone.success,
+        category: 'session_export_success',
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      AppNotice.show(
+        context,
+        message: '导出失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'session_export_failed',
+      );
+    }
+  }
+
+  Future<frb.SessionSummary?> _pickSessionForExport(
+    BuildContext context,
+    List<frb.SessionSummary> sessions,
+  ) async {
+    if (sessions.length == 1) {
+      return sessions.first;
+    }
+    return showDialog<frb.SessionSummary>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => SimpleDialog(
+        title: const Text('选择会话'),
+        children: sessions
+            .map(
+              (session) => SimpleDialogOption(
+                onPressed: () => Navigator.of(context).pop(session),
+                child: Text(session.sessionName),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  void _applyStoredSessionMetadata({
+    required String sessionId,
+    required frb.SessionMode mode,
+    required SessionStoredMetadata? metadata,
+  }) {
+    final resolvedMetadata =
+        metadata ??
+        SessionStoredMetadata(
+          schedulerMode: mode == frb.SessionMode.rst
+              ? SchedulerMode.rst.name
+              : SchedulerMode.sillyTavern.name,
+          appearanceId: 'appearance-default',
+          backgroundImagePath: '',
+          userDescription: '',
+          scene: '',
+          lores: '',
+        );
+
+    ref
+        .read(sessionSchedulerModeProvider.notifier)
+        .state = <String, SchedulerMode>{
+      ...ref.read(sessionSchedulerModeProvider),
+      sessionId: schedulerModeFromWire(resolvedMetadata.schedulerMode),
+    };
+    ref.read(sessionAppearanceProvider.notifier).state = <String, String>{
+      ...ref.read(sessionAppearanceProvider),
+      sessionId: resolvedMetadata.appearanceId,
+    };
+
+    final backgroundMap = <String, String>{
+      ...ref.read(sessionBackgroundImageProvider),
+    };
+    if (resolvedMetadata.backgroundImagePath.trim().isEmpty) {
+      backgroundMap.remove(sessionId);
+    } else {
+      backgroundMap[sessionId] = resolvedMetadata.backgroundImagePath;
+    }
+    ref.read(sessionBackgroundImageProvider.notifier).state = backgroundMap;
+
+    ref.read(sessionRstDataProvider.notifier).state = <String, SessionRstData>{
+      ...ref.read(sessionRstDataProvider),
+      sessionId: SessionRstData(
+        userDescription: resolvedMetadata.userDescription,
+        scene: resolvedMetadata.scene,
+        lores: resolvedMetadata.lores,
+      ),
+    };
+  }
+
   Future<void> _deleteSession(
     BuildContext context,
     String sessionId,
@@ -519,6 +747,23 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
     await ref
         .read(apiServiceProvider)
         .deleteSessionWorldBookSnapshot(sessionId: sessionId);
+    await ref.read(apiServiceProvider).deleteSessionMetadata(sessionId);
+    final schedulerMap = <String, SchedulerMode>{
+      ...ref.read(sessionSchedulerModeProvider),
+    }..remove(sessionId);
+    final appearanceMap = <String, String>{
+      ...ref.read(sessionAppearanceProvider),
+    }..remove(sessionId);
+    final backgroundMap = <String, String>{
+      ...ref.read(sessionBackgroundImageProvider),
+    }..remove(sessionId);
+    final rstDataMap = <String, SessionRstData>{
+      ...ref.read(sessionRstDataProvider),
+    }..remove(sessionId);
+    ref.read(sessionSchedulerModeProvider.notifier).state = schedulerMap;
+    ref.read(sessionAppearanceProvider.notifier).state = appearanceMap;
+    ref.read(sessionBackgroundImageProvider.notifier).state = backgroundMap;
+    ref.read(sessionRstDataProvider.notifier).state = rstDataMap;
     if (ref.read(currentSessionIdProvider) == sessionId) {
       ref.read(currentSessionIdProvider.notifier).state = null;
     }

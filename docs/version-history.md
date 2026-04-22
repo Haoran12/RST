@@ -1,5 +1,17 @@
 # Version History
 
+## 0.1.0+52 (2026-04-22)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+52-release.apk`
+- Notes: Release packaging build for current workspace state.
+
+## 0.1.0+51 (2026-04-21)
+
+- Build type: Android APK release
+- Artifact: `rst-0.1.0+51-release.apk`
+- Notes: Release packaging build for current workspace state.
+
 ## 0.1.0+50 (2026-04-21)
 
 - Build type: Windows x64 release
@@ -289,6 +301,8 @@
 - Build type: Android APK release
 - Artifact: `rst-0.1.0+2-release.apk`
 - Notes: UI navigation refactor and session quick settings update
+
+
 
 
 
