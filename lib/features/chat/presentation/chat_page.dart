@@ -13,7 +13,6 @@ import '../../../core/services/chat_service.dart';
 import '../../../core/services/world_book_injection.dart';
 import '../../../shared/theme/theme_tokens.dart';
 import '../../../shared/utils/reasoning_markup.dart';
-import '../../../shared/utils/responsive.dart';
 import '../../../shared/widgets/empty_state_view.dart';
 import '../../../shared/widgets/error_state_view.dart';
 import '../../../shared/widgets/floating_composer.dart';
@@ -39,6 +38,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   String? _errorText;
   bool _isBootstrapping = true;
   bool _isSending = false;
+  String? _editingMessageId;
+  String _editingReasoning = '';
+  TextEditingController? _inlineEditController;
+  FocusNode? _inlineEditFocusNode;
+  bool _isSavingInlineEdit = false;
 
   @override
   void initState() {
@@ -51,6 +55,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void dispose() {
     _chatTopStatusController.state = ChatTopStatus.calm;
+    _disposeInlineEditor();
     _controller.dispose();
     _composerFocusNode.dispose();
     _scrollController.dispose();
@@ -74,6 +79,95 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
+  void _disposeInlineEditor() {
+    _inlineEditController?.dispose();
+    _inlineEditController = null;
+    _inlineEditFocusNode?.dispose();
+    _inlineEditFocusNode = null;
+  }
+
+  void _clearInlineEditState() {
+    _editingMessageId = null;
+    _editingReasoning = '';
+    _isSavingInlineEdit = false;
+    _disposeInlineEditor();
+  }
+
+  void _handleCancelInlineEdit() {
+    if (_editingMessageId == null) {
+      return;
+    }
+    setState(_clearInlineEditState);
+  }
+
+  void _handleEnterInlineEdit(frb.MessageRecord message) {
+    final parsed = ReasoningMarkup.parse(message.content);
+    setState(() {
+      _disposeInlineEditor();
+      _editingMessageId = message.messageId;
+      _editingReasoning = parsed.reasoning;
+      _inlineEditController = TextEditingController(text: parsed.content);
+      _inlineEditFocusNode = FocusNode();
+      _isSavingInlineEdit = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _editingMessageId != message.messageId) {
+        return;
+      }
+      final controller = _inlineEditController;
+      if (controller == null) {
+        return;
+      }
+      controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: controller.text.length,
+      );
+      _inlineEditFocusNode?.requestFocus();
+    });
+  }
+
+  Future<void> _handleSaveInlineEdit(frb.MessageRecord message) async {
+    if (_editingMessageId != message.messageId || _isSavingInlineEdit) {
+      return;
+    }
+    final editor = _inlineEditController;
+    if (editor == null) {
+      return;
+    }
+    setState(() {
+      _isSavingInlineEdit = true;
+    });
+    try {
+      final merged = ReasoningMarkup.compose(
+        content: editor.text,
+        reasoning: _editingReasoning,
+      );
+      final updated = await ref
+          .read(rustBridgeProvider)
+          .updateMessageContent(messageId: message.messageId, content: merged);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _upsertMessage(updated);
+        _clearInlineEditState();
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSavingInlineEdit = false;
+      });
+      AppNotice.show(
+        context,
+        message: '编辑失败: $error',
+        tone: AppNoticeTone.error,
+        category: 'chat_edit_failed',
+      );
+    }
+  }
+
   Future<void> _bootstrap({String? preferredSessionId}) async {
     final previousSessionId = _session?.sessionId;
     final targetSessionId =
@@ -88,6 +182,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (mounted) {
       setState(() {
         _isBootstrapping = true;
+        _clearInlineEditState();
         if (shouldSwitchSession) {
           _session = null;
           _isSending = false;
@@ -153,6 +248,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _errorText = null;
         _isBootstrapping = false;
         _isSending = false;
+        _clearInlineEditState();
       });
       _syncTopStatus();
       _scrollToBottom(force: true);
@@ -164,6 +260,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _errorText = error.toString();
         _isBootstrapping = false;
         _isSending = false;
+        _clearInlineEditState();
       });
       _syncTopStatus();
     }
@@ -421,6 +518,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _messages = _messages
             .where((item) => item.messageId != message.messageId)
             .toList(growable: false);
+        if (_editingMessageId == message.messageId) {
+          _clearInlineEditState();
+        }
       });
     } catch (error) {
       if (!mounted) {
@@ -479,97 +579,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
-  void _handleRewriteMessage(frb.MessageRecord message) {
-    final source = ReasoningMarkup.stripReasoning(message.content).trim();
-    if (source.isEmpty) {
-      return;
-    }
-    final nextInput = message.role == frb.MessageRole.user
-        ? source
-        : '请改写以下内容，保持原意并优化表达：\n$source';
-    _controller.value = TextEditingValue(
-      text: nextInput,
-      selection: TextSelection.collapsed(offset: nextInput.length),
-    );
-    _composerFocusNode.requestFocus();
-    _scrollToBottom(force: true);
-  }
-
-  Future<void> _handleEditMessage(frb.MessageRecord message) async {
-    final parsed = ReasoningMarkup.parse(message.content);
-    final contentController = TextEditingController(text: parsed.content);
-    final reasoningController = TextEditingController(text: parsed.reasoning);
-    final dialogWidth = Responsive.isDesktop(context) ? 640.0 : 480.0;
-    try {
-      final approved = await showDialog<bool>(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('编辑消息'),
-            content: SizedBox(
-              width: dialogWidth,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: contentController,
-                    maxLines: 8,
-                    minLines: 3,
-                    decoration: const InputDecoration(labelText: '内容'),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: reasoningController,
-                    maxLines: 8,
-                    minLines: 2,
-                    decoration: const InputDecoration(labelText: '思考'),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('保存'),
-              ),
-            ],
-          );
-        },
-      );
-      if (approved != true) {
-        return;
-      }
-      final merged = ReasoningMarkup.compose(
-        content: contentController.text,
-        reasoning: reasoningController.text,
-      );
-      final updated = await ref
-          .read(rustBridgeProvider)
-          .updateMessageContent(messageId: message.messageId, content: merged);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _upsertMessage(updated);
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      AppNotice.show(
-        context,
-        message: '编辑失败: $error',
-        tone: AppNoticeTone.error,
-        category: 'chat_edit_failed',
-      );
-    } finally {
-      contentController.dispose();
-      reasoningController.dispose();
-    }
+  void _handleEditMessage(frb.MessageRecord message) {
+    _handleEnterInlineEdit(message);
   }
 
   @override
@@ -666,6 +677,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             final canEdit =
                                 message.status != frb.MessageStatus.pending &&
                                 message.status != frb.MessageStatus.streaming;
+                            final isEditing =
+                                _editingMessageId == message.messageId;
                             return _MessageWithMetadata(
                               message: message,
                               floorNo: floorByMessageId[message.messageId],
@@ -674,9 +687,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               onDelete: canDelete ? _handleDeleteMessage : null,
                               onCopy: hasContent ? _handleCopyMessage : null,
                               onEdit: canEdit ? _handleEditMessage : null,
-                              onRewrite: hasContent
-                                  ? _handleRewriteMessage
+                              isEditing: isEditing,
+                              editingController: isEditing
+                                  ? _inlineEditController
                                   : null,
+                              editingFocusNode: isEditing
+                                  ? _inlineEditFocusNode
+                                  : null,
+                              onEditSave: isEditing
+                                  ? () => _handleSaveInlineEdit(message)
+                                  : null,
+                              onEditCancel: isEditing && !_isSavingInlineEdit
+                                  ? _handleCancelInlineEdit
+                                  : null,
+                              isSavingEdit: isEditing && _isSavingInlineEdit,
                             );
                           },
                         ),
@@ -722,20 +746,30 @@ class _MessageWithMetadata extends StatelessWidget {
     required this.floorNo,
     required this.appearance,
     required this.onToggleVisibility,
+    this.isEditing = false,
+    this.editingController,
+    this.editingFocusNode,
     this.onDelete,
     this.onCopy,
     this.onEdit,
-    this.onRewrite,
+    this.onEditSave,
+    this.onEditCancel,
+    this.isSavingEdit = false,
   });
 
   final frb.MessageRecord message;
   final int? floorNo;
   final MessageBubbleAppearance appearance;
   final void Function(frb.MessageRecord message) onToggleVisibility;
+  final bool isEditing;
+  final TextEditingController? editingController;
+  final FocusNode? editingFocusNode;
   final void Function(frb.MessageRecord message)? onDelete;
   final void Function(frb.MessageRecord message)? onCopy;
   final void Function(frb.MessageRecord message)? onEdit;
-  final void Function(frb.MessageRecord message)? onRewrite;
+  final VoidCallback? onEditSave;
+  final VoidCallback? onEditCancel;
+  final bool isSavingEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -764,7 +798,12 @@ class _MessageWithMetadata extends StatelessWidget {
           onDelete: onDelete == null ? null : () => onDelete!(message),
           onCopy: onCopy == null ? null : () => onCopy!(message),
           onEdit: onEdit == null ? null : () => onEdit!(message),
-          onRewrite: onRewrite == null ? null : () => onRewrite!(message),
+          isEditing: isEditing,
+          editController: editingController,
+          editFocusNode: editingFocusNode,
+          onEditSave: onEditSave,
+          onEditCancel: onEditCancel,
+          isSavingEdit: isSavingEdit,
         ),
         if (message.errorMessage != null && message.errorMessage!.isNotEmpty)
           Padding(
@@ -786,9 +825,12 @@ class _MessageWithMetadata extends StatelessWidget {
       return raw;
     }
     final local = parsed.toLocal();
+    final year = local.year.toString().padLeft(4, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    final day = local.day.toString().padLeft(2, '0');
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     final second = local.second.toString().padLeft(2, '0');
-    return '$hour:$minute:$second';
+    return '$year-$month-$day $hour:$minute:$second';
   }
 }

@@ -78,104 +78,103 @@ class _SessionManagementPageState extends ConsumerState<SessionManagementPage> {
           }
 
           final sessions = snapshot.data ?? const <frb.SessionSummary>[];
-          final cards = <Widget>[
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      PrimaryPillButton(
-                        label: '新建会话',
-                        onPressed: () => _openCreateDialog(context),
-                      ),
-                      SecondaryOutlineButton(label: '刷新', onPressed: _reload),
-                    ],
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '导入',
-                    onPressed: () => _importSession(context),
-                    icon: const Icon(Icons.file_download_outlined),
-                  ),
-                  IconButton(
-                    tooltip: '导出',
-                    onPressed: () => _exportSession(context, sessions),
-                    icon: const Icon(Icons.file_upload_outlined),
-                  ),
-                ],
-              ),
-            ),
-          ];
-
-          if (sessions.isEmpty) {
-            cards.add(
-              EmptyStateView(
-                title: '暂无会话',
-                description: '先创建一个会话，再进入聊天和会话设置。',
-                actionLabel: '新建会话',
-                onAction: () => _openCreateDialog(context),
-              ),
-            );
-          } else {
-            for (final session in sessions) {
-              final selected = session.sessionId == currentSessionId;
-              cards.add(
-                Padding(
+          return ListView.builder(
+            itemCount: sessions.isEmpty ? 2 : sessions.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      ref.read(currentSessionIdProvider.notifier).state =
-                          session.sessionId;
-                    },
-                    child: GlassPanelCard(
-                      backgroundColor: selected
-                          ? AppThemeTokens.userBubble(
-                              context,
-                            ).withValues(alpha: 0.92)
-                          : null,
-                      borderColor: selected
-                          ? AppColors.accentSecondary
-                          : AppThemeTokens.border(context),
-                      child: Row(
+                  child: Row(
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          Expanded(
-                            child: Text(
-                              session.sessionName,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
+                          PrimaryPillButton(
+                            label: '新建会话',
+                            onPressed: () => _openCreateDialog(context),
                           ),
-                          IconButton(
-                            tooltip: '编辑',
-                            onPressed: () =>
-                                _openEditDialog(context, session.sessionId),
-                            icon: const Icon(Icons.edit_outlined),
-                          ),
-                          IconButton(
-                            tooltip: '删除',
-                            onPressed: () => _deleteSession(
-                              context,
-                              session.sessionId,
-                              session.sessionName,
-                            ),
-                            icon: const Icon(
-                              Icons.delete_outline_rounded,
-                              color: AppColors.error,
-                            ),
+                          SecondaryOutlineButton(
+                            label: '刷新',
+                            onPressed: _reload,
                           ),
                         ],
                       ),
+                      const Spacer(),
+                      IconButton(
+                        tooltip: '导入',
+                        onPressed: () => _importSession(context),
+                        icon: const Icon(Icons.file_download_outlined),
+                      ),
+                      IconButton(
+                        tooltip: '导出',
+                        onPressed: () => _exportSession(context, sessions),
+                        icon: const Icon(Icons.file_upload_outlined),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              if (sessions.isEmpty) {
+                return EmptyStateView(
+                  title: '暂无会话',
+                  description: '先创建一个会话，再进入聊天和会话设置。',
+                  actionLabel: '新建会话',
+                  onAction: () => _openCreateDialog(context),
+                );
+              }
+              final session = sessions[index - 1];
+              final selected = session.sessionId == currentSessionId;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    ref.read(currentSessionIdProvider.notifier).state =
+                        session.sessionId;
+                  },
+                  child: GlassPanelCard(
+                    backgroundColor: selected
+                        ? AppThemeTokens.userBubble(
+                            context,
+                          ).withValues(alpha: 0.92)
+                        : null,
+                    borderColor: selected
+                        ? AppColors.accentSecondary
+                        : AppThemeTokens.border(context),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            session.sessionName,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: '编辑',
+                          onPressed: () =>
+                              _openEditDialog(context, session.sessionId),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
+                        IconButton(
+                          tooltip: '删除',
+                          onPressed: () => _deleteSession(
+                            context,
+                            session.sessionId,
+                            session.sessionName,
+                          ),
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: AppColors.error,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               );
-            }
-          }
-
-          return ListView(children: cards);
+            },
+          );
         },
       ),
     );

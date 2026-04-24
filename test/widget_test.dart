@@ -31,6 +31,14 @@ void main() {
     expect(find.text('外观'), findsOneWidget);
 
     await tester.scrollUntilVisible(
+      find.text('Agent'),
+      200,
+      scrollable: drawerList,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Agent'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
       find.text('日志'),
       200,
       scrollable: drawerList,

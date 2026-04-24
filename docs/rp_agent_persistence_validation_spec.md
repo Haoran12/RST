@@ -519,7 +519,139 @@ Those should be separate documents if needed.
 
 ---
 
-## 21. Summary
+## 21. Implementation Reference
+
+### 21.1 Dart Validation Module
+
+The validation layer is implemented in `lib/core/services/agent/validation/`:
+
+```
+validation/
+├── validation.dart              # Module exports
+├── validation_rule.dart         # Base class for all rules
+├── agent_validator.dart         # Aggregator and runner
+├── omniscience_leakage_rule.dart
+├── embodiment_ignored_rule.dart
+├── memory_leakage_rule.dart
+└── mana_sense_validation_rule.dart
+```
+
+#### AgentValidator Usage
+
+```dart
+final validator = AgentValidator.withDefaultRules();
+final results = validator.validate(
+  filteredView: filteredView,
+  embodimentState: embodimentState,
+  output: cognitiveOutput,
+  accessibleMemories: memories,
+);
+
+if (validator.hasErrors(results)) {
+  // Handle validation failures
+  final report = validator.generateReport(results);
+  log.warning(report);
+}
+```
+
+#### Custom Validation Rules
+
+```dart
+class CustomRule extends ValidationRule {
+  @override
+  String get ruleId => 'custom_rule';
+
+  @override
+  String get description => 'Description of what this rule checks';
+
+  @override
+  List<ValidationResult> validate({
+    required FilteredSceneView filteredView,
+    required EmbodimentState embodimentState,
+    required CharacterCognitivePassOutput? output,
+    required List<MemoryEntry> accessibleMemories,
+  }) {
+    final results = <ValidationResult>[];
+    // Validation logic here
+    return results;
+  }
+}
+
+// Add to validator
+final validator = AgentValidator.withDefaultRules()
+    .withRule(CustomRule());
+```
+
+### 21.2 Rust Persistence Layer
+
+The persistence layer is implemented in `rust/src/agent/`:
+
+```
+agent/
+├── mod.rs        # Module exports
+├── models.rs     # Data models
+└── storage.rs    # Storage implementation
+```
+
+#### Storage Usage
+
+```rust
+use rst_core::agent::{AgentStorage, SceneSnapshot, CharacterRuntimeSnapshot, MemoryRecord};
+
+let storage = AgentStorage::new("./data/agent");
+
+// Save scene snapshot
+let snapshot = SceneSnapshot::new("scene1", "turn1", scene_model_json);
+storage.save_scene_snapshot(&snapshot)?;
+
+// Save character state
+let char_snapshot = CharacterRuntimeSnapshot::new(
+    "char1", "turn1",
+    relationship_models, belief_state, emotion_state,
+    body_state, goals,
+);
+storage.save_character_snapshot(&char_snapshot)?;
+
+// Query memories
+let memories = storage.list_memories_for_character("alice")?;
+```
+
+#### Memory Access Control
+
+```rust
+let memory = MemoryRecord::new(
+    "mem1",
+    "Secret information",
+    "alice",
+    MemoryVisibilityRecord::Private,
+);
+
+// Check access
+assert!(memory.is_accessible_to("alice"));
+assert!(!memory.is_accessible_to("bob"));
+```
+
+### 21.3 Data File Structure
+
+```
+data/agent/
+├── scenes/
+│   ├── snapshot_scene1_turn1.json
+│   └── snapshot_scene1_turn2.json
+├── characters/
+│   ├── char_alice_turn1.json
+│   └── char_bob_turn1.json
+├── memories/
+│   ├── mem1.json
+│   └── mem2.json
+└── traces/
+    ├── trace_turn1.json
+    └── trace_turn2.json
+```
+
+---
+
+## 22. Summary
 
 This document defines how RP Agent state is stored, committed, and checked.
 

@@ -439,22 +439,28 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
         onReorder: _reorderEntries,
         itemBuilder: (context, index) {
           final entry = _draft.entries[index];
+          final builtinKey = entry.builtinKey;
+          final canEdit = builtinKey == null ||
+              PresetBuiltinEntryKeys.canEditContent(builtinKey);
+          final canReorder = builtinKey == null ||
+              PresetBuiltinEntryKeys.canReorder(builtinKey);
+          final canDisable = builtinKey == null ||
+              PresetBuiltinEntryKeys.canDisable(builtinKey);
           return Padding(
             key: ValueKey(entry.entryId),
             padding: const EdgeInsets.only(bottom: 10),
             child: _PresetEntryCard(
               entry: entry,
               index: index,
-              onEdit: _isLockedInteractiveInput(entry)
-                  ? null
-                  : () => _openEntryEditor(index),
+              canReorder: canReorder,
+              onEdit: canEdit ? () => _openEntryEditor(index) : null,
               onCopy: () => _copyEntry(index),
               onDelete: entry.isBuiltin ? null : () => _deleteEntry(index),
-              onEnabledChanged: _isLockedInteractiveInput(entry)
-                  ? null
-                  : (value) {
+              onEnabledChanged: canDisable
+                  ? (value) {
                       _updateEntry(index, entry.copyWith(enabled: value));
-                    },
+                    }
+                  : null,
             ),
           );
         },
@@ -492,13 +498,15 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
 
   Future<void> _openEntryEditor(int index) async {
     final entry = _draft.entries[index];
-    if (_isLockedInteractiveInput(entry)) {
+    final builtinKey = entry.builtinKey;
+    if (builtinKey != null && !PresetBuiltinEntryKeys.canEditContent(builtinKey)) {
       return;
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (context) => _PresetEntryEditorPage(
           entry: entry,
+          builtinKey: builtinKey,
           onChanged: (updated) => _updateEntry(index, updated),
         ),
       ),
@@ -618,6 +626,19 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
     if (newIndex > oldIndex) {
       newIndex -= 1;
     }
+    if (oldIndex == newIndex) {
+      return;
+    }
+    final movingEntry = entries[oldIndex];
+    if (movingEntry.builtinKey != null &&
+        !PresetBuiltinEntryKeys.canReorder(movingEntry.builtinKey!)) {
+      return;
+    }
+    final targetEntry = entries[newIndex];
+    if (targetEntry.builtinKey != null &&
+        !PresetBuiltinEntryKeys.canReorder(targetEntry.builtinKey!)) {
+      return;
+    }
     final item = entries.removeAt(oldIndex);
     entries.insert(newIndex, item);
     setState(() {
@@ -709,10 +730,6 @@ class PresetEditorPageState extends ConsumerState<PresetEditorPage> {
   bool _isDirty() =>
       jsonEncode(_draft.toJson()) != jsonEncode(_baseline.toJson());
 
-  bool _isLockedInteractiveInput(StoredPresetEntry entry) {
-    return entry.builtinKey == PresetBuiltinEntryKeys.interactiveInput;
-  }
-
   StoredPresetEntry _cloneEntry(StoredPresetEntry source) {
     return source.copyWith(
       entryId: 'entry-${DateTime.now().microsecondsSinceEpoch}',
@@ -771,6 +788,7 @@ class _PresetEntryCard extends StatelessWidget {
   const _PresetEntryCard({
     required this.entry,
     required this.index,
+    required this.canReorder,
     required this.onEdit,
     required this.onCopy,
     required this.onDelete,
@@ -779,6 +797,7 @@ class _PresetEntryCard extends StatelessWidget {
 
   final StoredPresetEntry entry;
   final int index;
+  final bool canReorder;
   final VoidCallback? onEdit;
   final VoidCallback onCopy;
   final VoidCallback? onDelete;
@@ -786,19 +805,8 @@ class _PresetEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassPanelCard(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      backgroundColor: entry.enabled
-          ? AppThemeTokens.card(
-              context,
-            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.98 : 0.92)
-          : AppThemeTokens.panel(
-              context,
-            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.76 : 0.55),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          ReorderableDragStartListener(
+    final dragHandle = canReorder
+        ? ReorderableDragStartListener(
             index: index,
             child: Container(
               width: 28,
@@ -812,7 +820,38 @@ class _PresetEntryCard extends StatelessWidget {
               ),
               child: const Icon(Icons.drag_indicator_rounded, size: 16),
             ),
-          ),
+          )
+        : Container(
+            width: 28,
+            height: 34,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              color: AppThemeTokens.panel(context).withValues(
+                alpha: AppThemeTokens.isLight(context) ? 0.5 : 0.3,
+              ),
+              border: Border.all(
+                color: AppThemeTokens.border(context).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Icon(
+              Icons.lock_outline_rounded,
+              size: 14,
+              color: AppThemeTokens.textMuted(context),
+            ),
+          );
+    return GlassPanelCard(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      backgroundColor: entry.enabled
+          ? AppThemeTokens.card(
+              context,
+            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.98 : 0.92)
+          : AppThemeTokens.panel(
+              context,
+            ).withValues(alpha: AppThemeTokens.isLight(context) ? 0.76 : 0.55),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          dragHandle,
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -933,9 +972,14 @@ class _CompactIconButton extends StatelessWidget {
 }
 
 class _PresetEntryEditorPage extends StatefulWidget {
-  const _PresetEntryEditorPage({required this.entry, required this.onChanged});
+  const _PresetEntryEditorPage({
+    required this.entry,
+    required this.builtinKey,
+    required this.onChanged,
+  });
 
   final StoredPresetEntry entry;
+  final String? builtinKey;
   final ValueChanged<StoredPresetEntry> onChanged;
 
   @override
@@ -945,6 +989,10 @@ class _PresetEntryEditorPage extends StatefulWidget {
 class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
   late final TextEditingController _titleController;
   late StoredPresetEntry _draft;
+
+  bool get _isBuiltin => widget.builtinKey != null;
+  bool get _canEditTitle => !_isBuiltin;
+  bool get _canEditRole => !_isBuiltin;
 
   @override
   void initState() {
@@ -983,7 +1031,10 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: _titleController,
-                        decoration: _entryDecoration('输入条目标题'),
+                        enabled: _canEditTitle,
+                        decoration: _entryDecoration(
+                          _canEditTitle ? '输入条目标题' : '内置条目不可改名',
+                        ),
                       ),
                     ],
                   ),
@@ -997,7 +1048,7 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
                       const SizedBox(height: 8),
                       InkWell(
                         borderRadius: BorderRadius.circular(16),
-                        onTap: _pickRole,
+                        onTap: _canEditRole ? _pickRole : null,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -1017,7 +1068,8 @@ class _PresetEntryEditorPageState extends State<_PresetEntryEditorPage> {
                           child: Row(
                             children: [
                               Expanded(child: Text(_draft.role.displayLabel)),
-                              const Icon(Icons.unfold_more_rounded),
+                              if (_canEditRole)
+                                const Icon(Icons.unfold_more_rounded),
                             ],
                           ),
                         ),

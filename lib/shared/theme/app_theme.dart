@@ -262,7 +262,9 @@ class AppTheme {
           );
 
     final textTheme = _buildTextTheme(ui);
-    final fontFamily = _resolveFontFamily(appearance);
+    final resolvedFonts = _resolveFontFamilies(appearance);
+    final fontFamily = resolvedFonts.$1;
+    final fontFamilyFallback = resolvedFonts.$2;
     final inputBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(ui.radiusField),
       borderSide: BorderSide(color: ui.border),
@@ -278,6 +280,9 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: ui.background,
       fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback.isEmpty
+          ? null
+          : fontFamilyFallback,
       textTheme: textTheme,
       iconTheme: IconThemeData(color: ui.textSecondary),
       dividerColor: ui.border,
@@ -401,46 +406,64 @@ class AppTheme {
     );
   }
 
-  static String? _resolveFontFamily(ManagedOption? appearance) {
+  static (String?, List<String>) _resolveFontFamilies(
+    ManagedOption? appearance,
+  ) {
     final customRaw = _readStringField(appearance, 'font_family');
-    final customPrimary = _extractPrimaryFontFamily(customRaw);
-    if (customPrimary != null) {
-      return customPrimary;
+    final customFamilies = _extractFontFamilies(customRaw);
+    if (customFamilies.isNotEmpty) {
+      return (
+        customFamilies.first,
+        customFamilies.length > 1
+            ? customFamilies.sublist(1)
+            : const <String>[],
+      );
     }
 
     final preset = _readStringField(appearance, 'font_preset')?.toLowerCase();
     return switch (preset) {
-      null || '' || 'system' => null,
-      'segoe' => 'Segoe UI',
-      'noto' => 'Noto Sans SC',
-      'source_han' => 'Source Han Sans SC',
-      'georgia' => 'Georgia',
-      'fira' => 'Fira Sans',
-      _ => null,
+      null || '' || 'system' => (null, const <String>[]),
+      'segoe' => (
+        'Segoe UI',
+        const <String>['Microsoft YaHei UI', 'Microsoft YaHei'],
+      ),
+      'noto' => (
+        'Noto Sans SC',
+        const <String>['Microsoft YaHei', 'PingFang SC', 'Heiti SC'],
+      ),
+      'source_han' => (
+        'Source Han Sans SC',
+        const <String>['Noto Sans SC', 'Microsoft YaHei'],
+      ),
+      'georgia' => ('Georgia', const <String>['Times New Roman']),
+      'fira' => ('Fira Sans', const <String>['Segoe UI']),
+      _ => (null, const <String>[]),
     };
   }
 
-  static String? _extractPrimaryFontFamily(String? raw) {
+  static List<String> _extractFontFamilies(String? raw) {
     if (raw == null) {
-      return null;
+      return const <String>[];
     }
-    final first = raw
+    return raw
         .split(',')
-        .first
-        .trim()
-        .replaceAll('"', '')
-        .replaceAll("'", '');
-    if (first.isEmpty) {
-      return null;
+        .map((item) => item.trim().replaceAll('"', '').replaceAll("'", ''))
+        .where(_isUsableFontFamily)
+        .toList(growable: false);
+  }
+
+  static bool _isUsableFontFamily(String family) {
+    if (family.isEmpty) {
+      return false;
     }
-    final normalized = first.toLowerCase();
+    final normalized = family.toLowerCase();
     if (normalized == 'sans-serif' ||
         normalized == 'serif' ||
         normalized == 'monospace' ||
         normalized == 'system-ui') {
-      return null;
+      return false;
     }
-    return first;
+    return true;
   }
 
   static String? _readStringField(ManagedOption? option, String key) {

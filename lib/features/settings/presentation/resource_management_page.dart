@@ -34,79 +34,81 @@ class ResourceManagementPage extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    PrimaryPillButton(
-                      label: '新建',
-                      onPressed: () => _createOption(context, ref),
-                    ),
-                    SecondaryOutlineButton(
-                      label: '刷新',
-                      onPressed: () => _refreshOptions(context, ref),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: '导入',
-                  onPressed: () => _importOption(context, ref),
-                  icon: const Icon(Icons.file_download_outlined),
-                ),
-                IconButton(
-                  tooltip: '导出',
-                  onPressed: () => _exportOption(context, ref),
-                  icon: const Icon(Icons.file_upload_outlined),
-                ),
-              ],
-            ),
-          ),
-          if (options.isEmpty)
-            EmptyStateView(
+      child: ListView.builder(
+        itemCount: options.isEmpty ? 2 : options.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      PrimaryPillButton(
+                        label: '新建',
+                        onPressed: () => _createOption(context, ref),
+                      ),
+                      SecondaryOutlineButton(
+                        label: '刷新',
+                        onPressed: () => _refreshOptions(context, ref),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '导入',
+                    onPressed: () => _importOption(context, ref),
+                    icon: const Icon(Icons.file_download_outlined),
+                  ),
+                  IconButton(
+                    tooltip: '导出',
+                    onPressed: () => _exportOption(context, ref),
+                    icon: const Icon(Icons.file_upload_outlined),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (options.isEmpty) {
+            return EmptyStateView(
               title: emptyTitle,
               description: emptyDescription,
               actionLabel: '新建',
               onAction: () => _createOption(context, ref),
-            )
-          else
-            ...options.map(
-              (option) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: GlassPanelCard(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          option.name,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: '编辑',
-                        onPressed: () => _editOption(context, ref, option),
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                      IconButton(
-                        tooltip: '删除',
-                        onPressed: () => _deleteOption(context, ref, option),
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          color: AppColors.error,
-                        ),
-                      ),
-                    ],
+            );
+          }
+          final option = options[index - 1];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: GlassPanelCard(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      option.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
-                ),
+                  IconButton(
+                    tooltip: '编辑',
+                    onPressed: () => _editOption(context, ref, option),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                  IconButton(
+                    tooltip: '删除',
+                    onPressed: () => _deleteOption(context, ref, option),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.error,
+                    ),
+                  ),
+                ],
               ),
             ),
-        ],
+          );
+        },
       ),
     );
   }

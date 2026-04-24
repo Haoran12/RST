@@ -22,7 +22,9 @@
       "WebFetch(domain:pub.dev)",
       "WebSearch",
       "Bash(taskkill /F /IM rst.exe)",
-      "Bash(\"D:/Projects/RST/build/Win64/rst.exe\")"
+      "Bash(\"D:/Projects/RST/build/Win64/rst.exe\")",
+      "Bash(cargo test *)",
+      "Bash(flutter run *)"
     ]
   }
 }

@@ -55,65 +55,59 @@ class WorldBookManagementPage extends ConsumerWidget {
     final options = ref.watch(worldBookOptionsProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    PrimaryPillButton(
-                      label: '新建世界书',
-                      onPressed: () => _create(context, ref),
-                    ),
-                    SecondaryOutlineButton(
-                      label: '刷新',
-                      onPressed: () => _refresh(context, ref),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                IconButton(
-                  tooltip: '导入',
-                  onPressed: () => _import(context, ref),
-                  icon: const Icon(Icons.file_download_outlined),
-                ),
-                IconButton(
-                  tooltip: '导出',
-                  onPressed: () => _export(context, ref),
-                  icon: const Icon(Icons.file_upload_outlined),
-                ),
-              ],
-            ),
-          ),
-          if (options.isEmpty)
-            EmptyStateView(
+      child: ListView.builder(
+        itemCount: options.isEmpty ? 2 : options.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      PrimaryPillButton(
+                        label: '新建世界书',
+                        onPressed: () => _create(context, ref),
+                      ),
+                      SecondaryOutlineButton(
+                        label: '刷新',
+                        onPressed: () => _refresh(context, ref),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: '导入',
+                    onPressed: () => _import(context, ref),
+                    icon: const Icon(Icons.file_download_outlined),
+                  ),
+                  IconButton(
+                    tooltip: '导出',
+                    onPressed: () => _export(context, ref),
+                    icon: const Icon(Icons.file_upload_outlined),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (options.isEmpty) {
+            return EmptyStateView(
               title: '暂无世界书',
               description: '',
               actionLabel: '新建世界书',
               onAction: () => _create(context, ref),
-            )
-          else
-            ...options.map((option) => _buildCard(context, ref, option)),
-        ],
+            );
+          }
+          return _buildCard(context, ref, options[index - 1]);
+        },
       ),
     );
   }
 
   Widget _buildCard(BuildContext context, WidgetRef ref, ManagedOption option) {
-    final entries = _loadEntries(option);
-    final c1 = entries
-        .where((e) => e.category == _WorldBookCategory.character)
-        .length;
-    final c2 = entries
-        .where((e) => e.category == _WorldBookCategory.setting)
-        .length;
-    final c3 = entries
-        .where((e) => e.category == _WorldBookCategory.memory)
-        .length;
+    final description = option.description.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GlassPanelCard(
@@ -127,13 +121,15 @@ class WorldBookManagementPage extends ConsumerWidget {
                     option.name,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '人物 $c1 · 其他设定 $c2 · 世界记忆 $c3',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
+                  if (description.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

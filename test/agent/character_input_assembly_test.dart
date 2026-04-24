@@ -1,10 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rst/core/models/agent/baseline_body_profile.dart';
 import 'package:rst/core/models/agent/character_runtime_state.dart';
-import 'package:rst/core/models/agent/cognitive_pass_io.dart';
 import 'package:rst/core/models/agent/embodiment_state.dart';
 import 'package:rst/core/models/agent/filtered_scene_view.dart';
-import 'package:rst/core/models/agent/mana_field.dart';
 import 'package:rst/core/models/agent/memory_entry.dart';
 import 'package:rst/core/models/agent/scene_model.dart';
 import 'package:rst/core/models/agent/temporary_body_state.dart';

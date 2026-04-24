@@ -195,7 +195,7 @@ void main() {
           currentEmotions: const {'fear': 0.8},
         );
 
-        final calmContext = MemoryAccessContext(
+        final _ = MemoryAccessContext(
           filteredSceneView: const FilteredSceneView(
             characterId: 'alice',
             sceneTurnId: 'turn_001',

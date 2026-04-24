@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:io';
-
-import 'package:path_provider/path_provider.dart';
 
 import '../models/common.dart' as core;
+import '../services/workspace_path_service.dart';
 import 'frb_api.dart' as frb;
 import 'frb_generated.dart';
 
@@ -25,19 +23,7 @@ class RustBridge {
       return;
     }
 
-    Directory supportDir;
-    try {
-      supportDir = await getApplicationSupportDirectory();
-    } catch (_) {
-      supportDir = Directory('${Directory.systemTemp.path}/rst_test_support');
-      if (!supportDir.existsSync()) {
-        supportDir.createSync(recursive: true);
-      }
-    }
-    final workspaceDir = Directory('${supportDir.path}/rst_data');
-    if (!workspaceDir.existsSync()) {
-      workspaceDir.createSync(recursive: true);
-    }
+    final workspaceDir = await WorkspacePathService.resolveWorkspaceDirectory();
 
     await RustCore.init();
     await frb.setWorkspaceDir(path: workspaceDir.path);

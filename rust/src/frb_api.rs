@@ -240,19 +240,36 @@ struct SessionFile {
     messages: Vec<MessageRecord>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionSummaryFile {
+    config: SessionConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RequestLogSummaryFile {
+    log_id: String,
+    session_id: String,
+    provider: String,
+    model: String,
+    status: RequestLogStatus,
+    request_time: String,
+    #[serde(default)]
+    duration_ms: Option<i64>,
+    #[serde(default)]
+    redacted: bool,
+    #[serde(default)]
+    payload_truncated: bool,
+}
+
 const WORLDBOOK_SNAPSHOT_FILE_SUFFIX: &str = ".st_worldbook.json";
 const WORLDBOOK_SNAPSHOT_ID_SUFFIX: &str = ".st_worldbook";
 
 pub fn list_sessions() -> Result<Vec<SessionSummary>> {
     let mut sessions = Vec::new();
     for path in session_paths()? {
-        let file = read_session_file(&path)?;
-        sessions.push(SessionSummary {
-            session_id: file.config.session_id.clone(),
-            session_name: file.config.session_name.clone(),
-            mode: file.config.mode,
-            updated_at: file.config.updated_at.clone(),
-        });
+        sessions.push(read_session_summary_file(&path)?);
     }
 
     sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
@@ -670,7 +687,7 @@ pub fn list_request_logs(
 
     let mut logs = Vec::new();
     for path in request_log_paths()? {
-        let log = read_request_log_file(&path)?;
+        let log = read_request_log_summary_file(&path)?;
         if let Some(filter) = session_filter.as_ref() {
             if &log.session_id != filter {
                 continue;
@@ -682,18 +699,7 @@ pub fn list_request_logs(
                 continue;
             }
         }
-
-        logs.push(RequestLogSummary {
-            log_id: log.log_id,
-            session_id: log.session_id,
-            provider: log.provider,
-            model: log.model,
-            status: log.status,
-            request_time: log.request_time,
-            duration_ms: log.duration_ms,
-            redacted: log.redacted,
-            payload_truncated: log.payload_truncated,
-        });
+        logs.push(log);
     }
 
     logs.sort_by(|a, b| b.request_time.cmp(&a.request_time));
@@ -827,7 +833,10 @@ fn session_paths() -> Result<Vec<PathBuf>> {
             continue;
         }
 
-        let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("");
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
         if is_worldbook_snapshot_sidecar_file_name(file_name) {
             continue;
         }
@@ -858,7 +867,7 @@ fn request_log_paths() -> Result<Vec<PathBuf>> {
 }
 
 fn is_request_log_expired(path: &Path, cutoff: DateTime<Utc>) -> bool {
-    if let Ok(log) = read_request_log_file(path) {
+    if let Ok(log) = read_request_log_summary_file(path) {
         if let Some(request_time) = parse_rfc3339_utc(&log.request_time) {
             return request_time < cutoff;
         }
@@ -886,6 +895,19 @@ fn read_session_file(path: &Path) -> Result<SessionFile> {
     serde_json::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
 }
 
+fn read_session_summary_file(path: &Path) -> Result<SessionSummary> {
+    let raw =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let file: SessionSummaryFile = serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    Ok(SessionSummary {
+        session_id: file.config.session_id,
+        session_name: file.config.session_name,
+        mode: file.config.mode,
+        updated_at: file.config.updated_at,
+    })
+}
+
 fn write_session_file(path: &Path, file: &SessionFile) -> Result<()> {
     let raw =
         serde_json::to_string_pretty(file).with_context(|| "failed to serialize session data")?;
@@ -897,6 +919,24 @@ fn read_request_log_file(path: &Path) -> Result<RequestLog> {
     let raw =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     serde_json::from_str(&raw).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+fn read_request_log_summary_file(path: &Path) -> Result<RequestLogSummary> {
+    let raw =
+        fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let file: RequestLogSummaryFile = serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse {}", path.display()))?;
+    Ok(RequestLogSummary {
+        log_id: file.log_id,
+        session_id: file.session_id,
+        provider: file.provider,
+        model: file.model,
+        status: file.status,
+        request_time: file.request_time,
+        duration_ms: file.duration_ms,
+        redacted: file.redacted,
+        payload_truncated: file.payload_truncated,
+    })
 }
 
 fn write_request_log_file(path: &Path, log: &RequestLog) -> Result<()> {

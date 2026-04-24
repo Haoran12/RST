@@ -7,6 +7,7 @@ import '../services/chat_service.dart';
 import '../services/import_export_service.dart';
 import '../services/log_service.dart';
 import '../services/provider_spec_service.dart';
+import '../services/runtime_log_service.dart';
 import '../services/session_service.dart';
 
 final rustBridgeProvider = Provider<RustBridge>((_) => const RustBridge());
@@ -17,6 +18,9 @@ final providerSpecServiceProvider = Provider<ProviderSpecService>(
 final providerSpecCatalogProvider = FutureProvider<ProviderSpecCatalog>(
   (ref) => ref.watch(providerSpecServiceProvider).loadCatalog(),
 );
+final runtimeLogServiceProvider = Provider<RuntimeLogService>(
+  (_) => RuntimeLogService.instance,
+);
 final sessionServiceProvider = Provider<SessionService>(
   (ref) => SessionService(ref.watch(rustBridgeProvider)),
 );
@@ -24,6 +28,7 @@ final chatServiceProvider = Provider<ChatService>(
   (ref) => ChatService(
     ref.watch(rustBridgeProvider),
     ref.watch(providerSpecServiceProvider),
+    ref.watch(runtimeLogServiceProvider),
   ),
 );
 final importExportServiceProvider = Provider<ImportExportService>(
@@ -33,5 +38,8 @@ final importExportServiceProvider = Provider<ImportExportService>(
   ),
 );
 final logServiceProvider = Provider<LogService>(
-  (ref) => LogService(ref.watch(rustBridgeProvider)),
+  (ref) => LogService(
+    ref.watch(rustBridgeProvider),
+    ref.watch(runtimeLogServiceProvider),
+  ),
 );

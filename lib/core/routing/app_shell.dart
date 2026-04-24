@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/bridge/frb_api.dart' as frb;
+import '../../features/agent/presentation/agent_management_page.dart';
 import '../../features/chat/presentation/chat_page.dart';
 import '../../features/log/presentation/log_page.dart';
 import '../../features/session/presentation/session_management_page.dart';
@@ -90,6 +91,12 @@ class AppShell extends ConsumerStatefulWidget {
       ),
     ),
     _DrawerNavItem(
+      tab: AppTab.agent,
+      label: 'Agent',
+      icon: Icons.smart_toy_outlined,
+      page: const AgentManagementPage(),
+    ),
+    _DrawerNavItem(
       tab: AppTab.log,
       label: '日志',
       icon: Icons.receipt_long_outlined,
@@ -103,6 +110,7 @@ class AppShell extends ConsumerStatefulWidget {
     AppTab.preset,
     AppTab.apiConfig,
     AppTab.appearance,
+    AppTab.agent,
     AppTab.log,
   };
 

@@ -235,6 +235,38 @@ class PresetBuiltinEntryKeys {
       _ => builtinKey,
     };
   }
+
+  static bool canEditContent(String builtinKey) {
+    return switch (builtinKey) {
+      mainPrompt || userDescription => true,
+      loreBefore ||
+      loreAfter ||
+      chatHistory ||
+      scene ||
+      interactiveInput =>
+        false,
+      _ => true,
+    };
+  }
+
+  static bool canReorder(String builtinKey) {
+    return switch (builtinKey) {
+      mainPrompt || userDescription => true,
+      loreBefore ||
+      loreAfter ||
+      chatHistory ||
+      scene ||
+      interactiveInput =>
+        false,
+      _ => true,
+    };
+  }
+
+  static bool canDisable(String builtinKey) {
+    return builtinKey != interactiveInput;
+  }
+
+  static bool canRename(String builtinKey) => false;
 }
 
 class StoredPresetEntry {
@@ -407,20 +439,31 @@ StoredPresetEntry _normalizeBuiltinEntryInvariants(
   if (builtinKey == null) {
     return entry;
   }
+
+  final normalizedTitle = PresetBuiltinEntryKeys.defaultTitleOf(builtinKey);
+  final normalizedRole = builtinKey == PresetBuiltinEntryKeys.interactiveInput
+      ? StoredPresetEntryRole.user
+      : StoredPresetEntryRole.system;
+  final normalizedEnabled = PresetBuiltinEntryKeys.canDisable(builtinKey)
+      ? entry.enabled
+      : true;
+
+  String normalizedContent = entry.content;
   if (builtinKey == PresetBuiltinEntryKeys.mainPrompt &&
       entry.content.trim().isEmpty &&
       legacyMainPrompt.trim().isNotEmpty) {
-    return entry.copyWith(content: legacyMainPrompt.trim());
+    normalizedContent = legacyMainPrompt.trim();
   }
-  if (builtinKey == PresetBuiltinEntryKeys.interactiveInput) {
-    return entry.copyWith(
-      title: PresetBuiltinEntryKeys.defaultTitleOf(builtinKey),
-      role: StoredPresetEntryRole.user,
-      content: '',
-      enabled: true,
-    );
+  if (!PresetBuiltinEntryKeys.canEditContent(builtinKey)) {
+    normalizedContent = '';
   }
-  return entry;
+
+  return entry.copyWith(
+    title: normalizedTitle,
+    role: normalizedRole,
+    content: normalizedContent,
+    enabled: normalizedEnabled,
+  );
 }
 
 class StoredPresetConfig {

@@ -7,6 +7,7 @@ enum AppTab {
   preset,
   apiConfig,
   appearance,
+  agent,
   log,
 }
 

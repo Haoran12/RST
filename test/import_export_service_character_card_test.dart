@@ -9,6 +9,7 @@ import 'package:rst/core/services/api_service.dart';
 import 'package:rst/core/services/chat_service.dart';
 import 'package:rst/core/services/import_export_service.dart';
 import 'package:rst/core/services/provider_spec_service.dart';
+import 'package:rst/core/services/runtime_log_service.dart';
 import 'package:rst/core/services/world_book_injection.dart';
 
 void main() {
@@ -17,7 +18,11 @@ void main() {
   setUp(() {
     service = ImportExportService(
       apiService: const ApiService(),
-      chatService: ChatService(const RustBridge(), const ProviderSpecService()),
+      chatService: ChatService(
+        const RustBridge(),
+        const ProviderSpecService(),
+        RuntimeLogService.instance,
+      ),
     );
   });
 
@@ -128,6 +133,58 @@ void main() {
       'st_character_card_png',
     );
   });
+
+  test(
+    'imports ST world info and falls back to name when comment is empty',
+    () async {
+      final file = File(
+        '${Directory.systemTemp.path}/rst-st-worldbook-${DateTime.now().microsecondsSinceEpoch}.json',
+      );
+      addTearDown(() async {
+        if (await file.exists()) {
+          await file.delete();
+        }
+      });
+
+      await file.writeAsString(
+        jsonEncode(<String, dynamic>{
+          'name': 'demo-worldbook',
+          'entries': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'id': 'entry-a',
+              'name': '主设定',
+              'comment': '',
+              'content': '设定内容 A',
+              'key': <String>['主设定'],
+            },
+            <String, dynamic>{
+              'id': 'entry-b',
+              'name': '角色设定',
+              'comment': '角色设定-comment',
+              'content': '设定内容 B',
+              'key': <String>['角色设定'],
+            },
+          ],
+        }),
+      );
+
+      final result = await service.importWorldBookFromFile(
+        filePath: file.path,
+        existingOptions: const <ManagedOption>[],
+      );
+      final entries = parseWorldBookEntries(result.value);
+
+      final fallbackEntry = entries.firstWhere(
+        (entry) => '${entry['content']}' == '设定内容 A',
+      );
+      expect(fallbackEntry['comment'], '主设定');
+
+      final explicitCommentEntry = entries.firstWhere(
+        (entry) => '${entry['content']}' == '设定内容 B',
+      );
+      expect(explicitCommentEntry['comment'], '角色设定-comment');
+    },
+  );
 }
 
 List<int> _buildPngWithTextChunk(String key, String value) {

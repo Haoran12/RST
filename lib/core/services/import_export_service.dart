@@ -1410,7 +1410,15 @@ class ImportExportService {
     };
     final uid = _parseInt(raw['uid']) ?? _parseInt(raw['id']) ?? fallbackUid;
     final content = '${raw['content'] ?? ''}';
-    final comment = '${raw['comment'] ?? raw['name'] ?? ''}'.trim();
+    final comment =
+        _normalizeOptionalString(raw['comment']) ??
+        _normalizeOptionalString(raw['name']) ??
+        _normalizeOptionalString(raw['title']) ??
+        _normalizeOptionalString(raw['label']) ??
+        _normalizeOptionalString(raw['memo']) ??
+        _normalizeOptionalString(raw['note']) ??
+        _normalizeOptionalString(raw['displayName']) ??
+        _normalizeOptionalString(raw['display_name']);
     final enabled = _parseBool(raw['enabled']);
     final normalized = <String, dynamic>{
       'uid': uid,
@@ -1418,7 +1426,7 @@ class ImportExportService {
       'keysecondary': _stringList(
         raw['keysecondary'] ?? raw['secondary_keys'] ?? raw['secondaryKeys'],
       ),
-      'comment': comment.isEmpty ? '条目 $uid' : comment,
+      'comment': comment ?? '条目 $uid',
       'content': content,
       'constant': _parseBool(raw['constant']) ?? false,
       'vectorized': _parseBool(raw['vectorized']) ?? false,

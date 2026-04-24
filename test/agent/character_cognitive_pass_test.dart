@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rst/core/models/agent/baseline_body_profile.dart';
 import 'package:rst/core/models/agent/character_runtime_state.dart';
 import 'package:rst/core/models/agent/cognitive_pass_io.dart';
 import 'package:rst/core/models/agent/embodiment_state.dart';

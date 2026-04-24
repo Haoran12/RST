@@ -682,7 +682,174 @@ Those should live in companion documents.
 
 ---
 
-## 30. Summary
+## 30. Implementation Reference
+
+### 30.1 Dart Implementation
+
+The execution strategy is implemented in `lib/core/services/agent/`:
+
+```
+services/agent/
+├── scene_state_extractor.dart      # Programmatic scene extraction
+├── embodiment_resolver.dart        # Programmatic embodiment resolution
+├── scene_filtering_protocol.dart   # Programmatic scene filtering
+├── memory_access_protocol.dart     # Programmatic memory access
+├── character_input_assembly.dart   # Programmatic input assembly
+├── character_cognitive_pass.dart   # Fused cognitive pass (model call)
+├── cognitive_pass_executor.dart    # Orchestrates belief + intent updates
+├── action_arbitration.dart         # Programmatic arbitration
+├── surface_realizer.dart           # Presentation layer (model call)
+├── agent_runtime.dart              # Main loop orchestrator
+└── validation/                     # Programmatic validation
+    ├── agent_validator.dart
+    ├── omniscience_leakage_rule.dart
+    ├── embodiment_ignored_rule.dart
+    ├── memory_leakage_rule.dart
+    └── mana_sense_validation_rule.dart
+```
+
+### 30.2 AgentRuntime Main Loop
+
+```dart
+class AgentRuntime {
+  Future<AgentTurnResult> processTurn(AgentTurnRequest request) async {
+    // 1. Extract scene state (programmatic)
+    final scene = await _sceneExtractor.extract(...);
+
+    // 2. Compute active set and dirty flags (programmatic)
+    final activeIds = _resolveActiveCharacterIds(request);
+
+    // 3. For each active & dirty character:
+    for (final characterId in activeIds) {
+      if (!_isDirty(characterId)) continue;
+
+      // 3a. Assemble input (programmatic)
+      final input = await _inputAssembly.assemble(...);
+
+      // 3b. Execute cognitive pass (model call)
+      final output = await _cognitivePassExecutor.execute(...);
+
+      // 3c. Validate output (programmatic)
+      final validationResults = _validator.validate(...);
+    }
+
+    // 4. Arbitrate actions (programmatic)
+    final arbitration = _actionArbitration.arbitrate(...);
+
+    // 5. Render output (model call)
+    final rendered = _surfaceRealizer.render(...);
+
+    return AgentTurnResult(...);
+  }
+}
+```
+
+### 30.3 Dirty Flags Implementation
+
+```dart
+class DirtyFlags {
+  bool sceneChanged = false;
+  bool bodyChanged = false;
+  bool relationChanged = false;
+  bool beliefInvalidated = false;
+  bool intentInvalidated = false;
+  bool directlyAddressed = false;
+  bool underThreat = false;
+  bool reactionWindowOpen = false;
+  bool receivedNewSalientSignal = false;
+
+  bool get isDirty =>
+      sceneChanged ||
+      bodyChanged ||
+      relationChanged ||
+      beliefInvalidated ||
+      intentInvalidated ||
+      directlyAddressed ||
+      underThreat ||
+      reactionWindowOpen ||
+      receivedNewSalientSignal;
+}
+```
+
+### 30.4 Character Tier Policy
+
+```dart
+enum CharacterTier {
+  tierA,  // Full cognitive pass
+  tierB,  // Simplified rule-based
+  tierC,  // Programmatic only
+}
+
+class CognitivePassExecutor {
+  Future<ExecutionResult> execute(
+    CognitivePassExecutionRequest request, {
+    required CharacterTier tier,
+  }) async {
+    return switch (tier) {
+      CharacterTier.tierA => await _executeFullCognitivePass(request),
+      CharacterTier.tierB => await _executeSimplifiedPass(request),
+      CharacterTier.tierC => _executeProgrammaticPass(request),
+    };
+  }
+}
+```
+
+### 30.5 Rust Persistence Layer
+
+The persistence layer in `rust/src/agent/` provides efficient state storage:
+
+```rust
+// Scene snapshots
+let snapshot = SceneSnapshot::new("scene1", "turn1", scene_model_json);
+storage.save_scene_snapshot(&snapshot)?;
+
+// Character state
+let char_snapshot = CharacterRuntimeSnapshot::new(
+    "char1", "turn1",
+    relationship_models, belief_state, emotion_state,
+    body_state, goals,
+);
+storage.save_character_snapshot(&char_snapshot)?;
+
+// Turn traces for debugging
+let trace = TurnTrace::new("turn1")
+    .with_perception(perception_json)
+    .with_belief_update(belief_json)
+    .with_intent_plan(intent_json)
+    .with_validation(validation_record);
+storage.save_turn_trace(&trace)?;
+```
+
+### 30.6 Call Budget Monitoring
+
+```dart
+class CallBudgetMonitor {
+  int cognitivePassCount = 0;
+  int surfaceRealizerCount = 0;
+  int validationWarningCount = 0;
+
+  void recordCognitivePass(String characterId, String reason) {
+    cognitivePassCount++;
+    log.info('Cognitive pass for $characterId: $reason');
+  }
+
+  void recordSurfaceRealizer(String sceneTurnId) {
+    surfaceRealizerCount++;
+  }
+
+  BudgetReport generateReport() {
+    return BudgetReport(
+      cognitivePasses: cognitivePassCount,
+      surfaceRealizations: surfaceRealizerCount,
+      warnings: validationWarningCount,
+    );
+  }
+}
+```
+
+---
+
+## 31. Summary
 
 This execution strategy keeps the RP Agent system practical for real deployment.
 

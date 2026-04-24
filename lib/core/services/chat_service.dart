@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -10,6 +11,7 @@ import '../models/workspace_config.dart';
 import '../../shared/utils/reasoning_markup.dart';
 import 'api_service.dart';
 import 'provider_spec_service.dart';
+import 'runtime_log_service.dart';
 
 class PromptAssemblyMetadata {
   const PromptAssemblyMetadata({
@@ -120,7 +122,7 @@ class SendRoundResult {
 }
 
 class ChatService {
-  ChatService(this._rustBridge, this._providerSpecService, {Dio? dio})
+  ChatService(this._rustBridge, this._providerSpecService, this._runtimeLogService, {Dio? dio})
     : _dio = dio ?? Dio();
 
   static const int _maxPreviewChars = 120000;
@@ -128,6 +130,7 @@ class ChatService {
 
   final RustBridge _rustBridge;
   final ProviderSpecService _providerSpecService;
+  final RuntimeLogService _runtimeLogService;
   final Dio _dio;
   final Map<String, _ActiveStreamState> _activeStreams =
       <String, _ActiveStreamState>{};
@@ -305,10 +308,24 @@ class ChatService {
   Future<bool> stop(String sessionId) async {
     final state = _activeStreams[sessionId];
     if (state == null) {
+      unawaited(
+        _runtimeLogService.info(
+          category: 'network.chat',
+          message: 'stop_ignored_no_active_stream',
+          data: <String, Object?>{'session_id': sessionId},
+        ),
+      );
       return false;
     }
     state.stoppedByUser = true;
     state.cancelToken.cancel('stopped_by_user');
+    unawaited(
+      _runtimeLogService.info(
+        category: 'network.chat',
+        message: 'stop_requested',
+        data: <String, Object?>{'session_id': sessionId},
+      ),
+    );
     return true;
   }
 
@@ -324,22 +341,87 @@ class ChatService {
       providerSpec: providerSpec,
       promptMessages: messages,
     );
-    final response = await _dio.post<dynamic>(
-      providerRequest.url,
-      data: providerRequest.payload,
-      options: Options(
-        responseType: ResponseType.json,
-        headers: providerRequest.headers,
-        connectTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
-        receiveTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
-        sendTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+    final requestTime = DateTime.now().toUtc();
+    unawaited(
+      _runtimeLogService.info(
+        category: 'network.utility',
+        message: 'request_start',
+        data: <String, Object?>{
+          'provider': providerRequest.providerName,
+          'model': providerRequest.model,
+          'request_url': _redactUrl(providerRequest.url),
+          'request_timeout_ms': providerRequest.requestTimeoutMs,
+        },
       ),
     );
-    final parsed = _parseJsonResponse(
-      providerType: providerRequest.providerType,
-      body: response.data,
-    );
-    return ReasoningMarkup.stripReasoning(parsed.text).trim();
+    try {
+      final response = await _dio.post<dynamic>(
+        providerRequest.url,
+        data: providerRequest.payload,
+        options: Options(
+          responseType: ResponseType.json,
+          headers: providerRequest.headers,
+          connectTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+          receiveTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+          sendTimeout: _durationFromMs(providerRequest.requestTimeoutMs),
+        ),
+      );
+      final parsed = _parseJsonResponse(
+        providerType: providerRequest.providerType,
+        body: response.data,
+      );
+      final responseTime = DateTime.now().toUtc();
+      unawaited(
+        _runtimeLogService.info(
+          category: 'network.utility',
+          message: 'request_success',
+          data: <String, Object?>{
+            'provider': providerRequest.providerName,
+            'model': providerRequest.model,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+            'prompt_tokens': parsed.promptTokens,
+            'completion_tokens': parsed.completionTokens,
+            'total_tokens': parsed.totalTokens,
+            'stop_reason': parsed.stopReason,
+          },
+        ),
+      );
+      return ReasoningMarkup.stripReasoning(parsed.text).trim();
+    } on DioException catch (error) {
+      final responseTime = DateTime.now().toUtc();
+      unawaited(
+        _runtimeLogService.error(
+          category: 'network.utility',
+          message: 'request_failed',
+          data: <String, Object?>{
+            'provider': providerRequest.providerName,
+            'model': providerRequest.model,
+            'status_code': error.response?.statusCode,
+            'error_type': error.type.name,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+          },
+          error: error.message ?? error.toString(),
+          stackTrace: error.stackTrace,
+        ),
+      );
+      rethrow;
+    } catch (error, stackTrace) {
+      final responseTime = DateTime.now().toUtc();
+      unawaited(
+        _runtimeLogService.error(
+          category: 'network.utility',
+          message: 'request_failed_client_error',
+          data: <String, Object?>{
+            'provider': providerRequest.providerName,
+            'model': providerRequest.model,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+          },
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+      rethrow;
+    }
   }
 
   Future<frb.MessageRecord> _streamAssistantResponse({
@@ -349,6 +431,13 @@ class ChatService {
     void Function(frb.MessageRecord message)? onMessageUpdated,
   }) async {
     if (_activeStreams.containsKey(sessionId)) {
+      unawaited(
+        _runtimeLogService.warning(
+          category: 'network.chat',
+          message: 'concurrent_stream_blocked',
+          data: <String, Object?>{'session_id': sessionId},
+        ),
+      );
       throw StateError('session $sessionId already has an active stream');
     }
 
@@ -370,6 +459,21 @@ class ChatService {
         url: providerRequest.url,
         headers: providerRequest.headers,
         payload: providerRequest.payload,
+      );
+      unawaited(
+        _runtimeLogService.info(
+          category: 'network.chat',
+          message: 'request_start',
+          data: <String, Object?>{
+            'session_id': sessionId,
+            'assistant_message_id': assistantMessageId,
+            'provider': providerRequest.providerName,
+            'model': providerRequest.model,
+            'stream': providerRequest.stream,
+            'request_url': _redactUrl(providerRequest.url),
+            'request_timeout_ms': providerRequest.requestTimeoutMs,
+          },
+        ),
       );
 
       final response = await _dio.post<dynamic>(
@@ -426,6 +530,23 @@ class ChatService {
         responsePreviewJson: responsePreview.value,
         payloadTruncated: requestPreview.truncated || responsePreview.truncated,
       );
+      unawaited(
+        _runtimeLogService.info(
+          category: 'network.chat',
+          message: 'request_success',
+          data: <String, Object?>{
+            'session_id': sessionId,
+            'assistant_message_id': assistantMessageId,
+            'provider': providerRequest.providerName,
+            'model': providerRequest.model,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+            'prompt_tokens': consumeResult.promptTokens,
+            'completion_tokens': consumeResult.completionTokens,
+            'total_tokens': consumeResult.totalTokens,
+            'stop_reason': consumeResult.stopReason,
+          },
+        ),
+      );
 
       final completed = await _rustBridge.setMessageStatus(
         messageId: assistantMessageId,
@@ -452,6 +573,22 @@ class ChatService {
           responsePreviewJson: responsePreview.value,
           payloadTruncated:
               requestPreview.truncated || responsePreview.truncated,
+        );
+        unawaited(
+          _runtimeLogService.warning(
+            category: 'network.chat',
+            message: active.stoppedByUser
+                ? 'request_stopped_by_user'
+                : 'request_canceled',
+            data: <String, Object?>{
+              'session_id': sessionId,
+              'assistant_message_id': assistantMessageId,
+              'provider': providerRequest.providerName,
+              'model': providerRequest.model,
+              'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+              'error_type': error.type.name,
+            },
+          ),
         );
         final completed = await _rustBridge.setMessageStatus(
           messageId: assistantMessageId,
@@ -482,8 +619,25 @@ class ChatService {
         responsePreviewJson: responsePreview.value,
         payloadTruncated: requestPreview.truncated || responsePreview.truncated,
       );
+      unawaited(
+        _runtimeLogService.error(
+          category: 'network.chat',
+          message: 'request_failed',
+          data: <String, Object?>{
+            'session_id': sessionId,
+            'assistant_message_id': assistantMessageId,
+            'provider': providerRequest.providerName,
+            'model': providerRequest.model,
+            'status_code': error.response?.statusCode,
+            'error_type': error.type.name,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+          },
+          error: error.message ?? error.toString(),
+          stackTrace: error.stackTrace,
+        ),
+      );
       rethrow;
-    } catch (error) {
+    } catch (error, stackTrace) {
       final errored = await _rustBridge.setMessageStatus(
         messageId: assistantMessageId,
         status: frb.MessageStatus.error,
@@ -506,6 +660,21 @@ class ChatService {
         requestPreviewJson: requestPreview.value,
         responsePreviewJson: responsePreview.value,
         payloadTruncated: requestPreview.truncated || responsePreview.truncated,
+      );
+      unawaited(
+        _runtimeLogService.error(
+          category: 'network.chat',
+          message: 'request_failed_client_error',
+          data: <String, Object?>{
+            'session_id': sessionId,
+            'assistant_message_id': assistantMessageId,
+            'provider': providerRequest.providerName,
+            'model': providerRequest.model,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+          },
+          error: error,
+          stackTrace: stackTrace,
+        ),
       );
       rethrow;
     } finally {

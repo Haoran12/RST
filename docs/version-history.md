@@ -1,5 +1,82 @@
 # Version History
 
+## 0.1.0+66 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 66
+- Artifact: `rst-0.1.0+66-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+65 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 65
+- Artifact: `rst-0.1.0+65-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+64 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 64
+- Artifact: `rst-0.1.0+64-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+63 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 63
+- Artifact: `rst-0.1.0+63-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+62 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 62
+- Artifact: `rst-0.1.0+62-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+61 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 61
+- Artifact: `rst-0.1.0+61-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+60 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 60
+- Artifact: `rst-0.1.0+60-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+59 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 59
+- Artifact: `rst-0.1.0+59-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+58 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 58
+- Artifact: `rst-0.1.0+58-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+57 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 57
+- Artifact: `rst-0.1.0+57-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+56 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 56
+- Artifact: `rst-0.1.0+56-win64.zip`
+- Notes: Windows x64 release build.
+
 ## 0.1.0+55 (2026-04-24)
 
 - Build type: Windows x64 release
@@ -322,6 +399,17 @@
 - Build type: Android APK release
 - Artifact: `rst-0.1.0+2-release.apk`
 - Notes: UI navigation refactor and session quick settings update
+
+
+
+
+
+
+
+
+
+
+
 
 
 

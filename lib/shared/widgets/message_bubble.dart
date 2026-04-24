@@ -60,7 +60,12 @@ class MessageBubble extends StatelessWidget {
     this.onDelete,
     this.onCopy,
     this.onEdit,
-    this.onRewrite,
+    this.isEditing = false,
+    this.editController,
+    this.editFocusNode,
+    this.onEditSave,
+    this.onEditCancel,
+    this.isSavingEdit = false,
   });
 
   final String messageId;
@@ -73,15 +78,20 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onCopy;
   final VoidCallback? onEdit;
-  final VoidCallback? onRewrite;
+  final bool isEditing;
+  final TextEditingController? editController;
+  final FocusNode? editFocusNode;
+  final VoidCallback? onEditSave;
+  final VoidCallback? onEditCancel;
+  final bool isSavingEdit;
 
   bool get _isUser => role == 'user';
   bool get _isSystem => role == 'system';
   bool get _hasActions =>
+      isEditing ||
       onDelete != null ||
       onCopy != null ||
       onEdit != null ||
-      onRewrite != null ||
       onToggleVisibility != null;
 
   @override
@@ -150,19 +160,27 @@ class MessageBubble extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (parsedMarkup.content.isNotEmpty)
-                  _MarkdownMessageText(
-                    content: parsedMarkup.content,
+                if (isEditing && editController != null)
+                  _InlineEditField(
+                    controller: editController!,
+                    focusNode: editFocusNode,
                     appearance: appearance,
-                  ),
-                if (parsedMarkup.hasReasoning) ...[
+                  )
+                else ...[
                   if (parsedMarkup.content.isNotEmpty)
-                    const SizedBox(height: 8),
-                  _ReasoningPanel(
-                    messageId: messageId,
-                    reasoning: parsedMarkup.reasoning,
-                    appearance: appearance,
-                  ),
+                    _MarkdownMessageText(
+                      content: parsedMarkup.content,
+                      appearance: appearance,
+                    ),
+                  if (parsedMarkup.hasReasoning) ...[
+                    if (parsedMarkup.content.isNotEmpty)
+                      const SizedBox(height: 8),
+                    _ReasoningPanel(
+                      messageId: messageId,
+                      reasoning: parsedMarkup.reasoning,
+                      appearance: appearance,
+                    ),
+                  ],
                 ],
                 if (_hasActions) ...[
                   const SizedBox(height: 8),
@@ -173,39 +191,46 @@ class MessageBubble extends StatelessWidget {
                     child: Wrap(
                       spacing: 2,
                       children: [
-                        if (onToggleVisibility != null)
+                        if (isEditing) ...[
                           _QuickActionButton(
-                            icon: hidden
-                                ? Icons.visibility_off_rounded
-                                : Icons.visibility_rounded,
-                            tooltip: hidden ? '设为可见' : '设为隐藏',
-                            onPressed: onToggleVisibility!,
+                            icon: Icons.close_rounded,
+                            tooltip: '取消',
+                            onPressed: onEditCancel,
                           ),
-                        if (onDelete != null)
                           _QuickActionButton(
-                            icon: Icons.delete_outline_rounded,
-                            tooltip: '删除',
-                            onPressed: onDelete!,
-                            foregroundColor: AppThemeTokens.error(context),
+                            icon: Icons.check_rounded,
+                            tooltip: '保存',
+                            onPressed: isSavingEdit ? null : onEditSave,
                           ),
-                        if (onCopy != null)
-                          _QuickActionButton(
-                            icon: Icons.content_copy_rounded,
-                            tooltip: '复制',
-                            onPressed: onCopy!,
-                          ),
-                        if (onEdit != null)
-                          _QuickActionButton(
-                            icon: Icons.edit_rounded,
-                            tooltip: '编辑',
-                            onPressed: onEdit!,
-                          ),
-                        if (onRewrite != null)
-                          _QuickActionButton(
-                            icon: Icons.edit_note_rounded,
-                            tooltip: '改写',
-                            onPressed: onRewrite!,
-                          ),
+                        ] else ...[
+                          if (onToggleVisibility != null)
+                            _QuickActionButton(
+                              icon: hidden
+                                  ? Icons.visibility_off_rounded
+                                  : Icons.visibility_rounded,
+                              tooltip: hidden ? '设为可见' : '设为隐藏',
+                              onPressed: onToggleVisibility!,
+                            ),
+                          if (onDelete != null)
+                            _QuickActionButton(
+                              icon: Icons.delete_outline_rounded,
+                              tooltip: '删除',
+                              onPressed: onDelete!,
+                              foregroundColor: AppThemeTokens.error(context),
+                            ),
+                          if (onCopy != null)
+                            _QuickActionButton(
+                              icon: Icons.content_copy_rounded,
+                              tooltip: '复制',
+                              onPressed: onCopy!,
+                            ),
+                          if (onEdit != null)
+                            _QuickActionButton(
+                              icon: Icons.edit_rounded,
+                              tooltip: '编辑',
+                              onPressed: onEdit!,
+                            ),
+                        ],
                       ],
                     ),
                   ),
@@ -213,6 +238,55 @@ class MessageBubble extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineEditField extends StatelessWidget {
+  const _InlineEditField({
+    required this.controller,
+    required this.appearance,
+    this.focusNode,
+  });
+
+  final TextEditingController controller;
+  final MessageBubbleAppearance appearance;
+  final FocusNode? focusNode;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = AppThemeTokens.border(context).withValues(alpha: 0.7);
+    final fillColor = Theme.of(
+      context,
+    ).colorScheme.surface.withValues(alpha: 0.55);
+    final fontSize =
+        ((Theme.of(context).textTheme.bodyLarge?.fontSize ?? 15.0) *
+                appearance.fontScale)
+            .clamp(10.0, 40.0);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.radiusMedium(context),
+        ),
+        border: Border.all(color: borderColor),
+        color: fillColor,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: TextField(
+          controller: controller,
+          focusNode: focusNode,
+          minLines: 3,
+          maxLines: null,
+          style: TextStyle(
+            color: appearance.paragraphColor,
+            fontSize: fontSize,
+            height: 1.45,
+          ),
+          decoration: const InputDecoration.collapsed(hintText: ''),
         ),
       ),
     );
@@ -317,7 +391,7 @@ class _MarkdownMessageText extends StatelessWidget {
 
   static final RegExp _headingPattern = RegExp(r'^\s{0,3}(#{1,6})\s+(.*)$');
   static final RegExp _tokenPattern = RegExp(
-    r'(\*\*[^*\n]+?\*\*|__[^_\n]+?__|\*[^*\n]+?\*|_[^_\n]+?_|"[^"\n]+"|“[^”\n]+”)',
+    r'(\*\*[^*\n]+?\*\*|__[^_\n]+?__|\*[^*\n]+?\*|"[^"\n]+"|“[^”\n]+”|「[^」\n]+」)',
   );
   static final RegExp _invisibleCharsPattern = RegExp(
     r'[\u200B\u200C\u200D\uFEFF]',
@@ -467,25 +541,17 @@ class _MarkdownMessageText extends StatelessWidget {
             ),
           ),
         );
-      } else if (token.startsWith('_') &&
-          token.endsWith('_') &&
-          token.length > 2) {
-        spans.add(
-          TextSpan(
-            text: token.substring(1, token.length - 1),
-            style: baseStyle.copyWith(
-              color: appearance.italicColor,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        );
-      } else {
+      } else if ((token.startsWith('"') && token.endsWith('"')) ||
+          (token.startsWith('“') && token.endsWith('”')) ||
+          (token.startsWith('「') && token.endsWith('」'))) {
         spans.add(
           TextSpan(
             text: token,
             style: baseStyle.copyWith(color: appearance.quotedColor),
           ),
         );
+      } else {
+        spans.add(TextSpan(text: token, style: baseStyle));
       }
 
       start = match.end;
@@ -515,7 +581,7 @@ class _QuickActionButton extends StatelessWidget {
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final Color? foregroundColor;
 
   @override

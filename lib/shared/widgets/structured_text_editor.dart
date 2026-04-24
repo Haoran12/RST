@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:json2yaml/json2yaml.dart';
@@ -185,14 +186,16 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
             ),
           ),
           if (_isFocused)
-            _StructuredEditorAssistBar(
-              onFullscreen: _openFullscreenEditor,
-              onInsertColon: () => _insertLiteral(':'),
-              onInsertDoubleQuote: () => _insertWrapped('"', '"'),
-              onInsertBraces: () => _insertWrapped('{', '}'),
-              onInsertBrackets: () => _insertWrapped('[', ']'),
-              onInsertParentheses: () => _insertWrapped('(', ')'),
-              onInsertHash: () => _insertLiteral('#'),
+            TextFieldTapRegion(
+              child: _StructuredEditorAssistBar(
+                onFullscreen: _openFullscreenEditor,
+                onInsertColon: () => _insertLiteral(':'),
+                onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+                onInsertBraces: () => _insertWrapped('{', '}'),
+                onInsertBrackets: () => _insertWrapped('[', ']'),
+                onInsertParentheses: () => _insertWrapped('(', ')'),
+                onInsertHash: () => _insertLiteral('#'),
+              ),
             ),
         ],
       ),
@@ -267,6 +270,54 @@ class _StructuredTextEditorState extends State<StructuredTextEditor>
   }
 
   Future<void> _openFullscreenEditor() async {
+    final platform = defaultTargetPlatform;
+    final useOverlayDialog =
+        platform == TargetPlatform.windows ||
+        platform == TargetPlatform.linux ||
+        platform == TargetPlatform.macOS;
+    if (useOverlayDialog) {
+      final nextText = await showDialog<String>(
+        context: context,
+        useRootNavigator: false,
+        builder: (context) {
+          final size = MediaQuery.of(context).size;
+          final overlayWidth = (size.width * 0.86).clamp(860.0, 1360.0);
+          final overlayHeight = (size.height * 0.88).clamp(640.0, 960.0);
+          return Dialog(
+            backgroundColor: AppThemeTokens.background(context),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                AppThemeTokens.radiusCard(context),
+              ),
+            ),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
+            child: SizedBox(
+              width: overlayWidth,
+              height: overlayHeight,
+              child: _FullscreenStructuredEditorSheet(
+                initialText: _controller.text,
+                hintText: widget.hintText,
+                initialFormat: _selectedFormat,
+              ),
+            ),
+          );
+        },
+      );
+      if (nextText == null) {
+        return;
+      }
+      _controller.value = TextEditingValue(
+        text: nextText,
+        selection: TextSelection.collapsed(offset: nextText.length),
+        composing: TextRange.empty,
+      );
+      _focusNode.requestFocus();
+      return;
+    }
+
     final nextText = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -628,6 +679,8 @@ class _FullscreenStructuredEditorSheetState
   late final _StructuredContentFormatter _formatter;
   late final FocusNode _focusNode;
 
+  bool get _hasUnsavedChanges => _controller.text != widget.initialText;
+
   @override
   void initState() {
     super.initState();
@@ -652,6 +705,39 @@ class _FullscreenStructuredEditorSheetState
 
   void _applyAndClose() {
     Navigator.of(context).pop(_controller.text);
+  }
+
+  Future<bool> _confirmDiscardChanges() async {
+    if (!_hasUnsavedChanges) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => AlertDialog(
+        title: const Text('放弃未保存的修改？'),
+        content: const Text('当前修改尚未应用，关闭后会丢失。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('放弃修改'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _attemptDismiss() async {
+    final confirmed = await _confirmDiscardChanges();
+    if (!confirmed || !mounted) {
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   void _insertLiteral(String value) {
@@ -713,77 +799,86 @@ class _FullscreenStructuredEditorSheetState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppThemeTokens.background(context),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: '关闭',
-                    onPressed: () =>
-                        Navigator.of(context).pop(_controller.text),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '全屏编辑',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppThemeTokens.textStrong(context),
-                        fontWeight: FontWeight.w600,
+    return PopScope<String?>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
+        await _attemptDismiss();
+      },
+      child: Scaffold(
+        backgroundColor: AppThemeTokens.background(context),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      tooltip: '关闭',
+                      onPressed: _attemptDismiss,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '全屏编辑',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: AppThemeTokens.textStrong(context),
+                              fontWeight: FontWeight.w600,
+                            ),
                       ),
                     ),
-                  ),
-                  TextButton(
-                    onPressed: _applyAndClose,
-                    child: const Text('应用'),
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: AppThemeTokens.border(context)),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  inputFormatters: [_formatter],
-                  keyboardType: TextInputType.multiline,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppThemeTokens.textStrong(context),
-                    fontFamily: 'monospace',
-                    height: 1.5,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: widget.hintText,
-                    hintStyle: TextStyle(
-                      color: AppThemeTokens.textMuted(context),
+                    TextButton(
+                      onPressed: _applyAndClose,
+                      child: const Text('应用'),
                     ),
-                    border: InputBorder.none,
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: AppThemeTokens.border(context)),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    inputFormatters: [_formatter],
+                    keyboardType: TextInputType.multiline,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppThemeTokens.textStrong(context),
+                      fontFamily: 'monospace',
+                      height: 1.5,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: widget.hintText,
+                      hintStyle: TextStyle(
+                        color: AppThemeTokens.textMuted(context),
+                      ),
+                      border: InputBorder.none,
+                    ),
                   ),
                 ),
               ),
-            ),
-            _StructuredEditorAssistBar(
-              onFullscreen: _applyAndClose,
-              onInsertColon: () => _insertLiteral(':'),
-              onInsertDoubleQuote: () => _insertWrapped('"', '"'),
-              onInsertBraces: () => _insertWrapped('{', '}'),
-              onInsertBrackets: () => _insertWrapped('[', ']'),
-              onInsertParentheses: () => _insertWrapped('(', ')'),
-              onInsertHash: () => _insertLiteral('#'),
-            ),
-          ],
+              _StructuredEditorAssistBar(
+                onFullscreen: _applyAndClose,
+                onInsertColon: () => _insertLiteral(':'),
+                onInsertDoubleQuote: () => _insertWrapped('"', '"'),
+                onInsertBraces: () => _insertWrapped('{', '}'),
+                onInsertBrackets: () => _insertWrapped('[', ']'),
+                onInsertParentheses: () => _insertWrapped('(', ')'),
+                onInsertHash: () => _insertLiteral('#'),
+              ),
+            ],
+          ),
         ),
       ),
     );

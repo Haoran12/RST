@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../bridge/frb_api.dart' as frb;
 import '../models/common.dart';
 import '../models/import_export_models.dart';
 import '../models/workspace_config.dart';
 import '../providers/app_state.dart';
+import 'runtime_log_service.dart';
+import 'workspace_path_service.dart';
 
 class RuntimeApiConfig {
   const RuntimeApiConfig({
@@ -687,15 +689,32 @@ class ApiService {
         sendTimeout: Duration(milliseconds: requestTimeoutMs ?? 15000),
       ),
     );
+    final runtimeLogs = RuntimeLogService.instance;
+    final modelsUri = _buildModelsUri(
+      providerType: providerType,
+      baseUrl: baseUrl,
+      requestPath: requestPath,
+      apiKey: apiKey,
+    );
+    final redactedUri = modelsUri
+        .replace(queryParameters: const <String, dynamic>{})
+        .toString();
+    final requestTime = DateTime.now().toUtc();
+    unawaited(
+      runtimeLogs.info(
+        category: 'network.models',
+        message: 'request_start',
+        data: <String, Object?>{
+          'provider_type': providerType.name,
+          'request_uri': redactedUri,
+          'request_timeout_ms': requestTimeoutMs ?? 15000,
+        },
+      ),
+    );
 
     try {
       final response = await dio.getUri<dynamic>(
-        _buildModelsUri(
-          providerType: providerType,
-          baseUrl: baseUrl,
-          requestPath: requestPath,
-          apiKey: apiKey,
-        ),
+        modelsUri,
         options: Options(
           headers: _buildModelFetchHeaders(
             providerType: providerType,
@@ -713,8 +732,37 @@ class ApiService {
       if (models.isEmpty) {
         throw StateError('没有返回可用模型');
       }
+      final responseTime = DateTime.now().toUtc();
+      unawaited(
+        runtimeLogs.info(
+          category: 'network.models',
+          message: 'request_success',
+          data: <String, Object?>{
+            'provider_type': providerType.name,
+            'request_uri': redactedUri,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+            'model_count': models.length,
+          },
+        ),
+      );
       return models;
     } on DioException catch (error) {
+      final responseTime = DateTime.now().toUtc();
+      unawaited(
+        runtimeLogs.error(
+          category: 'network.models',
+          message: 'request_failed',
+          data: <String, Object?>{
+            'provider_type': providerType.name,
+            'request_uri': redactedUri,
+            'status_code': error.response?.statusCode,
+            'error_type': error.type.name,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+          },
+          error: error.message ?? error.toString(),
+          stackTrace: error.stackTrace,
+        ),
+      );
       final statusCode = error.response?.statusCode;
       final details = error.response?.data?.toString().trim();
       if (statusCode == null) {
@@ -724,6 +772,22 @@ class ApiService {
         throw StateError('http_$statusCode');
       }
       throw StateError('http_$statusCode: $details');
+    } catch (error, stackTrace) {
+      final responseTime = DateTime.now().toUtc();
+      unawaited(
+        runtimeLogs.error(
+          category: 'network.models',
+          message: 'request_failed_client_error',
+          data: <String, Object?>{
+            'provider_type': providerType.name,
+            'request_uri': redactedUri,
+            'duration_ms': responseTime.difference(requestTime).inMilliseconds,
+          },
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+      rethrow;
     } finally {
       dio.close();
     }
@@ -758,8 +822,8 @@ class ApiService {
   }
 
   RuntimePresetConfig _toRuntimePresetConfig(StoredPresetConfig config) {
-    final entries = _buildPresetEntries(config.entries);
-    _assertBuiltinEntries(entries);
+    final normalizedEntries = normalizeStoredPresetEntries(config.entries);
+    final entries = _buildPresetEntries(normalizedEntries);
     return RuntimePresetConfig(
       presetId: config.presetId,
       name: config.name,
@@ -782,20 +846,6 @@ class ApiService {
           ),
         )
         .toList(growable: false);
-  }
-
-  void _assertBuiltinEntries(List<RuntimePresetEntry> entries) {
-    final builtinKeys = entries
-        .map((entry) => entry.builtinKey)
-        .whereType<String>()
-        .toSet();
-    for (final requiredName in PresetBuiltinEntryKeys.ordered) {
-      if (!builtinKeys.contains(requiredName)) {
-        throw StateError(
-          'missing required preset builtin entry: $requiredName',
-        );
-      }
-    }
   }
 
   StoredApiConfig _defaultApiConfig() {
@@ -836,20 +886,7 @@ class ApiService {
   }
 
   Future<Directory> _workspaceDir() async {
-    Directory supportDir;
-    try {
-      supportDir = await getApplicationSupportDirectory();
-    } catch (_) {
-      supportDir = Directory('${Directory.systemTemp.path}/rst_test_support');
-      if (!supportDir.existsSync()) {
-        supportDir.createSync(recursive: true);
-      }
-    }
-    final workspaceDir = Directory('${supportDir.path}/rst_data');
-    if (!workspaceDir.existsSync()) {
-      workspaceDir.createSync(recursive: true);
-    }
-    return workspaceDir;
+    return WorkspacePathService.resolveWorkspaceDirectory();
   }
 
   Future<Directory> _presetsDirectory() async {

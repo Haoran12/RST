@@ -64,6 +64,20 @@ void main() {
     expect(controllerOf(tester, fullscreenEditor).text, 'profile:\n  ');
   });
 
+  testWidgets(
+    'fullscreen editor uses overlay dialog on windows desktop',
+    (WidgetTester tester) async {
+      await pumpEditor(tester);
+      await tester.tap(find.byType(TextField).first);
+      await tester.pump();
+      await tester.tap(find.byTooltip('全屏编辑'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsOneWidget);
+    },
+    variant: TargetPlatformVariant(<TargetPlatform>{TargetPlatform.windows}),
+  );
+
   testWidgets('yaml list item continues with same indent and dash on newline', (
     WidgetTester tester,
   ) async {
@@ -91,5 +105,36 @@ void main() {
     await tester.enterText(editor, 'list:\n  - item1\n');
     await tester.pump();
     expect(controllerOf(tester, editor).text, 'list:\n  - item1\n  - ');
+  });
+
+  testWidgets('fullscreen editor confirms before discarding unsaved changes', (
+    WidgetTester tester,
+  ) async {
+    await pumpEditor(tester);
+
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump();
+    await tester.tap(find.byTooltip('全屏编辑'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    final fullscreenEditor = find.byType(TextField).last;
+    await tester.enterText(fullscreenEditor, 'draft');
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+    expect(find.text('放弃未保存的修改？'), findsOneWidget);
+
+    await tester.tap(find.text('继续编辑'));
+    await tester.pumpAndSettle();
+    expect(find.text('放弃未保存的修改？'), findsNothing);
+    expect(find.byType(TextField), findsNWidgets(2));
+
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('放弃修改'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
   });
 }
