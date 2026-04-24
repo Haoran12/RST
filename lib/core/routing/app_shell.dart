@@ -103,6 +103,7 @@ class AppShell extends ConsumerStatefulWidget {
     AppTab.preset,
     AppTab.apiConfig,
     AppTab.appearance,
+    AppTab.log,
   };
 
   static final _tabToIndex = <AppTab, int>{

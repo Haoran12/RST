@@ -81,39 +81,76 @@ class _LogPageState extends ConsumerState<LogPage> {
                 final durationLabel = item.durationMs == null
                     ? '-'
                     : '${item.durationMs}ms';
+                final textTheme = Theme.of(context).textTheme;
+                final titleStyle = textTheme.titleSmall?.copyWith(
+                  color: AppColors.textStrong,
+                );
+                final metaStyle = textTheme.bodySmall?.copyWith(
+                  color: AppColors.textMuted,
+                );
+                final durationStyle = textTheme.bodySmall?.copyWith(
+                  color: AppColors.textMuted,
+                );
                 return InkWell(
                   borderRadius: BorderRadius.circular(20),
                   onTap: () => _openDetail(item.logId),
                   child: GlassPanelCard(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.model,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${item.provider} · ${_formatTime(item.requestTime)}',
-                                style: const TextStyle(
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text('duration: $durationLabel'),
-                            ],
-                          ),
-                        ),
-                        StatusBadge(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final textScale = MediaQuery.textScalerOf(
+                          context,
+                        ).scale(1);
+                        final compactLayout =
+                            constraints.maxWidth < 360 || textScale > 1.2;
+                        final details = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.model,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: titleStyle,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${item.provider} · ${_formatTime(item.requestTime)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: metaStyle,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'duration: $durationLabel',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: durationStyle,
+                            ),
+                          ],
+                        );
+                        final badge = StatusBadge(
                           label: item.status.name,
                           color: isError ? AppColors.error : AppColors.success,
-                        ),
-                      ],
+                        );
+
+                        if (compactLayout) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              details,
+                              const SizedBox(height: 8),
+                              badge,
+                            ],
+                          );
+                        }
+
+                        return Row(
+                          children: [
+                            Expanded(child: details),
+                            const SizedBox(width: 10),
+                            badge,
+                          ],
+                        );
+                      },
                     ),
                   ),
                 );

@@ -1,5 +1,26 @@
 # Version History
 
+## 0.1.0+55 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 55
+- Artifact: `rst-0.1.0+55-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+54 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 54
+- Artifact: `rst-0.1.0+54-win64.zip`
+- Notes: Windows x64 release build.
+
+## 0.1.0+53 (2026-04-24)
+
+- Build type: Windows x64 release
+- Build number: 53
+- Artifact: `rst-0.1.0+53-win64.zip`
+- Notes: Windows x64 release build.
+
 ## 0.1.0+52 (2026-04-22)
 
 - Build type: Android APK release
@@ -301,6 +322,9 @@
 - Build type: Android APK release
 - Artifact: `rst-0.1.0+2-release.apk`
 - Notes: UI navigation refactor and session quick settings update
+
+
+
 
 
 
